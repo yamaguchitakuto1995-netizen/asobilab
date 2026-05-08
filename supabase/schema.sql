@@ -1,0 +1,889 @@
+-- ============================================================
+-- ASOBI Lab. - Supabase schema
+-- 実行手順: Supabase ダッシュボード → SQL Editor → 全文を貼り付けて Run
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 1) ENUM 型
+-- ------------------------------------------------------------
+do $$ begin
+  create type grade_level as enum (
+    '年少','年中','年長',
+    '小1','小2','小3','小4','小5','小6',
+    '中1','中2','中3',
+    '高1','高2','高3','浪人','その他'
+  );
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type attendance_status as enum (
+    'present', 'absent', 'late', 'makeup'
+  );
+exception when duplicate_object then null; end $$;
+
+-- ------------------------------------------------------------
+-- 2) teacher_profiles テーブル (講師の付加情報 + 管理者フラグ)
+-- ------------------------------------------------------------
+create table if not exists public.teacher_profiles (
+  id            uuid primary key references auth.users(id) on delete cascade,
+  email         text not null,
+  display_name  text,
+  is_admin      boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
+-- 3) 管理者判定ヘルパー (RLS 用 / security definer で再帰回避)
+-- ------------------------------------------------------------
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select tp.is_admin from public.teacher_profiles tp where tp.id = auth.uid()),
+    false
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
+/** 職員アカウント（全生徒にアクセス可なロール）かどうか */
+create or replace function public.is_staff_user()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.teacher_profiles tp
+    where tp.id = auth.uid() and tp.account_role = 'staff'
+  );
+$$;
+
+revoke all on function public.is_staff_user() from public;
+grant execute on function public.is_staff_user() to authenticated;
+
+-- ------------------------------------------------------------
+-- 4) サインアップ時に teacher_profiles を自動作成
+--    特定メールアドレスは自動的に管理者へ昇格
+-- ------------------------------------------------------------
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  admin_emails text[] := array[
+    'yamaguchi.takuto1995@gmail.com'
+  ];
+begin
+  insert into public.teacher_profiles (id, email, is_admin)
+  values (
+    new.id,
+    new.email,
+    new.email = any (admin_emails)
+  )
+  on conflict (id) do update
+    set email    = excluded.email,
+        is_admin = excluded.is_admin or public.teacher_profiles.is_admin;
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- 既に登録済みのユーザがいた場合のリカバリ (初回適用後にも安全に動く)
+-- is_admin は admin_emails に含まれるメール、または既に true の行は維持
+insert into public.teacher_profiles (id, email, is_admin)
+select
+  u.id,
+  u.email,
+  u.email = any (array[
+    'yamaguchi.takuto1995@gmail.com'
+  ]::text[])
+from auth.users u
+on conflict (id) do update
+  set email    = excluded.email,
+      is_admin = excluded.is_admin or public.teacher_profiles.is_admin;
+
+-- アカウント種別: staff=職員（全生徒アクセス可） / parent=保護者（紐付けた生徒のみ）
+alter table public.teacher_profiles
+  add column if not exists account_role text not null default 'staff';
+
+do $$ begin
+  alter table public.teacher_profiles add constraint teacher_profiles_account_role_check
+    check (account_role in ('staff', 'parent'));
+exception when duplicate_object then null; end $$;
+
+update public.teacher_profiles set account_role = 'staff' where account_role is null;
+
+-- ------------------------------------------------------------
+-- 5) students テーブル
+-- ------------------------------------------------------------
+create table if not exists public.students (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  grade       grade_level not null,
+  classroom   text,
+  subjects    text[] not null default '{}',
+  note        text,
+  created_at  timestamptz not null default now(),
+  created_by  uuid not null references auth.users(id) on delete restrict
+);
+
+-- 既存 DB に対するカラム追加 (冪等)
+alter table public.students add column if not exists subjects  text[] not null default '{}';
+alter table public.students add column if not exists classroom text;
+
+-- subjects は 'プログラミング' または 'ロボット' のみ
+do $$ begin
+  alter table public.students add constraint students_subjects_check
+    check (subjects <@ array['プログラミング', 'ロボット']::text[]);
+exception when duplicate_object then null; end $$;
+
+-- classroom は許可リストから選択 (NULL も可)
+do $$ begin
+  alter table public.students add constraint students_classroom_check
+    check (classroom is null or classroom in (
+      '長浜八幡中山教室',
+      '長浜駅前通り教室',
+      '米原駅前教室',
+      '米原長岡教室',
+      '西宮鳴尾町教室',
+      '出屋敷教室',
+      '長浜神照教室',
+      '学校法人芦屋学園芦屋大学附属幼稚園教室'
+    ));
+exception when duplicate_object then null; end $$;
+
+create index if not exists students_name_idx      on public.students (name);
+create index if not exists students_subjects_idx  on public.students using gin (subjects);
+create index if not exists students_classroom_idx on public.students (classroom);
+
+-- ------------------------------------------------------------
+-- 5.5) parent_student_links（保護者アカウント ↔ 生徒）
+-- ------------------------------------------------------------
+create table if not exists public.parent_student_links (
+  parent_user_id uuid not null references auth.users(id) on delete cascade,
+  student_id     uuid not null references public.students(id) on delete cascade,
+  created_at     timestamptz not null default now(),
+  created_by     uuid references auth.users(id) on delete set null,
+  primary key (parent_user_id, student_id)
+);
+
+create index if not exists parent_student_links_student_idx
+  on public.parent_student_links (student_id);
+
+alter table public.parent_student_links enable row level security;
+
+-- ------------------------------------------------------------
+-- 6) lessons テーブル
+-- ------------------------------------------------------------
+create table if not exists public.lessons (
+  id                 uuid primary key default gen_random_uuid(),
+  student_id         uuid not null references public.students(id) on delete cascade,
+  teacher_id         uuid not null references auth.users(id)      on delete restrict,
+  lesson_date        date not null,
+  period             smallint,                       -- 何コマ目か (1〜10) / 未設定可
+  attendance         attendance_status not null default 'present',
+  subject            text,
+  textbook           text,                           -- 使用テキスト (任意)
+  status             text not null default 'recorded',
+  text_memo          text,
+  source_lesson_date date,                         -- 振替の元になった欠席授業日
+  source_period      smallint,
+  source_subject     text,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+-- 既存 DB へのカラム追加 (冪等)
+alter table public.lessons add column if not exists subject  text;
+alter table public.lessons add column if not exists status   text not null default 'recorded';
+alter table public.lessons add column if not exists period   smallint;
+alter table public.lessons add column if not exists textbook text;
+alter table public.lessons add column if not exists source_lesson_date date;
+alter table public.lessons add column if not exists source_period   smallint;
+alter table public.lessons add column if not exists source_subject  text;
+
+-- period は 1〜10 のいずれか、または未設定 (null)
+do $$ begin
+  alter table public.lessons add constraint lessons_period_check
+    check (period is null or (period between 1 and 10));
+exception when duplicate_object then null; end $$;
+
+-- subject を 'プログラミング' / 'ロボット' に限定する前に、既存の他値を NULL にクリア
+update public.lessons
+   set subject = null
+ where subject is not null
+   and subject not in ('プログラミング', 'ロボット');
+
+do $$ begin
+  alter table public.lessons add constraint lessons_subject_check
+    check (subject is null or subject in ('プログラミング', 'ロボット'));
+exception when duplicate_object then null; end $$;
+
+-- status は 'scheduled' (予定) か 'recorded' (記録済み)
+do $$ begin
+  alter table public.lessons add constraint lessons_status_check
+    check (status in ('scheduled', 'recorded'));
+exception when duplicate_object then null; end $$;
+
+-- 予定 (scheduled) のときは attendance に 'late' を許さない
+do $$ begin
+  alter table public.lessons add constraint lessons_status_attendance_check
+    check (status = 'recorded' or attendance <> 'late');
+exception when duplicate_object then null; end $$;
+
+-- 振替元: 3 つ揃うか null のみ
+do $$ begin
+  alter table public.lessons add constraint lessons_source_triple_check
+    check (
+      (source_lesson_date is null and source_period is null and source_subject is null)
+      or (
+        source_lesson_date is not null
+        and source_period between 1 and 10
+        and source_subject in ('プログラミング', 'ロボット')
+      )
+    );
+exception when duplicate_object then null; end $$;
+
+create index if not exists lessons_subject_idx     on public.lessons (subject);
+create index if not exists lessons_status_date_idx on public.lessons (status, lesson_date);
+create index if not exists lessons_date_period_idx on public.lessons (lesson_date, period);
+
+create index if not exists lessons_student_date_idx
+  on public.lessons (student_id, lesson_date desc);
+
+create index if not exists lessons_teacher_date_idx
+  on public.lessons (teacher_id, lesson_date desc);
+
+create or replace function public.set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+
+drop trigger if exists lessons_set_updated_at on public.lessons;
+create trigger lessons_set_updated_at
+before update on public.lessons
+for each row execute function public.set_updated_at();
+
+-- ------------------------------------------------------------
+-- 6.5) lesson_capacities テーブル
+--      (教室, 曜日, コマ, 教科) 単位で 振替の最大受け入れ人数 を保持
+-- ------------------------------------------------------------
+create table if not exists public.lesson_capacities (
+  id             uuid primary key default gen_random_uuid(),
+  classroom      text     not null,
+  day_of_week    smallint not null,           -- 0=日, 1=月, ... 6=土
+  week_ordinals  smallint[] not null default array[1,2,3,4,5]::smallint[],
+  period         smallint not null,           -- 1〜10コマ目
+  subject        text     not null,           -- 'プログラミング' / 'ロボット'
+  max_students   smallint not null,
+  note           text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (classroom, day_of_week, period, subject)
+);
+
+alter table public.lesson_capacities add column if not exists week_ordinals smallint[] not null default array[1,2,3,4,5]::smallint[];
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_classroom_check
+    check (classroom in (
+      '長浜八幡中山教室',
+      '長浜駅前通り教室',
+      '米原駅前教室',
+      '米原長岡教室',
+      '西宮鳴尾町教室',
+      '出屋敷教室',
+      '長浜神照教室',
+      '学校法人芦屋学園芦屋大学附属幼稚園教室'
+    ));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_dow_check
+    check (day_of_week between 0 and 6);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_period_check
+    check (period between 1 and 10);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_subject_check
+    check (subject in ('プログラミング', 'ロボット'));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_max_check
+    check (max_students >= 0);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.lesson_capacities add constraint lesson_capacities_week_ordinals_check
+    check (
+      cardinality(week_ordinals) >= 1
+      and week_ordinals <@ array[1,2,3,4,5]::smallint[]
+    );
+exception when duplicate_object then null; end $$;
+
+create index if not exists lesson_capacities_lookup_idx
+  on public.lesson_capacities (classroom, day_of_week, period, subject);
+
+drop trigger if exists lesson_capacities_set_updated_at on public.lesson_capacities;
+create trigger lesson_capacities_set_updated_at
+  before update on public.lesson_capacities
+  for each row execute function public.set_updated_at();
+
+-- ------------------------------------------------------------
+-- 6.55) classroom_period_times（教室・開催日・コマごとの時刻表記）
+--       第◯週ではなく暦日（lesson_date）で指定。イレギュラーな開催に合わせやすい。
+-- ------------------------------------------------------------
+create table if not exists public.classroom_period_times (
+  id             uuid primary key default gen_random_uuid(),
+  classroom      text     not null,
+  lesson_date    date     not null,
+  period         smallint not null,
+  subject        text,
+  start_time     time     not null,
+  end_time       time     not null,
+  note           text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  constraint classroom_period_times_time_order check (start_time < end_time)
+);
+
+do $$ begin
+  alter table public.classroom_period_times add constraint classroom_period_times_classroom_check
+    check (classroom in (
+      '長浜八幡中山教室',
+      '長浜駅前通り教室',
+      '米原駅前教室',
+      '米原長岡教室',
+      '西宮鳴尾町教室',
+      '出屋敷教室',
+      '長浜神照教室',
+      '学校法人芦屋学園芦屋大学附属幼稚園教室'
+    ));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.classroom_period_times add constraint classroom_period_times_period_check
+    check (period between 1 and 10);
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.classroom_period_times add constraint classroom_period_times_subject_check
+    check (subject is null or subject in ('プログラミング', 'ロボット'));
+exception when duplicate_object then null; end $$;
+
+create index if not exists classroom_period_times_lookup_idx
+  on public.classroom_period_times (classroom, lesson_date, period);
+
+-- subject 未指定は「その日そのコマの共通時刻」1行まで、指定時は教科ごとに1行
+create unique index if not exists classroom_period_times_unique_any_subject
+  on public.classroom_period_times (classroom, lesson_date, period)
+  where subject is null;
+
+create unique index if not exists classroom_period_times_unique_subject
+  on public.classroom_period_times (classroom, lesson_date, period, subject)
+  where subject is not null;
+
+drop trigger if exists classroom_period_times_set_updated_at on public.classroom_period_times;
+create trigger classroom_period_times_set_updated_at
+  before update on public.classroom_period_times
+  for each row execute function public.set_updated_at();
+
+-- ------------------------------------------------------------
+-- 6.6) 保護者向け 振替申請用 SECURITY DEFINER 関数
+--      フロントは anon ロールでもこの関数だけは実行可能に
+-- ------------------------------------------------------------
+
+-- カレンダー月内で、その日の曜日が「第何回目か」(1〜5)
+create or replace function public.weekday_occurrence_in_month(d date)
+returns smallint
+language sql
+immutable
+strict
+set search_path = public
+as $occ$
+  select count(*)::smallint
+  from generate_series(
+    date_trunc('month', d)::date,
+    d,
+    '1 day'::interval
+  ) as g(day)
+  where extract(dow from g.day::date) = extract(dow from d);
+$occ$;
+
+-- (a) 指定日の各枠の空き状況を返す
+create or replace function public.get_makeup_availability(target_date date)
+returns table (
+  classroom    text,
+  period       smallint,
+  subject      text,
+  max_students smallint,
+  occupied     int,
+  available    int
+)
+language sql
+stable
+security definer
+set search_path = public
+as $get_makeup$
+  with capacity as (
+    select c.classroom, c.period, c.subject, c.max_students
+    from public.lesson_capacities c
+    where c.day_of_week = extract(dow from target_date)::smallint
+      and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
+  ),
+  occupied as (
+    select s.classroom, l.period, l.subject, count(*)::int as occ
+    from public.lessons l
+    join public.students s on s.id = l.student_id
+    where l.lesson_date = target_date
+      and l.status     = 'scheduled'
+      and l.attendance in ('present', 'makeup')
+      and l.period is not null
+      and l.subject is not null
+    group by s.classroom, l.period, l.subject
+  )
+  select
+    c.classroom,
+    c.period,
+    c.subject,
+    c.max_students,
+    coalesce(o.occ, 0)                                                as occupied,
+    greatest(0, c.max_students::int - coalesce(o.occ, 0))             as available
+  from capacity c
+  left join occupied o
+    on o.classroom = c.classroom
+   and o.period    = c.period
+   and o.subject   = c.subject
+  order by c.classroom, c.period, c.subject
+$get_makeup$;
+
+revoke all on function public.get_makeup_availability(date) from public;
+grant execute on function public.get_makeup_availability(date) to anon, authenticated;
+
+-- (b) 保護者が子供を本人確認するための限定ルックアップ
+create or replace function public.find_student_for_makeup(
+  p_name      text,
+  p_classroom text,
+  p_grade     text
+)
+returns table (
+  id         uuid,
+  name       text,
+  classroom  text,
+  grade      text,
+  subjects   text[]
+)
+language sql
+stable
+security definer
+set search_path = public
+as $find_student$
+  select
+    s.id,
+    s.name,
+    s.classroom,
+    s.grade::text,
+    s.subjects
+  from public.students s
+  where lower(trim(s.name)) = lower(trim(p_name))
+    and s.classroom         = p_classroom
+    and s.grade::text       = p_grade
+  limit 5
+$find_student$;
+
+revoke all on function public.find_student_for_makeup(text, text, text) from public;
+grant execute on function public.find_student_for_makeup(text, text, text) to anon, authenticated;
+
+-- 保護者申請: 欠席にする元の授業を一覧（予定のうち日付・コマ・教科が揃った行）
+create or replace function public.list_scheduled_lessons_for_makeup(
+  p_student_id uuid,
+  p_name       text,
+  p_classroom  text,
+  p_grade      text,
+  p_from_date  date default current_date
+)
+returns table (
+  id           uuid,
+  lesson_date  date,
+  period       smallint,
+  subject      text,
+  attendance   attendance_status
+)
+language sql
+stable
+security definer
+set search_path = public
+as $list_sched$
+  select l.id, l.lesson_date, l.period, l.subject, l.attendance
+  from public.lessons l
+  join public.students s on s.id = l.student_id
+  where l.student_id = p_student_id
+    and lower(trim(s.name)) = lower(trim(p_name))
+    and s.classroom = p_classroom
+    and s.grade::text = p_grade
+    and l.status = 'scheduled'
+    and l.lesson_date >= p_from_date
+    and l.period is not null
+    and l.subject is not null
+    and l.attendance = 'present'
+  order by l.lesson_date, l.period;
+$list_sched$;
+
+revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) from public;
+grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) to anon, authenticated;
+
+drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
+drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
+
+-- (c) 振替予約を 容量チェック付き でアトミックに作成（欠席元の登録・更新も同時に）
+create or replace function public.book_makeup_lesson(
+  p_student_id         uuid,
+  p_lesson_date        date,
+  p_period             smallint,
+  p_subject            text,
+  p_source_lesson_date date,
+  p_source_period      smallint,
+  p_source_subject     text,
+  p_text_memo          text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $book_makeup$
+declare
+  v_student    record;
+  v_max        smallint;
+  v_current    bigint;
+  v_lesson_id  uuid;
+  v_src_exists boolean;
+begin
+  if p_source_lesson_date is null or p_source_period is null or p_source_subject is null then
+    raise exception '欠席する授業（日付・コマ・教科）を指定してください。';
+  end if;
+
+  if p_source_period < 1 or p_source_period > 10 then
+    raise exception '欠席コマの指定が不正です。';
+  end if;
+
+  if p_source_subject not in ('プログラミング', 'ロボット') then
+    raise exception '欠席の教科の指定が不正です。';
+  end if;
+
+  if p_source_lesson_date > p_lesson_date then
+    raise exception '振替先は欠席する授業日以降の日付を選んでください。';
+  end if;
+
+  if p_source_lesson_date = p_lesson_date
+     and p_source_period = p_period
+     and p_source_subject is not distinct from p_subject then
+    raise exception '欠席コマと振替コマが同じです。';
+  end if;
+
+  if p_lesson_date < current_date
+     or p_lesson_date > current_date + interval '120 days' then
+    raise exception '振替先の日付は今日から 120 日以内で選んでください。';
+  end if;
+
+  select * into v_student from public.students where id = p_student_id;
+  if v_student is null then
+    raise exception '生徒が見つかりません。';
+  end if;
+  if v_student.classroom is null then
+    raise exception '所属教室が未設定の生徒のため申請できません。教室にお問い合わせください。';
+  end if;
+
+  select c.max_students
+    into v_max
+    from public.lesson_capacities c
+   where c.classroom   = v_student.classroom
+     and c.day_of_week = extract(dow from p_lesson_date)::smallint
+     and c.period      = p_period
+     and c.subject     = p_subject
+     and public.weekday_occurrence_in_month(p_lesson_date) = any(c.week_ordinals);
+
+  if v_max is null then
+    raise exception 'この日時のコマ枠は設定されていません。';
+  end if;
+
+  if exists (
+    select 1
+      from public.lessons
+     where student_id  = p_student_id
+       and lesson_date = p_lesson_date
+       and period      = p_period
+       and subject     = p_subject
+       and status      = 'scheduled'
+  ) then
+    raise exception 'すでに同じコマで申請済みです。';
+  end if;
+
+  select count(*)::bigint
+    into v_current
+    from (
+      select l.id
+        from public.lessons l
+        join public.students s on s.id = l.student_id
+       where l.lesson_date = p_lesson_date
+         and l.period      = p_period
+         and l.subject     = p_subject
+         and s.classroom   = v_student.classroom
+         and l.status      = 'scheduled'
+         and l.attendance  in ('present', 'makeup')
+       for update of l
+    ) as locked;
+
+  if v_current >= v_max then
+    raise exception 'この枠は満員です。別の日時をお選びください。';
+  end if;
+
+  select exists (
+    select 1 from public.lessons
+     where student_id  = p_student_id
+       and lesson_date = p_source_lesson_date
+       and period      = p_source_period
+       and subject     = p_source_subject
+       and status      = 'scheduled'
+  ) into v_src_exists;
+
+  if v_src_exists then
+    update public.lessons
+       set attendance = 'absent',
+           updated_at = now()
+     where student_id  = p_student_id
+       and lesson_date = p_source_lesson_date
+       and period      = p_source_period
+       and subject     = p_source_subject
+       and status      = 'scheduled';
+  else
+    insert into public.lessons (
+      student_id, teacher_id, lesson_date, period,
+      attendance, subject, status
+    ) values (
+      p_student_id, v_student.created_by, p_source_lesson_date, p_source_period,
+      'absent', p_source_subject, 'scheduled'
+    );
+  end if;
+
+  insert into public.lessons (
+    student_id, teacher_id, lesson_date, period,
+    attendance, subject, status, text_memo,
+    source_lesson_date, source_period, source_subject
+  ) values (
+    p_student_id, v_student.created_by, p_lesson_date, p_period,
+    'makeup', p_subject, 'scheduled', p_text_memo,
+    p_source_lesson_date, p_source_period, p_source_subject
+  )
+  returning id into v_lesson_id;
+
+  return v_lesson_id;
+end;
+$book_makeup$;
+
+revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) from public;
+grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) to anon, authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ------------------------------------------------------------
+-- 7) RLS
+-- ------------------------------------------------------------
+alter table public.teacher_profiles    enable row level security;
+alter table public.students            enable row level security;
+alter table public.lessons             enable row level security;
+alter table public.lesson_capacities          enable row level security;
+alter table public.classroom_period_times     enable row level security;
+
+-- ===== teacher_profiles =====
+drop policy if exists "tp: read all"          on public.teacher_profiles;
+drop policy if exists "tp: read own or all staff" on public.teacher_profiles;
+drop policy if exists "tp: update own"        on public.teacher_profiles;
+drop policy if exists "tp: admin update any"  on public.teacher_profiles;
+drop policy if exists "tp: admin delete any"  on public.teacher_profiles;
+
+create policy "tp: read own or all staff"
+  on public.teacher_profiles for select
+  to authenticated
+  using (id = auth.uid() or public.is_staff_user());
+
+create policy "tp: update own"
+  on public.teacher_profiles for update
+  to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid() and is_admin = public.is_admin());
+
+create policy "tp: admin update any"
+  on public.teacher_profiles for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+create policy "tp: admin delete any"
+  on public.teacher_profiles for delete
+  to authenticated
+  using (public.is_admin());
+
+-- ===== students =====
+drop policy if exists "students: authenticated read"   on public.students;
+drop policy if exists "students: authenticated insert" on public.students;
+drop policy if exists "students: authenticated update" on public.students;
+drop policy if exists "students: creator delete"       on public.students;
+drop policy if exists "students: delete (creator or admin)" on public.students;
+
+create policy "students: authenticated read"
+  on public.students for select
+  to authenticated
+  using (
+    public.is_staff_user()
+    or exists (
+      select 1 from public.parent_student_links l
+      where l.student_id = students.id and l.parent_user_id = auth.uid()
+    )
+  );
+
+create policy "students: authenticated insert"
+  on public.students for insert
+  to authenticated
+  with check (public.is_staff_user() and created_by = auth.uid());
+
+create policy "students: authenticated update"
+  on public.students for update
+  to authenticated
+  using (public.is_staff_user())
+  with check (public.is_staff_user());
+
+create policy "students: delete (creator or admin)"
+  on public.students for delete
+  to authenticated
+  using (
+    public.is_staff_user()
+    and (created_by = auth.uid() or public.is_admin())
+  );
+
+-- ===== lessons =====
+drop policy if exists "lessons: authenticated read" on public.lessons;
+drop policy if exists "lessons: insert as self"     on public.lessons;
+drop policy if exists "lessons: update own"         on public.lessons;
+drop policy if exists "lessons: delete own"         on public.lessons;
+drop policy if exists "lessons: update (own or admin)" on public.lessons;
+drop policy if exists "lessons: delete (own or admin)" on public.lessons;
+
+create policy "lessons: authenticated read"
+  on public.lessons for select
+  to authenticated
+  using (
+    public.is_staff_user()
+    or exists (
+      select 1 from public.parent_student_links l
+      where l.student_id = lessons.student_id and l.parent_user_id = auth.uid()
+    )
+  );
+
+create policy "lessons: insert as self"
+  on public.lessons for insert
+  to authenticated
+  with check (public.is_staff_user() and teacher_id = auth.uid());
+
+create policy "lessons: update (own or admin)"
+  on public.lessons for update
+  to authenticated
+  using (public.is_staff_user() and (teacher_id = auth.uid() or public.is_admin()))
+  with check (public.is_staff_user() and (teacher_id = auth.uid() or public.is_admin()));
+
+create policy "lessons: delete (own or admin)"
+  on public.lessons for delete
+  to authenticated
+  using (public.is_staff_user() and (teacher_id = auth.uid() or public.is_admin()));
+
+-- ===== lesson_capacities =====
+-- 認証済みは閲覧可、管理者のみ書込可。
+-- 保護者向け公開フォームはこのテーブルを直接読むのではなく、
+-- get_makeup_availability() RPC を経由するので anon アクセスは不要。
+drop policy if exists "lc: authenticated read" on public.lesson_capacities;
+drop policy if exists "lc: admin write"        on public.lesson_capacities;
+
+create policy "lc: authenticated read"
+  on public.lesson_capacities for select
+  to authenticated
+  using (public.is_staff_user());
+
+create policy "lc: admin write"
+  on public.lesson_capacities for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ===== classroom_period_times =====
+-- 時刻表は個人情報ではないため anon も SELECT 可（/apply の表記用）。
+-- 書き込みは管理者のみ。
+drop policy if exists "cpt: public read" on public.classroom_period_times;
+drop policy if exists "cpt: admin write" on public.classroom_period_times;
+
+create policy "cpt: public read"
+  on public.classroom_period_times for select
+  to anon, authenticated
+  using (true);
+
+create policy "cpt: admin write"
+  on public.classroom_period_times for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+grant select on public.classroom_period_times to anon, authenticated;
+grant insert, update, delete on public.classroom_period_times to authenticated;
+
+-- ===== parent_student_links =====
+drop policy if exists "psl: staff all" on public.parent_student_links;
+drop policy if exists "psl: parent read own" on public.parent_student_links;
+
+create policy "psl: staff all"
+  on public.parent_student_links for all
+  to authenticated
+  using (public.is_staff_user())
+  with check (public.is_staff_user());
+
+create policy "psl: parent read own"
+  on public.parent_student_links for select
+  to authenticated
+  using (parent_user_id = auth.uid());
+
+grant select, insert, delete on public.parent_student_links to authenticated;
+
+-- ------------------------------------------------------------
+-- 8) Realtime
+--    保護者フォームで lessons の変更をリアルタイム反映させるため、
+--    lessons を supabase_realtime publication に追加。
+-- ------------------------------------------------------------
+do $$ begin
+  alter publication supabase_realtime add table public.lessons;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;  -- publication が無い環境では握りつぶす
+end $$;
+
+do $$ begin
+  alter publication supabase_realtime add table public.lesson_capacities;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;
