@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentTextInfoSummary } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
 import { createClient } from "@/lib/supabase/server";
 import { CLASSROOM_NAMES, CLASSROOMS, type Student } from "@/lib/types";
@@ -190,6 +191,20 @@ export default async function StudentsPage({
                       <SubjectChip key={sub} subject={sub} />
                     ))}
                   </div>
+                  <StudentTextInfoSummary
+                    classroom={s.classroom}
+                    subjects={s.subjects}
+                    next_text_robot={s.next_text_robot}
+                    next_text_robot_course={s.next_text_robot_course ?? null}
+                    next_text_robot_text={s.next_text_robot_text ?? null}
+                    next_text_programming={s.next_text_programming}
+                    next_text_programming_course={
+                      s.next_text_programming_course ?? null
+                    }
+                    next_text_programming_text={
+                      s.next_text_programming_text ?? null
+                    }
+                  />
                   {s.note ? (
                     <p className="text-xs text-slate-500 truncate mt-1.5">
                       {s.note}

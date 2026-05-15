@@ -35,6 +35,21 @@ exception when duplicate_object then null; end $c$;
 alter table public.lessons add column if not exists source_lesson_date date;
 alter table public.lessons add column if not exists source_period   smallint;
 alter table public.lessons add column if not exists source_subject  text;
+alter table public.lessons add column if not exists lesson_classroom text;
+
+do $c$ begin
+  alter table public.lessons add constraint lessons_lesson_classroom_check
+    check (lesson_classroom is null or lesson_classroom in (
+      '長浜八幡中山教室',
+      '長浜駅前通り教室',
+      '米原駅前教室',
+      '米原長岡教室',
+      '西宮鳴尾町教室',
+      '出屋敷教室',
+      '長浜神照教室',
+      '学校法人芦屋学園芦屋大学附属幼稚園教室'
+    ));
+exception when duplicate_object then null; end $c$;
 
 do $c$ begin
   alter table public.lessons add constraint lessons_source_triple_check
@@ -88,7 +103,11 @@ as $get_makeup$
       and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
   ),
   occupied as (
-    select s.classroom, l.period, l.subject, count(*)::int as occ
+    select
+      coalesce(l.lesson_classroom, s.classroom) as classroom,
+      l.period,
+      l.subject,
+      count(*)::int as occ
     from public.lessons l
     join public.students s on s.id = l.student_id
     where l.lesson_date = target_date
@@ -96,7 +115,7 @@ as $get_makeup$
       and l.attendance in ('present', 'makeup')
       and l.period is not null
       and l.subject is not null
-    group by s.classroom, l.period, l.subject
+    group by 1, l.period, l.subject
   )
   select
     c.classroom,
@@ -188,6 +207,7 @@ grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, t
 
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
+drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text);
 
 create or replace function public.book_makeup_lesson(
   p_student_id         uuid,
@@ -197,7 +217,8 @@ create or replace function public.book_makeup_lesson(
   p_source_lesson_date date,
   p_source_period      smallint,
   p_source_subject     text,
-  p_text_memo          text default null
+  p_text_memo          text default null,
+  p_lesson_classroom   text default null
 )
 returns uuid
 language plpgsql
@@ -206,6 +227,7 @@ set search_path = public
 as $book_makeup$
 declare
   v_student    record;
+  v_venue      text;
   v_max        smallint;
   v_current    bigint;
   v_lesson_id  uuid;
@@ -246,10 +268,15 @@ begin
     raise exception '所属教室が未設定の生徒のため申請できません。教室にお問い合わせください。';
   end if;
 
+  v_venue := coalesce(nullif(trim(p_lesson_classroom), ''), v_student.classroom);
+  if v_venue is null then
+    raise exception '実施会場を特定できません。';
+  end if;
+
   select c.max_students
     into v_max
     from public.lesson_capacities c
-   where c.classroom   = v_student.classroom
+   where c.classroom   = v_venue
      and c.day_of_week = extract(dow from p_lesson_date)::smallint
      and c.period      = p_period
      and c.subject     = p_subject
@@ -280,7 +307,7 @@ begin
        where l.lesson_date = p_lesson_date
          and l.period      = p_period
          and l.subject     = p_subject
-         and s.classroom   = v_student.classroom
+         and coalesce(l.lesson_classroom, s.classroom) = v_venue
          and l.status      = 'scheduled'
          and l.attendance  in ('present', 'makeup')
        for update of l
@@ -321,11 +348,13 @@ begin
   insert into public.lessons (
     student_id, teacher_id, lesson_date, period,
     attendance, subject, status, text_memo,
-    source_lesson_date, source_period, source_subject
+    source_lesson_date, source_period, source_subject,
+    lesson_classroom
   ) values (
     p_student_id, v_student.created_by, p_lesson_date, p_period,
     'makeup', p_subject, 'scheduled', p_text_memo,
-    p_source_lesson_date, p_source_period, p_source_subject
+    p_source_lesson_date, p_source_period, p_source_subject,
+    v_venue
   )
   returning id into v_lesson_id;
 
@@ -333,8 +362,8 @@ begin
 end;
 $book_makeup$;
 
-revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) from public;
-grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) to anon, authenticated;
+revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) from public;
+grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) to anon, authenticated;
 
 -- PostgREST が関数を再認識しやすくする（無視されても害はありません）
 notify pgrst, 'reload schema';

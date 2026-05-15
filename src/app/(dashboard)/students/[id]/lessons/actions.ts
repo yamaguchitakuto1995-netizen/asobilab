@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
 import {
   ATTENDANCE_OPTIONS,
+  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   LESSON_STATUS_OPTIONS,
   MAX_PERIOD,
@@ -15,6 +17,18 @@ import {
 
 const ATTENDANCE_VALUES = ATTENDANCE_OPTIONS.map((o) => o.value) as readonly AttendanceStatus[];
 const STATUS_VALUES = LESSON_STATUS_OPTIONS.map((o) => o.value) as readonly LessonStatus[];
+
+function readLessonClassroom(formData: FormData): {
+  value: string | null;
+  error?: string;
+} {
+  const raw = String(formData.get("lesson_classroom") ?? "").trim();
+  if (!raw) return { value: null };
+  if (!(CLASSROOM_NAMES as readonly string[]).includes(raw)) {
+    return { value: null, error: "実施会場の選択が不正です。" };
+  }
+  return { value: raw };
+}
 
 function readPeriod(raw: string): { value: number | null; error?: string } {
   const trimmed = raw.trim();
@@ -36,6 +50,7 @@ export async function updateLesson(formData: FormData) {
   const statusRaw = String(formData.get("status") ?? "recorded");
   const textMemo = String(formData.get("text_memo") ?? "").trim();
   const periodResult = readPeriod(String(formData.get("period") ?? ""));
+  const lessonVenue = readLessonClassroom(formData);
 
   const editPath = `/students/${studentId}/lessons/${lessonId}/edit`;
 
@@ -45,6 +60,9 @@ export async function updateLesson(formData: FormData) {
   }
   if (periodResult.error) {
     redirect(`${editPath}?error=${encodeURIComponent(periodResult.error)}`);
+  }
+  if (lessonVenue.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(lessonVenue.error)}`);
   }
   if (!ATTENDANCE_VALUES.includes(attendance as AttendanceStatus)) {
     redirect(`${editPath}?error=${encodeURIComponent("出欠を選択してください。")}`);
@@ -66,6 +84,13 @@ export async function updateLesson(formData: FormData) {
   }
 
   const supabase = await createClient();
+
+  const { data: before } = await supabase
+    .from("lessons")
+    .select("status")
+    .eq("id", lessonId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("lessons")
     .update({
@@ -76,11 +101,21 @@ export async function updateLesson(formData: FormData) {
       textbook: textbookRaw || null,
       status,
       text_memo: textMemo || null,
+      lesson_classroom: lessonVenue.value,
     })
     .eq("id", lessonId);
 
   if (error) {
     redirect(`${editPath}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  if (before?.status === "scheduled" && status === "recorded") {
+    await advanceStudentNextTextAfterLessonRecorded(
+      supabase,
+      studentId,
+      subject,
+      attendance as AttendanceStatus
+    );
   }
 
   revalidatePath(`/students/${studentId}`);
@@ -119,16 +154,34 @@ export async function markLessonRecorded(formData: FormData) {
   if (!studentId || !lessonId) redirect("/students");
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("lessons")
     .update({ status: "recorded" })
-    .eq("id", lessonId);
+    .eq("id", lessonId)
+    .eq("student_id", studentId)
+    .eq("status", "scheduled")
+    .select("student_id, subject, attendance")
+    .maybeSingle();
 
   if (error) {
     redirect(
       `/students/${studentId}?error=${encodeURIComponent(error.message)}`
     );
   }
+  if (!updated) {
+    redirect(
+      `/students/${studentId}?error=${encodeURIComponent(
+        "予定が見つからないか、すでに記録済みです。"
+      )}`
+    );
+  }
+
+  await advanceStudentNextTextAfterLessonRecorded(
+    supabase,
+    updated.student_id,
+    updated.subject,
+    updated.attendance
+  );
 
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/");

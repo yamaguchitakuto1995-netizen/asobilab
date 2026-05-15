@@ -5,6 +5,7 @@ import { AttendanceCalendar } from "@/components/AttendanceCalendar";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { ConfirmDeleteForm } from "@/components/ConfirmDeleteForm";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
 import { getCurrentUser } from "@/lib/auth";
 import { currentYm, formatDateLong, todayIso } from "@/lib/date";
@@ -15,7 +16,12 @@ import {
 } from "@/lib/periodTimes";
 import { createClient } from "@/lib/supabase/server";
 import {
+  resolveProgrammingNextTextPartsForStudent,
+  resolveRobotNextTextPartsForStudent,
+} from "@/lib/courseNextText";
+import {
   SCHEDULED_ATTENDANCE_LABEL,
+  effectiveLessonClassroom,
   periodLabel,
   type Lesson,
   type Student,
@@ -128,6 +134,19 @@ export default async function StudentDetailPage({
       ? `${baseHref}?${filterParams.toString()}`
       : baseHref;
 
+  const robotTextParts = resolveRobotNextTextPartsForStudent({
+    next_text_robot: student.next_text_robot,
+    next_text_robot_course: student.next_text_robot_course ?? null,
+    next_text_robot_text: student.next_text_robot_text ?? null,
+  });
+  const programmingTextParts = resolveProgrammingNextTextPartsForStudent({
+    next_text_programming: student.next_text_programming,
+    next_text_programming_course:
+      student.next_text_programming_course ?? null,
+    next_text_programming_text:
+      student.next_text_programming_text ?? null,
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -192,8 +211,77 @@ export default async function StudentDetailPage({
               </div>
             </div>
           ) : null}
+          {(student.subjects ?? []).some((s) => s === "ロボット" || s === "プログラミング") ? (
+            <div className="pt-3 border-t border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-700 mb-2">
+                教材コース（次回テキスト）
+              </h2>
+              <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
+                ロボット・プログラミングでは、ここにコース名と単元の位置を示します。詳細は下の「テキスト情報」でも同じ内容を確認できます。
+              </p>
+              <dl className="space-y-2 text-sm">
+                {(student.subjects ?? []).includes("ロボット") ? (
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">ロボット</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      {robotTextParts ? (
+                        <>
+                          <span className="text-slate-500 text-xs">コース</span>{" "}
+                          {robotTextParts.course}
+                          <span className="text-slate-400 mx-1.5">·</span>
+                          <span className="text-slate-500 text-xs">テキスト名</span>{" "}
+                          {robotTextParts.text}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">
+                          未設定（生徒を編集でコース・テキスト名を登録してください）
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
+                {(student.subjects ?? []).includes("プログラミング") ? (
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">
+                      プログラミング
+                    </dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      {programmingTextParts ? (
+                        <>
+                          <span className="text-slate-500 text-xs">コース</span>{" "}
+                          {programmingTextParts.course}
+                          <span className="text-slate-400 mx-1.5">·</span>
+                          <span className="text-slate-500 text-xs">テキスト名</span>{" "}
+                          {programmingTextParts.text}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">
+                          未設定（生徒を編集でコース・テキスト名を登録してください）
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          ) : null}
         </section>
       ) : null}
+
+      <StudentTextInfoSection
+        subjects={student.subjects}
+        next_text_robot={student.next_text_robot}
+        next_text_robot_course={student.next_text_robot_course ?? null}
+        next_text_robot_text={student.next_text_robot_text ?? null}
+        next_text_programming={student.next_text_programming}
+        next_text_programming_course={
+          student.next_text_programming_course ?? null
+        }
+        next_text_programming_text={
+          student.next_text_programming_text ?? null
+        }
+        editHref={`${baseHref}/edit`}
+      />
 
       {student.note ? (
         <section className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -235,7 +323,7 @@ export default async function StudentDetailPage({
               const slotRow =
                 l.period && periodTimes.length
                   ? resolveClassroomPeriodTime(periodTimes, {
-                      classroom: student.classroom,
+                      classroom: effectiveLessonClassroom(l, student.classroom),
                       lessonDate: l.lesson_date,
                       period: l.period,
                       subject: l.subject,
@@ -256,6 +344,10 @@ export default async function StudentDetailPage({
                             : ""}
                         </span>
                         <SubjectChip subject={l.subject} />
+                        <ClassroomBadge
+                          classroom={effectiveLessonClassroom(l, student.classroom)}
+                          size="sm"
+                        />
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-brand-100 text-brand-800 ring-brand-600/20">
                           {SCHEDULED_ATTENDANCE_LABEL[l.attendance]}
                         </span>
@@ -465,7 +557,7 @@ export default async function StudentDetailPage({
               const slotRow =
                 l.period && periodTimes.length
                   ? resolveClassroomPeriodTime(periodTimes, {
-                      classroom: student.classroom,
+                      classroom: effectiveLessonClassroom(l, student.classroom),
                       lessonDate: l.lesson_date,
                       period: l.period,
                       subject: l.subject,
@@ -486,6 +578,10 @@ export default async function StudentDetailPage({
                             : ""}
                         </span>
                         <SubjectChip subject={l.subject} />
+                        <ClassroomBadge
+                          classroom={effectiveLessonClassroom(l, student.classroom)}
+                          size="sm"
+                        />
                         <AttendanceBadge status={l.attendance} size="sm" />
                       </div>
                       {l.text_memo ? (

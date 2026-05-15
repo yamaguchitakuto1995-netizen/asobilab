@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inputClass } from "@/components/Field";
+import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { formatDateLong, isValidDate, shiftDate, todayIso } from "@/lib/date";
 import { dayColor, dayLabel, dowOf } from "@/lib/days";
@@ -75,6 +76,7 @@ export function AvailabilityPicker({
   const [bookedDest, setBookedDest] = useState<{
     period: number;
     subject: string;
+    classroom: string;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmSlot, setConfirmSlot] = useState<SlotAvailability | null>(null);
@@ -85,10 +87,15 @@ export function AvailabilityPicker({
     [student]
   );
 
-  function timeSuffix(date: string, period: number, subject: string): string {
+  function timeSuffix(
+    date: string,
+    period: number,
+    subject: string,
+    classroom: string
+  ): string {
     if (!periodTimes.length) return "";
     const row = resolveClassroomPeriodTime(periodTimes, {
-      classroom: student.classroom,
+      classroom,
       lessonDate: date,
       period,
       subject,
@@ -148,11 +155,7 @@ export function AvailabilityPicker({
           date: string;
           slots: SlotAvailability[];
         };
-        // 当該生徒が利用できる教室の枠だけにフィルタ
-        const filtered = body.slots.filter(
-          (s) => s.classroom === student.classroom
-        );
-        setCache((prev) => ({ ...prev, [body.date]: filtered }));
+        setCache((prev) => ({ ...prev, [body.date]: body.slots }));
         setLastUpdated(new Date());
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -160,7 +163,7 @@ export function AvailabilityPicker({
         setLoading(false);
       }
     },
-    [student.classroom]
+    []
   );
 
   // 日付を切り替えたら即フェッチ
@@ -238,6 +241,7 @@ export function AvailabilityPicker({
       sourceLessonDate: source.lessonDate,
       sourcePeriod: source.period,
       sourceSubject: source.subject,
+      lessonClassroom: slot.classroom,
     });
     setSubmitting(false);
     setConfirmSlot(null);
@@ -246,7 +250,11 @@ export function AvailabilityPicker({
       fetchAvailability(selectedDate);
       return;
     }
-    setBookedDest({ period: slot.period, subject: slot.subject });
+    setBookedDest({
+      period: slot.period,
+      subject: slot.subject,
+      classroom: slot.classroom,
+    });
     setBookedLessonId(result.lessonId);
   }
 
@@ -259,13 +267,13 @@ export function AvailabilityPicker({
           <span className="block">
             欠席:{" "}
             {source
-              ? `${formatDateLong(source.lessonDate)} ${periodLabel(source.period)}${timeSuffix(source.lessonDate, source.period, source.subject)} ${source.subject}`
+              ? `${formatDateLong(source.lessonDate)} ${periodLabel(source.period)}${timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)} ${source.subject}`
               : "—"}
           </span>
           <span className="block mt-1">
             振替先: {formatDateLong(selectedDate)}
             {bookedDest
-              ? ` ${periodLabel(bookedDest.period)}${timeSuffix(selectedDate, bookedDest.period, bookedDest.subject)} ${bookedDest.subject}`
+              ? ` ${periodLabel(bookedDest.period)}${timeSuffix(selectedDate, bookedDest.period, bookedDest.subject, bookedDest.classroom)} ${bookedDest.subject}（${bookedDest.classroom}）`
               : ""}
           </span>
           <span className="block mt-3">
@@ -375,7 +383,7 @@ export function AvailabilityPicker({
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-slate-800">
                       {periodLabel(row.period)}
-                      {timeSuffix(row.lesson_date, row.period, row.subject)}
+                      {timeSuffix(row.lesson_date, row.period, row.subject, student.classroom)}
                     </span>
                     <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 ring-1 ring-slate-200/80">
                       {row.subject}
@@ -487,7 +495,7 @@ export function AvailabilityPicker({
           <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-2">
             選択中の欠席: {formatDateLong(source.lessonDate)}{" "}
             {periodLabel(source.period)}
-            {timeSuffix(source.lessonDate, source.period, source.subject)}{" "}
+            {timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)}{" "}
             {source.subject}
           </p>
         ) : (
@@ -569,6 +577,9 @@ export function AvailabilityPicker({
                 : ""}
           </p>
         </div>
+        <p className="text-xs text-slate-500 mb-3">
+          各教室の空き枠が一覧されます。所属教室以外の会場で振替を受けたい場合も、ここから選べます。
+        </p>
 
         {error ? (
           <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
@@ -585,7 +596,7 @@ export function AvailabilityPicker({
           <SkeletonGrid />
         ) : slots.length === 0 ? (
           <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-6 text-center text-sm text-slate-500">
-            {student.classroom} のこの曜日には振替枠が設定されていません。
+            この日に空きのある振替枠はありません。別の日付をお選びください。
           </div>
         ) : (
           <ul className="space-y-2">
@@ -595,7 +606,7 @@ export function AvailabilityPicker({
               const disabled =
                 isFull || submitting || !isStudentSubject || confirmSlot !== null;
               return (
-                <li key={`${slot.period}-${slot.subject}`}>
+                <li key={`${slot.classroom}-${slot.period}-${slot.subject}`}>
                   <button
                     type="button"
                     onClick={() => openMakeupConfirm(slot)}
@@ -610,8 +621,14 @@ export function AvailabilityPicker({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-base font-semibold">
                           {slot.period}コマ目
-                          {timeSuffix(selectedDate, slot.period, slot.subject)}
+                          {timeSuffix(
+                            selectedDate,
+                            slot.period,
+                            slot.subject,
+                            slot.classroom
+                          )}
                         </span>
+                        <ClassroomBadge classroom={slot.classroom} />
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                           {slot.subject}
                         </span>
@@ -674,7 +691,7 @@ export function AvailabilityPicker({
                 <p>
                   {formatDateLong(source.lessonDate)}{" "}
                   {periodLabel(source.period)}
-                  {timeSuffix(source.lessonDate, source.period, source.subject)}{" "}
+                  {timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)}{" "}
                   {source.subject}
                 </p>
               </div>
@@ -686,9 +703,13 @@ export function AvailabilityPicker({
                   {timeSuffix(
                     selectedDate,
                     confirmSlot.period,
-                    confirmSlot.subject
+                    confirmSlot.subject,
+                    confirmSlot.classroom
                   )}{" "}
                   {confirmSlot.subject}
+                </p>
+                <p className="text-xs text-slate-600 mt-1">
+                  実施会場: {confirmSlot.classroom}
                 </p>
               </div>
               <p className="text-xs text-slate-500 pt-1 border-t border-slate-200">

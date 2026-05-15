@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { isValidDate } from "@/lib/date";
+import { isValidDate, parseLessonDateFromPaste } from "@/lib/date";
 import { createClient } from "@/lib/supabase/server";
 import {
   CLASSROOM_NAMES,
@@ -14,6 +14,26 @@ import {
 } from "@/lib/types";
 
 const BASE = "/capacities/period-times";
+
+/** 貼り付け由来のゼロ幅・NBSP・全角スペースを除去 */
+function normalizePasteCell(s: string): string {
+  return s
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\u3000/g, " ")
+    .trim();
+}
+
+function splitTableRow(line: string): string[] {
+  const parts = (() => {
+    if (line.includes("\t")) return line.split(/\t/);
+    const commas = (line.match(/,/g) ?? []).length;
+    const semis = (line.match(/;/g) ?? []).length;
+    if (semis > commas) return line.split(";");
+    return line.split(",");
+  })();
+  return parts.map(normalizePasteCell);
+}
 
 function fail(msg: string): never {
   redirect(`${BASE}?error=${encodeURIComponent(msg)}`);
@@ -176,7 +196,7 @@ export async function importPeriodTimesCsv(formData: FormData) {
   const lines = raw.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) fail("ヘッダー行とデータ行が必要です。");
 
-  const header = lines[0].split(",").map((s) => s.trim().toLowerCase());
+  const header = splitTableRow(lines[0]).map((s) => s.toLowerCase());
   const idx = (name: string) => header.indexOf(name);
 
   const iClass = idx("classroom");
@@ -195,15 +215,15 @@ export async function importPeriodTimesCsv(formData: FormData) {
     iEnd < 0
   ) {
     fail(
-      "必須列: classroom, lesson_date, period, start_time, end_time（日付は YYYY-MM-DD）"
+      "必須列: classroom, lesson_date, period, start_time, end_time（日付は YYYY-MM-DD または Excel の 2026/5/10 形式）"
     );
   }
 
   const rows: Parsed[] = [];
   for (let r = 1; r < lines.length; r++) {
-    const cells = lines[r].split(",").map((c) => c.trim());
-    const classroom = cells[iClass] ?? "";
-    const lesson_date = (cells[iDate] ?? "").trim();
+    const cells = splitTableRow(lines[r]);
+    const classroom = normalizePasteCell(cells[iClass] ?? "");
+    const lesson_date = parseLessonDateFromPaste(cells[iDate] ?? "");
     const period = Number(cells[iPeriod]);
     const subjectCell = iSub >= 0 ? (cells[iSub] ?? "").trim() : "";
     const subject =
@@ -217,7 +237,7 @@ export async function importPeriodTimesCsv(formData: FormData) {
     const note = iNote >= 0 ? (cells[iNote] ?? "").trim() || null : null;
 
     if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) continue;
-    if (!isValidDate(lesson_date)) continue;
+    if (!lesson_date) continue;
     if (!Number.isInteger(period) || period < 1 || period > MAX_PERIOD)
       continue;
 

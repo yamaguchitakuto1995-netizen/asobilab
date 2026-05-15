@@ -4,6 +4,7 @@ import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { SubjectChip } from "@/components/SubjectChip";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
+  effectiveLessonClassroom,
   periodLabel,
   type ClassroomPeriodTime,
   type Lesson,
@@ -12,6 +13,10 @@ import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
+import {
+  resolveProgrammingNextTextPartsForStudent,
+  resolveRobotNextTextPartsForStudent,
+} from "@/lib/courseNextText";
 
 export type DailyLessonItem = Lesson & {
   students: {
@@ -19,6 +24,12 @@ export type DailyLessonItem = Lesson & {
     name: string;
     grade: string;
     classroom: string | null;
+    next_text_robot: string | null;
+    next_text_programming: string | null;
+    next_text_robot_course?: string | null;
+    next_text_robot_text?: string | null;
+    next_text_programming_course?: string | null;
+    next_text_programming_text?: string | null;
   } | null;
 };
 
@@ -185,7 +196,10 @@ function StudentSlot({
   const slotRow =
     period && classroomPeriodTimes.length
       ? resolveClassroomPeriodTime(classroomPeriodTimes, {
-          classroom: lesson.students?.classroom,
+          classroom: effectiveLessonClassroom(
+            lesson,
+            lesson.students?.classroom ?? null
+          ),
           lessonDate: date,
           period,
           subject: lesson.subject,
@@ -208,7 +222,12 @@ function StudentSlot({
             ) : null}
           </div>
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-            <ClassroomBadge classroom={lesson.students?.classroom} />
+            <ClassroomBadge
+              classroom={effectiveLessonClassroom(
+                lesson,
+                lesson.students?.classroom ?? null
+              )}
+            />
             <SubjectChip subject={lesson.subject} />
             {isScheduled ? (
               <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset bg-brand-100 text-brand-800 ring-brand-600/20">
@@ -225,6 +244,64 @@ function StudentSlot({
           ) : null}
         </div>
       </div>
+      {lesson.subject === "ロボット"
+        ? (() => {
+            const st = lesson.students;
+            const r = st
+              ? resolveRobotNextTextPartsForStudent({
+                  next_text_robot: st.next_text_robot,
+                  next_text_robot_course: st.next_text_robot_course,
+                  next_text_robot_text: st.next_text_robot_text,
+                })
+              : null;
+            return r ? (
+              <p className="mt-1.5 text-[11px] text-amber-900/90 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 leading-snug space-y-0.5">
+                <span className="font-medium text-amber-950/80 mr-1 block">
+                  次回テキスト（ロボット）
+                </span>
+                <span className="block">
+                  <span className="text-amber-800/80">コース</span> {r.course}{" "}
+                  <span className="text-amber-800/80">· テキスト名</span>{" "}
+                  {r.text}
+                </span>
+                {r.full ? (
+                  <span className="block text-[10px] text-amber-800/70">
+                    表記: {r.full}
+                  </span>
+                ) : null}
+              </p>
+            ) : null;
+          })()
+        : null}
+      {lesson.subject === "プログラミング"
+        ? (() => {
+            const st = lesson.students;
+            const r = st
+              ? resolveProgrammingNextTextPartsForStudent({
+                  next_text_programming: st.next_text_programming,
+                  next_text_programming_course: st.next_text_programming_course,
+                  next_text_programming_text: st.next_text_programming_text,
+                })
+              : null;
+            return r ? (
+              <p className="mt-1.5 text-[11px] text-indigo-900/90 bg-indigo-50 border border-indigo-100 rounded-lg px-2 py-1 leading-snug space-y-0.5">
+                <span className="font-medium text-indigo-950/80 mr-1 block">
+                  次回テキスト（プログラミング）
+                </span>
+                <span className="block">
+                  <span className="text-indigo-800/80">コース</span> {r.course}{" "}
+                  <span className="text-indigo-800/80">· テキスト名</span>{" "}
+                  {r.text}
+                </span>
+                {r.full ? (
+                  <span className="block text-[10px] text-indigo-800/70">
+                    表記: {r.full}
+                  </span>
+                ) : null}
+              </p>
+            ) : null;
+          })()
+        : null}
       {lesson.textbook ? (
         <p className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 leading-snug">
           <span className="text-[10px] text-slate-500 font-medium mr-1">

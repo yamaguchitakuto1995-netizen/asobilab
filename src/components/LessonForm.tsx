@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
+import { LessonFormCurriculumSection } from "@/components/LessonTextbookCurriculumPickers";
 import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
   ATTENDANCE_OPTIONS,
+  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   PERIOD_OPTIONS,
   SCHEDULED_ATTENDANCE_OPTIONS,
@@ -30,6 +32,8 @@ type Props = {
     textbook?: string | null;
     status?: LessonStatus;
     textMemo?: string | null;
+    /** 実施会場。未指定は所属教室と同じ */
+    lessonClassroom?: string | null;
   };
   /**
    * 生徒に紐づく受講教科。指定された教科のみ選択肢として表示する。
@@ -67,6 +71,10 @@ export function LessonForm({
     defaultValues?.period != null ? String(defaultValues.period) : ""
   );
   const [subjectStr, setSubjectStr] = useState(defaultValues?.subject ?? "");
+  const [textbook, setTextbook] = useState(defaultValues?.textbook ?? "");
+  const [venueStr, setVenueStr] = useState(
+    () => defaultValues?.lessonClassroom ?? ""
+  );
 
   // 予定モードに切り替えた瞬間に「遅刻」が選ばれていたら 出席 に補正
   useEffect(() => {
@@ -84,17 +92,25 @@ export function LessonForm({
       : COURSE_SUBJECTS;
 
   const slotHint = useMemo(() => {
-    if (!studentClassroom || !classroomPeriodTimes.length) return null;
+    const venue = venueStr || studentClassroom || null;
+    if (!venue || !classroomPeriodTimes.length) return null;
     const p = periodStr ? Number(periodStr) : null;
     if (!p) return null;
     const row = resolveClassroomPeriodTime(classroomPeriodTimes, {
-      classroom: studentClassroom,
+      classroom: venue,
       lessonDate,
       period: p,
       subject: subjectStr || null,
     });
     return row ? formatTimeRange(row.start_time, row.end_time) : null;
-  }, [studentClassroom, classroomPeriodTimes, lessonDate, periodStr, subjectStr]);
+  }, [
+    venueStr,
+    studentClassroom,
+    classroomPeriodTimes,
+    lessonDate,
+    periodStr,
+    subjectStr,
+  ]);
 
   return (
     <form
@@ -103,6 +119,13 @@ export function LessonForm({
     >
       <input type="hidden" name="student_id" value={studentId} />
       {lessonId ? <input type="hidden" name="lesson_id" value={lessonId} /> : null}
+
+      <LessonFormCurriculumSection
+        subjectStr={subjectStr}
+        textbook={textbook}
+        setTextbook={setTextbook}
+        setSubjectStr={setSubjectStr}
+      />
 
       <Field label="種別" htmlFor="status" required>
         <div className="grid grid-cols-2 gap-2">
@@ -168,6 +191,27 @@ export function LessonForm({
         </p>
       ) : null}
 
+      <Field
+        label="実施会場"
+        htmlFor="lesson_classroom"
+        hint="未指定のときは所属教室のコマ表で時刻を表示します。振替など別会場はここで選べます（全教室から選択可能）。"
+      >
+        <select
+          id="lesson_classroom"
+          name="lesson_classroom"
+          value={venueStr}
+          onChange={(e) => setVenueStr(e.target.value)}
+          className={inputClass}
+        >
+          <option value="">所属教室と同じ</option>
+          {CLASSROOM_NAMES.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
       <Field label="科目" htmlFor="subject">
         <select
           id="subject"
@@ -188,18 +232,20 @@ export function LessonForm({
       <Field
         label="使用テキスト"
         htmlFor="textbook"
-        hint="例) Scratch 3.0 入門 / レゴ WeDo 2.0 標準セット"
+        hint="フォーム上部のカリキュラム枠のプルダウンで選んでも、ここに直接入力してもかまいません。"
       >
         <input
           id="textbook"
           name="textbook"
           type="text"
           maxLength={120}
-          defaultValue={defaultValues?.textbook ?? ""}
+          value={textbook}
+          onChange={(e) => setTextbook(e.target.value)}
           className={inputClass}
           placeholder="教材名・章を記入"
         />
       </Field>
+
 
       <Field
         label={status === "scheduled" ? "出席予定" : "出欠"}

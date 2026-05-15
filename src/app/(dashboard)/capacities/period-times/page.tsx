@@ -141,8 +141,8 @@ export default async function PeriodTimesPage({
           <div className="text-xs text-slate-600 leading-relaxed space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
             <p>
               <span className="font-semibold text-slate-700">手順:</span>{" "}
-              Excel やメモ帳で CSV を作成 → ファイル全体をコピー → 下の欄に貼り付け →
-              「取り込む」。1行目は必ず列名のヘッダーにしてください。
+              Excel から表をそのままコピーして貼り付けても構いません（タブ区切り）。
+              保存してから貼る場合は UTF-8 の CSV 推奨。1行目は必ず列名のヘッダーにしてください。
             </p>
             <p>
               <span className="font-semibold text-slate-700">文字コード:</span>{" "}
@@ -163,8 +163,8 @@ export default async function PeriodTimesPage({
                 <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
                   lesson_date
                 </code>{" "}
-                開催日（<span className="font-medium">YYYY-MM-DD</span>
-                。そのコマが実際に行われる暦日）
+                開催日（<span className="font-medium">YYYY-MM-DD</span> または
+                Excel の <span className="font-medium">2026/5/10</span> 形式。暦日）
               </li>
               <li>
                 <code className="text-[11px] bg-white px-1 rounded border border-slate-200">

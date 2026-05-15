@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
 import {
   ATTENDANCE_OPTIONS,
+  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   LESSON_STATUS_OPTIONS,
   MAX_PERIOD,
@@ -15,6 +17,18 @@ import {
 
 const ATTENDANCE_VALUES = ATTENDANCE_OPTIONS.map((o) => o.value) as readonly AttendanceStatus[];
 const STATUS_VALUES = LESSON_STATUS_OPTIONS.map((o) => o.value) as readonly LessonStatus[];
+
+function readLessonClassroom(formData: FormData): {
+  value: string | null;
+  error?: string;
+} {
+  const raw = String(formData.get("lesson_classroom") ?? "").trim();
+  if (!raw) return { value: null };
+  if (!(CLASSROOM_NAMES as readonly string[]).includes(raw)) {
+    return { value: null, error: "実施会場の選択が不正です。" };
+  }
+  return { value: raw };
+}
 
 function readPeriod(raw: string): { value: number | null; error?: string } {
   const trimmed = raw.trim();
@@ -35,6 +49,7 @@ export async function createLesson(formData: FormData) {
   const statusRaw = String(formData.get("status") ?? "recorded");
   const textMemo = String(formData.get("text_memo") ?? "").trim();
   const periodResult = readPeriod(String(formData.get("period") ?? ""));
+  const lessonVenue = readLessonClassroom(formData);
 
   const newPath = `/students/${studentId}/lessons/new`;
 
@@ -44,6 +59,9 @@ export async function createLesson(formData: FormData) {
   }
   if (periodResult.error) {
     redirect(`${newPath}?error=${encodeURIComponent(periodResult.error)}`);
+  }
+  if (lessonVenue.error) {
+    redirect(`${newPath}?error=${encodeURIComponent(lessonVenue.error)}`);
   }
   if (!ATTENDANCE_VALUES.includes(attendance as AttendanceStatus)) {
     redirect(`${newPath}?error=${encodeURIComponent("出欠を選択してください。")}`);
@@ -80,10 +98,20 @@ export async function createLesson(formData: FormData) {
     textbook: textbookRaw || null,
     status,
     text_memo: textMemo || null,
+    lesson_classroom: lessonVenue.value,
   });
 
   if (error) {
     redirect(`${newPath}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  if (status === "recorded") {
+    await advanceStudentNextTextAfterLessonRecorded(
+      supabase,
+      studentId,
+      subject,
+      attendance as AttendanceStatus
+    );
   }
 
   revalidatePath(`/students/${studentId}`);

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "gen:next-text-sql": "tsx scripts/gen-next-text-sql.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -24,6 +25,7 @@
     "eslint-config-next": "^15.0.3",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }

@@ -285,7 +285,8 @@ git push -u origin main
 1. Supabase 左メニュー **SQL Editor** → **New query**
 2. このリポジトリの **`supabase/schema.sql` をエディタで開き、中身をすべてコピー**
 3. SQL Editor に貼り付けて **Run**（数十秒かかることがあります）
-4. エラーになったら、表示された行番号をメモしてから **全文をもう一度**貼り付けていないか、`rpc` だけ先に流していないかを確認（README の「8. 差分」のトラブル欄も参照）
+4. **`column tp.account_role does not exist`**（`is_staff_user` 関連）となる場合は、**このリポジトリ最新の `schema.sql` を使ってください**。`teacher_profiles.account_role` 列を **`is_staff_user()` より前に** 作る順序に修正済みです。古いコピーを流した場合は、`supabase/patches/step_c_account_role_then_is_staff_user.sql` を先に Run してから、**`schema.sql` を全文もう一度 Run** してください。
+5. エラーになったら、表示された行番号をメモしてから **全文をもう一度**貼り付けていないか、`rpc` だけ先に流していないかを確認（README の「8. 差分」のトラブル欄も参照）
 
 ここまででテーブル・関数・RLS（誰が何を読めるか）が揃います。
 
@@ -295,7 +296,7 @@ git push -u origin main
 
 1. Supabase **Authentication → Providers → Email** … **有効**
 2. 本番では **Confirm email（メール確認）を ON** にすることが多いです（スパム・なりすまし対策）
-3. メールが届かないときは **Authentication → URL Configuration** を確認  
+3. メールが届かないときは **Authentication →  ** を確認  
    - **Site URL** … 後で決まる本番 URL（先に Vercel でデプロイしたあとで直してもOK）  
    - **Redirect URLs** に `https://あなたの本番ドメイン/**` と `http://localhost:3000/**` を追加
 
@@ -303,16 +304,85 @@ git push -u origin main
 
 ### ステップ E：Vercel に環境変数を入れる
 
-Vercel のダッシュボードで、このプロジェクトの **Settings → Environment Variables** に **次の 3つ** を入れます（名前は **一字違いもダメ**）。
+ここでいう「環境変数」は、**本番サーバー上でだけ使う Supabase の接続情報**です。コードには書かず、Vercel が秘密を差し込みます。
 
-| Name | 値の取り方 |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase **Project URL** |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase **API** の **anon public** |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase **API** の **service_role**（**絶対に公開しない・GitHub に載せない**） |
+**タイミングの目安**
 
-**Production** にチェックを入れて保存。  
-（ローカルでは `.env.local` に同じ名前で書きます。`cp .env.local.example .env.local` で雛形あり。）
+- **すでに Vercel にプロジェクトがある**（ステップ F を終えた）→ 下記 **A** の「Settings から」でOKです。
+- **これから GitHub と連携して初回デプロイする**（これから F）→ ステップ F の **Configure Project** 画面の下の方にある **Environment Variables** に、下の 3 つをそのまま入れてから Deploy しても同じです。
+
+---
+
+**手順 A：いまできているプロジェクトに後から足す**
+
+1. ブラウザで [vercel.com](https://vercel.com) にログインする  
+2. 画面上部の **Dashboard** で、このアプリ用の **プロジェクト名** をクリックする  
+3. プロジェクトの上メニューから **Settings**（設定）を開く  
+4. 左の一覧から **Environment Variables** を選ぶ  
+5. 画面に **Name** と **Value** の入り方が 2 つ並んでいます（古い画面だと左が **Key** と書いてあることもあります）。
+
+   - **Name / Key の欄** … ここに入れる文字列は **Supabase にはありません**。下の表の「左列」を **そのままコピーして貼り付け**ます（例: 最初の 1 回目は `NEXT_PUBLIC_SUPABASE_URL` とだけ入れる）。  
+   - **Value の欄** … ここに **Supabase からコピーした値** を入れます（URL や長いトークン）。
+
+   つまり「Key をどこで探すか」ではなく、**左列の名前は決まっているので表からコピー**、「中身の値だけ Supabase で探す」という流れです。
+
+6. **Supabase で Value（URL・キー）を取る場所** … ダッシュボードの見た目はアカウントや時期で少し違います。次の **A か B** のどちらかに当てはまる画面を探してください。
+
+   ---
+
+   **A. 「API Keys」という専用ページがある場合（いまよくある構成）**
+
+   1. [Supabase Dashboard](https://supabase.com/dashboard) で **プロジェクト** を開く  
+   2. 左サイドバー最下部付近の **⚙️ Project Settings** をクリック  
+   3. 左メニューから **API Keys** をクリック  
+      （URL が `.../settings/api-keys` のようなページです）
+   4. **Project URL** … このページまたは **Settings → General** / **Data API** にある `https://xxxxx.supabase.co` をコピー → Vercel の `NEXT_PUBLIC_SUPABASE_URL`  
+   5. **2 本目**（公開用・ブラウザ向け） …  
+      - **Publishable key**（`sb_publishable_...`）を **Copy** → `NEXT_PUBLIC_SUPABASE_ANON_KEY` に貼る  
+      - または、このページ内の **Legacy** 系のタブ / 折りたたみに **anon** キー（長い `eyJ...`）があるならそれでもOK（どちらか **1つ**）  
+   6. **3 本目**（サーバー専用・秘密） …  
+      **Secret keys** の **default** など **Secret**（`sb_secret_...`）を **Reveal → Copy** → `SUPABASE_SERVICE_ROLE_KEY`  
+      - または **Legacy** の **service_role**（長い `eyJ...`）でもOK（どちらか **1つ**。**見せたり GitHub に書かない**）
+
+   ---
+
+   **B. 古い「1ページに全部ある API」画面の場合**
+
+   1. **Project Settings** → 左メニュー **API**（または **Data API**）  
+   2. **Project URL** … ページ上段 → `NEXT_PUBLIC_SUPABASE_URL`  
+   3. **Project API hooks** などの見出しの下に **anon** **public** と **service_role** の欄があり、**Reveal** で表示 → それぞれ 2・3 本目の Value  
+
+   ---
+
+   **まとめ（Vercel に入れる対応）**
+
+   | Name / Key に貼る文字（変えない） | Value に入れるもの |
+   | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | **Project URL**（`https://....supabase.co`） |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Publishable**（`sb_publishable_...`）**または Legacy の anon**（長い JWT） |
+   | `SUPABASE_SERVICE_ROLE_KEY` | **Secret**（`sb_secret_...`）**または Legacy の service_role**（長い JWT） |
+
+7. 各変数で **Environment** のうち少なくとも **Production** にチェックが入っていることを確認して **Save** する（開発用に Preview / Development へも同じ値を入れておくと便利なことがありますが必要ならでOK）。
+
+8. **重要:** 環境変数を追加・変更したあとは、すでにデプロイ済みなら **再デプロイ**しないとアプリに反映されないことがあります。  
+   - プロジェクトの **Deployments** タブ → いちばん上のデプロイの **…** メニューから **Redeploy**  
+   または、空コミットを GitHub に push して自動デプロイしてもOKです。
+
+---
+
+**ローカル（自分の PC）で `npm run dev` するとき**
+
+- リポジトリ直下に **`.env.local`** を作り、同じ **名前 3つ**に Supabase の値を書きます。  
+- 雛形: `cp .env.local.example .env.local` を実行してから、中身を編集してください。
+
+---
+
+**よくあるつまずき**
+
+- **anon / service_role が見つからない** … **Project Settings → API Keys** を開き、**Publishable** を anon 代わり、**Secret** を service_role 代わりに使えます。または同じ画面の **Legacy** に **anon** と **service_role** があります。**Data API** だけのメニューしか無い場合は **API** や **General** に **Project URL** があるのでそこも確認してください。  
+- **「Key がどこにあるの？」** … Vercel の **Name / Key** の欄に入れるのは **表の左列 3つ**です。どこかに書いてあるのを探すのではなく、**この README の表からコピー**して貼ります。Supabase 側にあるのは **Value（URL とトークン）** だけです。  
+- **名前を間違える** … `NEXT_PUBLIC_` まで含めて表のとおりに。**大文字・小文字もそのまま**です。  
+- **`service_role` をブラウザやクライアントのコードに書かない** … あくまで Vercel の **サーバー側**（このアプリでは保護者紐付けなど）だけが使います。
 
 ---
 
@@ -359,10 +429,13 @@ Vercel のダッシュボードで、このプロジェクトの **Settings → 
 
 | 症状 | よくある原因 |
 | --- | --- |
+| Vercel で `500` / `MIDDLEWARE_INVOCATION_FAILED` | 多くの場合 **本番に `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` が無い**（名前ミス・Production 未チェック・**保存後に Redeploy していない**）。Settings → Environment Variables を確認し **Redeploy**。最新コードでは設定不足時に **日本語の 503 文言**が出ることもあります。 |
+| ステップ C で `account_role` / `is_staff_user` エラー | 旧順序の `schema.sql` を流した。**最新の `schema.sql` で全文 Run**。または `supabase/patches/step_c_account_role_then_is_staff_user.sql` を先に Run してから全文再実行。 |
 | 紐付けで「ユーザーが見つからない」 | そのメールのユーザーが **Supabase Auth にまだ無い** |
 | 紐付けでキー／権限エラー | Vercel に **`SUPABASE_SERVICE_ROLE_KEY` 未設定** |
 | ログイン後まっしろ／エラー | **`schema.sql` を本番 Supabase に未実行**、または Auth の **Site URL** が本番と一致していない |
 | メールが来ない | Confirm email ON なのに SMTP 未設定・迷惑メールフォルダ |
+| コマ時刻 CSV で `lesson_date` 列が schema cache に無い | 本番 Supabase が旧スキーマのまま。**`supabase/classroom_period_times_migrate_to_lesson_date.sql`** を SQL Editor で全文 Run（詳細はセクション **9-3** の見出し参照） |
 
 ---
 
@@ -456,6 +529,15 @@ create index if not exists students_classroom_idx on public.students (classroom)
 
 > 既存の生徒は `classroom IS NULL` のままなので、生徒一覧 → 「教室未設定」チップから該当生徒を見つけて編集 → 教室を割り当てると整理しやすいです。
 
+### 9-2b. ロボット / プログラミング「次回テキスト」（生徒）
+
+生徒編集のプルダウン用。
+
+- ロボット列のみ未適用: **`supabase/patches/students_next_text_robot.sql`**
+- プログラミング列のみ未適用: **`supabase/patches/students_next_text_programming.sql`**
+
+いずれも SQL Editor で全文 Run。または最新の **`supabase/schema.sql`** 全文で両方まとめて追加されます。候補は **`大枠 / 単元`**（プログラミング・ロボットの非2周）、ロボットの（2周）は **`大枠 / 1周目または2周目 / 単元`**（計: ロボット 198・プログラミング 128）。PostgreSQL の `CHECK` を同じ集合に合わせるには、変更後に **`npm run gen:next-text-sql`** で `supabase/generated/*.inc.sql` を再生成し、**`schema.sql` の該当 `check` ブロックを差し替える**か、**`supabase/patches/students_next_text_robot.sql`** と **`students_next_text_programming.sql`** を再生成して Run してください（既存の旧形式の値はパッチで NULL になります）。
+
 ### 9-3. 振替枠 + RPC + Realtime（保護者向けフォーム用）
 
 `supabase/schema.sql` 全文を再 Run するのが最も簡単です。重要なのは下記:
@@ -475,6 +557,16 @@ RPC ファイル（`rpc_makeup_functions_only.sql`）だけを先に流すと、
 2. 続けて **`supabase/rpc_makeup_functions_only.sql`** を **全文** Run
 
 `public.is_admin()` が無いプロジェクトでは ① の RLS 作成で失敗します。その場合は一度 **`schema.sql` の「teacher_profiles / is_admin」まで** を先に適用してください。
+
+#### コマ時刻 CSV で `Could not find the 'lesson_date' column of 'classroom_period_times' in the schema cache` が出たとき
+
+接続先の Supabase に **`classroom_period_times.lesson_date` 列がまだ無い**状態です（PostgREST のスキーマキャッシュが旧テーブル定義のまま）。アプリは **暦日 `lesson_date` 版**を前提に insert しています。
+
+**対処:** Supabase **SQL Editor** でこのリポジトリの **`supabase/classroom_period_times_migrate_to_lesson_date.sql`** を **全文** Run してください。末尾の `notify pgrst, 'reload schema';` で API 側のキャッシュが更新されます。
+
+- テーブルが旧仕様（`day_of_week` / `week_ordinals`）のままの場合、この移行で **コマ時刻データはいったん空になります**（ファイル内コメントどおり）。**CSV から取り直してください。**
+- 新規に近いプロジェクトでテーブル未作成なら、代わりに **`supabase/classroom_period_times_table_and_rls.sql`** を Run しても構いません（`lesson_date` 付きで作成されます）。
+- どちらでも直らない場合は、ダッシュボードで **Table Editor** を開き、`classroom_period_times` に **`lesson_date`（date）** があるか確認してください。
 
 #### SQL Editor で `unterminated dollar-quoted string` が出たとき
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LessonForm } from "@/components/LessonForm";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { getCurrentUser } from "@/lib/auth";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { createClient } from "@/lib/supabase/server";
@@ -26,10 +27,25 @@ export default async function EditLessonPage({
   const [{ data: student }, { data: lesson }, periodTimes] = await Promise.all([
     supabase
       .from("students")
-      .select("id, name, grade, subjects, classroom")
+      .select(
+        "id, name, grade, subjects, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
+      )
       .eq("id", id)
       .maybeSingle<
-        Pick<Student, "id" | "name" | "grade" | "subjects" | "classroom">
+        Pick<
+          Student,
+          | "id"
+          | "name"
+          | "grade"
+          | "subjects"
+          | "classroom"
+          | "next_text_robot"
+          | "next_text_robot_course"
+          | "next_text_robot_text"
+          | "next_text_programming"
+          | "next_text_programming_course"
+          | "next_text_programming_text"
+        >
       >(),
     supabase
       .from("lessons")
@@ -79,6 +95,21 @@ export default async function EditLessonPage({
         description={`${student.name} (${student.grade}) の授業`}
       />
 
+      <StudentTextInfoSection
+        subjects={student.subjects}
+        next_text_robot={student.next_text_robot}
+        next_text_robot_course={student.next_text_robot_course ?? null}
+        next_text_robot_text={student.next_text_robot_text ?? null}
+        next_text_programming={student.next_text_programming}
+        next_text_programming_course={
+          student.next_text_programming_course ?? null
+        }
+        next_text_programming_text={
+          student.next_text_programming_text ?? null
+        }
+        editHref={`/students/${student.id}/edit`}
+      />
+
       <LessonForm
         studentId={student.id}
         lessonId={lesson.id}
@@ -95,6 +126,7 @@ export default async function EditLessonPage({
           textbook: lesson.textbook,
           status: lesson.status,
           textMemo: lesson.text_memo,
+          lessonClassroom: lesson.lesson_classroom,
         }}
         submitLabel="保存する"
         error={error}

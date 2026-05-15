@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
 import {
   formatDateLong,
@@ -18,6 +19,7 @@ import {
 import {
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   SCHEDULED_ATTENDANCE_LABEL,
+  effectiveLessonClassroom,
   type Lesson,
   type Student,
 } from "@/lib/types";
@@ -65,9 +67,26 @@ export default async function ParentHomePage() {
 
   const { data: students } = await supabase
     .from("students")
-    .select("id, name, grade, classroom")
+    .select(
+      "id, name, grade, classroom, subjects, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
+    )
     .in("id", studentIds)
-    .returns<Pick<Student, "id" | "name" | "grade" | "classroom">[]>();
+    .returns<
+      Pick<
+        Student,
+        | "id"
+        | "name"
+        | "grade"
+        | "classroom"
+        | "subjects"
+        | "next_text_robot"
+        | "next_text_robot_course"
+        | "next_text_robot_text"
+        | "next_text_programming"
+        | "next_text_programming_course"
+        | "next_text_programming_text"
+      >[]
+    >();
 
   const today = todayIso();
   const end = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
@@ -97,8 +116,8 @@ export default async function ParentHomePage() {
         description={`今日（${formatDateShort(today)}）から約${MAKEUP_TARGET_MAX_DAYS_AHEAD}日先（${formatDateShort(end)}）までの予定です。振替申し込み済みのコマもここに表示されます。`}
       />
 
-      <section>
-        <h2 className="text-base font-semibold mb-3">紐付け中のお子様</h2>
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold">紐付け中のお子様</h2>
         <ul className="flex flex-wrap gap-2">
           {studentIds.map((id) => {
             const s = byStudent.get(id);
@@ -116,6 +135,30 @@ export default async function ParentHomePage() {
             );
           })}
         </ul>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {studentIds.map((id) => {
+            const s = byStudent.get(id);
+            if (!s) return null;
+            return (
+              <div key={`text-${id}`} className="space-y-2">
+                <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                <StudentTextInfoSection
+                  subjects={s.subjects}
+                  next_text_robot={s.next_text_robot}
+                  next_text_robot_course={s.next_text_robot_course ?? null}
+                  next_text_robot_text={s.next_text_robot_text ?? null}
+                  next_text_programming={s.next_text_programming}
+                  next_text_programming_course={
+                    s.next_text_programming_course ?? null
+                  }
+                  next_text_programming_text={
+                    s.next_text_programming_text ?? null
+                  }
+                />
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <section>
@@ -123,12 +166,14 @@ export default async function ParentHomePage() {
         {lessons && lessons.length > 0 ? (
           <ul className="bg-white border border-sky-200 rounded-2xl divide-y divide-sky-100 overflow-hidden">
             {lessons.map((lesson) => {
+              const lessonVenue = effectiveLessonClassroom(
+                lesson,
+                lesson.students?.classroom ?? null
+              );
               const slotRow =
-                lesson.period &&
-                periodTimes.length &&
-                lesson.students?.classroom
+                lesson.period && periodTimes.length && lessonVenue
                   ? resolveClassroomPeriodTime(periodTimes, {
-                      classroom: lesson.students.classroom,
+                      classroom: lessonVenue,
                       lessonDate: lesson.lesson_date,
                       period: lesson.period,
                       subject: lesson.subject,
@@ -154,7 +199,12 @@ export default async function ParentHomePage() {
                         ? ` · ${formatTimeRange(slotRow.start_time, slotRow.end_time)}`
                         : ""}
                     </span>
-                    <ClassroomBadge classroom={lesson.students?.classroom ?? null} />
+                    <ClassroomBadge
+                      classroom={effectiveLessonClassroom(
+                        lesson,
+                        lesson.students?.classroom ?? null
+                      )}
+                    />
                   </div>
                   {lesson.attendance === "makeup" &&
                   lesson.source_lesson_date ? (

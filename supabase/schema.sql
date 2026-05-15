@@ -32,6 +32,17 @@ create table if not exists public.teacher_profiles (
   created_at    timestamptz not null default now()
 );
 
+-- アカウント種別（is_staff_user より先に列が必要）
+alter table public.teacher_profiles
+  add column if not exists account_role text not null default 'staff';
+
+do $$ begin
+  alter table public.teacher_profiles add constraint teacher_profiles_account_role_check
+    check (account_role in ('staff', 'parent'));
+exception when duplicate_object then null; end $$;
+
+update public.teacher_profiles set account_role = 'staff' where account_role is null;
+
 -- ------------------------------------------------------------
 -- 3) 管理者判定ヘルパー (RLS 用 / security definer で再帰回避)
 -- ------------------------------------------------------------
@@ -114,17 +125,6 @@ on conflict (id) do update
   set email    = excluded.email,
       is_admin = excluded.is_admin or public.teacher_profiles.is_admin;
 
--- アカウント種別: staff=職員（全生徒アクセス可） / parent=保護者（紐付けた生徒のみ）
-alter table public.teacher_profiles
-  add column if not exists account_role text not null default 'staff';
-
-do $$ begin
-  alter table public.teacher_profiles add constraint teacher_profiles_account_role_check
-    check (account_role in ('staff', 'parent'));
-exception when duplicate_object then null; end $$;
-
-update public.teacher_profiles set account_role = 'staff' where account_role is null;
-
 -- ------------------------------------------------------------
 -- 5) students テーブル
 -- ------------------------------------------------------------
@@ -167,6 +167,361 @@ exception when duplicate_object then null; end $$;
 create index if not exists students_name_idx      on public.students (name);
 create index if not exists students_subjects_idx  on public.students using gin (subjects);
 create index if not exists students_classroom_idx on public.students (classroom);
+
+-- 次回テキスト（大枠[/ 周] / 単元）。再生成: npm run gen:next-text-sql
+alter table public.students add column if not exists next_text_robot text;
+alter table public.students add column if not exists next_text_robot_course text;
+alter table public.students add column if not exists next_text_robot_text text;
+do $$ begin
+  alter table public.students add constraint students_next_text_robot_check
+    check (
+      next_text_robot is null
+      or next_text_robot = any (
+      ARRAY[
+          'スタートアップ（入会時） / SU1',
+          'スタートアップ（入会時） / SU2',
+          'プレプライマリー / 1-1',
+          'プレプライマリー / 1-2',
+          'プレプライマリー / 2-1',
+          'プレプライマリー / 2-2',
+          'プレプライマリー / 3-1',
+          'プレプライマリー / 3-2',
+          'プレプライマリー / 4-1',
+          'プレプライマリー / 4-2',
+          'プレプライマリー / 5-1',
+          'プレプライマリー / 5-2',
+          'プレプライマリー / 6-1',
+          'プレプライマリー / 6-2',
+          'プレプライマリー / 7-1',
+          'プレプライマリー / 7-2',
+          'プレプライマリー / 8-1',
+          'プレプライマリー / 8-2',
+          'プレプライマリー / 9-1',
+          'プレプライマリー / 9-2',
+          'プレプライマリー / 10-1',
+          'プレプライマリー / 10-2',
+          'プレプライマリー / 11-1',
+          'プレプライマリー / 11-2',
+          'プレプライマリー / 12-1',
+          'プレプライマリー / 12-2',
+          'プライマリー / 1-1',
+          'プライマリー / 1-2',
+          'プライマリー / 2-1',
+          'プライマリー / 2-2',
+          'プライマリー / 3-1',
+          'プライマリー / 3-2',
+          'プライマリー / 4-1',
+          'プライマリー / 4-2',
+          'プライマリー / 5-1',
+          'プライマリー / 5-2',
+          'プライマリー / 6-1',
+          'プライマリー / 6-2',
+          'プライマリー / 7-1',
+          'プライマリー / 7-2',
+          'プライマリー / 8-1',
+          'プライマリー / 8-2',
+          'プライマリー / 9-1',
+          'プライマリー / 9-2',
+          'プライマリー / 10-1',
+          'プライマリー / 10-2',
+          'プライマリー / 11-1',
+          'プライマリー / 11-2',
+          'プライマリー / 12-1',
+          'プライマリー / 12-2',
+          'ベーシック（2周） / 1周目 / 1-1',
+          'ベーシック（2周） / 1周目 / 1-2',
+          'ベーシック（2周） / 1周目 / 2-1',
+          'ベーシック（2周） / 1周目 / 2-2',
+          'ベーシック（2周） / 1周目 / 3-1',
+          'ベーシック（2周） / 1周目 / 3-2',
+          'ベーシック（2周） / 1周目 / 4-1',
+          'ベーシック（2周） / 1周目 / 4-2',
+          'ベーシック（2周） / 1周目 / 5-1',
+          'ベーシック（2周） / 1周目 / 5-2',
+          'ベーシック（2周） / 1周目 / 6-1',
+          'ベーシック（2周） / 1周目 / 6-2',
+          'ベーシック（2周） / 1周目 / 7-1',
+          'ベーシック（2周） / 1周目 / 7-2',
+          'ベーシック（2周） / 1周目 / 8-1',
+          'ベーシック（2周） / 1周目 / 8-2',
+          'ベーシック（2周） / 1周目 / 9-1',
+          'ベーシック（2周） / 1周目 / 9-2',
+          'ベーシック（2周） / 1周目 / 10-1',
+          'ベーシック（2周） / 1周目 / 10-2',
+          'ベーシック（2周） / 1周目 / 11-1',
+          'ベーシック（2周） / 1周目 / 11-2',
+          'ベーシック（2周） / 1周目 / 12-1',
+          'ベーシック（2周） / 1周目 / 12-2',
+          'ベーシック（2周） / 2周目 / 1-1',
+          'ベーシック（2周） / 2周目 / 1-2',
+          'ベーシック（2周） / 2周目 / 2-1',
+          'ベーシック（2周） / 2周目 / 2-2',
+          'ベーシック（2周） / 2周目 / 3-1',
+          'ベーシック（2周） / 2周目 / 3-2',
+          'ベーシック（2周） / 2周目 / 4-1',
+          'ベーシック（2周） / 2周目 / 4-2',
+          'ベーシック（2周） / 2周目 / 5-1',
+          'ベーシック（2周） / 2周目 / 5-2',
+          'ベーシック（2周） / 2周目 / 6-1',
+          'ベーシック（2周） / 2周目 / 6-2',
+          'ベーシック（2周） / 2周目 / 7-1',
+          'ベーシック（2周） / 2周目 / 7-2',
+          'ベーシック（2周） / 2周目 / 8-1',
+          'ベーシック（2周） / 2周目 / 8-2',
+          'ベーシック（2周） / 2周目 / 9-1',
+          'ベーシック（2周） / 2周目 / 9-2',
+          'ベーシック（2周） / 2周目 / 10-1',
+          'ベーシック（2周） / 2周目 / 10-2',
+          'ベーシック（2周） / 2周目 / 11-1',
+          'ベーシック（2周） / 2周目 / 11-2',
+          'ベーシック（2周） / 2周目 / 12-1',
+          'ベーシック（2周） / 2周目 / 12-2',
+          'ミドル（2周） / 1周目 / SU1',
+          'ミドル（2周） / 1周目 / SU2',
+          'ミドル（2周） / 1周目 / 1-1',
+          'ミドル（2周） / 1周目 / 1-2',
+          'ミドル（2周） / 1周目 / 2-1',
+          'ミドル（2周） / 1周目 / 2-2',
+          'ミドル（2周） / 1周目 / 3-1',
+          'ミドル（2周） / 1周目 / 3-2',
+          'ミドル（2周） / 1周目 / 4-1',
+          'ミドル（2周） / 1周目 / 4-2',
+          'ミドル（2周） / 1周目 / 5-1',
+          'ミドル（2周） / 1周目 / 5-2',
+          'ミドル（2周） / 1周目 / 6-1',
+          'ミドル（2周） / 1周目 / 6-2',
+          'ミドル（2周） / 1周目 / 7-1',
+          'ミドル（2周） / 1周目 / 7-2',
+          'ミドル（2周） / 1周目 / 8-1',
+          'ミドル（2周） / 1周目 / 8-2',
+          'ミドル（2周） / 1周目 / 9-1',
+          'ミドル（2周） / 1周目 / 9-2',
+          'ミドル（2周） / 1周目 / 10-1',
+          'ミドル（2周） / 1周目 / 10-2',
+          'ミドル（2周） / 1周目 / 11-1',
+          'ミドル（2周） / 1周目 / 11-2',
+          'ミドル（2周） / 1周目 / 12-1',
+          'ミドル（2周） / 1周目 / 12-2',
+          'ミドル（2周） / 2周目 / 1-1',
+          'ミドル（2周） / 2周目 / 1-2',
+          'ミドル（2周） / 2周目 / 2-1',
+          'ミドル（2周） / 2周目 / 2-2',
+          'ミドル（2周） / 2周目 / 3-1',
+          'ミドル（2周） / 2周目 / 3-2',
+          'ミドル（2周） / 2周目 / 4-1',
+          'ミドル（2周） / 2周目 / 4-2',
+          'ミドル（2周） / 2周目 / 5-1',
+          'ミドル（2周） / 2周目 / 5-2',
+          'ミドル（2周） / 2周目 / 6-1',
+          'ミドル（2周） / 2周目 / 6-2',
+          'ミドル（2周） / 2周目 / 7-1',
+          'ミドル（2周） / 2周目 / 7-2',
+          'ミドル（2周） / 2周目 / 8-1',
+          'ミドル（2周） / 2周目 / 8-2',
+          'ミドル（2周） / 2周目 / 9-1',
+          'ミドル（2周） / 2周目 / 9-2',
+          'ミドル（2周） / 2周目 / 10-1',
+          'ミドル（2周） / 2周目 / 10-2',
+          'ミドル（2周） / 2周目 / 11-1',
+          'ミドル（2周） / 2周目 / 11-2',
+          'ミドル（2周） / 2周目 / 12-1',
+          'ミドル（2周） / 2周目 / 12-2',
+          'アドバンス（2周） / 1周目 / SU1',
+          'アドバンス（2周） / 1周目 / SU2',
+          'アドバンス（2周） / 1周目 / 1-3',
+          'アドバンス（2周） / 1周目 / 1-4',
+          'アドバンス（2周） / 1周目 / 2-1',
+          'アドバンス（2周） / 1周目 / 2-2',
+          'アドバンス（2周） / 1周目 / 3-3',
+          'アドバンス（2周） / 1周目 / 3-4',
+          'アドバンス（2周） / 1周目 / 4-1',
+          'アドバンス（2周） / 1周目 / 4-2',
+          'アドバンス（2周） / 1周目 / 5-3',
+          'アドバンス（2周） / 1周目 / 5-4',
+          'アドバンス（2周） / 1周目 / 6-1',
+          'アドバンス（2周） / 1周目 / 6-2',
+          'アドバンス（2周） / 1周目 / 7-3',
+          'アドバンス（2周） / 1周目 / 7-4',
+          'アドバンス（2周） / 1周目 / 8-1',
+          'アドバンス（2周） / 1周目 / 8-2',
+          'アドバンス（2周） / 1周目 / 9-3',
+          'アドバンス（2周） / 1周目 / 9-4',
+          'アドバンス（2周） / 1周目 / 10-1',
+          'アドバンス（2周） / 1周目 / 10-2',
+          'アドバンス（2周） / 1周目 / 11-3',
+          'アドバンス（2周） / 1周目 / 11-4',
+          'アドバンス（2周） / 1周目 / 12-1',
+          'アドバンス（2周） / 1周目 / 12-2',
+          'アドバンス（2周） / 2周目 / 1-3',
+          'アドバンス（2周） / 2周目 / 1-4',
+          'アドバンス（2周） / 2周目 / 2-1',
+          'アドバンス（2周） / 2周目 / 2-2',
+          'アドバンス（2周） / 2周目 / 3-3',
+          'アドバンス（2周） / 2周目 / 3-4',
+          'アドバンス（2周） / 2周目 / 4-1',
+          'アドバンス（2周） / 2周目 / 4-2',
+          'アドバンス（2周） / 2周目 / 5-3',
+          'アドバンス（2周） / 2周目 / 5-4',
+          'アドバンス（2周） / 2周目 / 6-1',
+          'アドバンス（2周） / 2周目 / 6-2',
+          'アドバンス（2周） / 2周目 / 7-3',
+          'アドバンス（2周） / 2周目 / 7-4',
+          'アドバンス（2周） / 2周目 / 8-1',
+          'アドバンス（2周） / 2周目 / 8-2',
+          'アドバンス（2周） / 2周目 / 9-3',
+          'アドバンス（2周） / 2周目 / 9-4',
+          'アドバンス（2周） / 2周目 / 10-1',
+          'アドバンス（2周） / 2周目 / 10-2',
+          'アドバンス（2周） / 2周目 / 11-3',
+          'アドバンス（2周） / 2周目 / 11-4',
+          'アドバンス（2周） / 2周目 / 12-1',
+          'アドバンス（2周） / 2周目 / 12-2'
+      ]::text[]
+      )
+    );
+exception when duplicate_object then null; end $$;
+
+alter table public.students add column if not exists next_text_programming text;
+alter table public.students add column if not exists next_text_programming_course text;
+alter table public.students add column if not exists next_text_programming_text text;
+do $$ begin
+  alter table public.students add constraint students_next_text_programming_check
+    check (
+      next_text_programming is null
+      or next_text_programming = any (
+      ARRAY[
+          'スタートアップ（入会時） / SU1',
+          'スタートアップ（入会時） / SU2',
+          'ベーシック / 1-1',
+          'ベーシック / 1-2',
+          'ベーシック / 2-1',
+          'ベーシック / 2-2',
+          'ベーシック / 3-1',
+          'ベーシック / 3-2',
+          'ベーシック / 4-1',
+          'ベーシック / 4-2',
+          'ベーシック / 5-1',
+          'ベーシック / 5-2',
+          'ベーシック / 6-1',
+          'ベーシック / 6-2',
+          'ベーシック / 7-1',
+          'ベーシック / 7-2',
+          'ベーシック / 8-1',
+          'ベーシック / 8-2',
+          'ベーシック / 9-1',
+          'ベーシック / 9-2',
+          'ベーシック / 10-1',
+          'ベーシック / 10-2',
+          'ベーシック / 11-1',
+          'ベーシック / 11-2',
+          'ベーシック / 12-1',
+          'ベーシック / 12-2',
+          'ベーシック2 / SU1',
+          'ベーシック2 / SU2',
+          'ベーシック2 / 1-1',
+          'ベーシック2 / 1-2',
+          'ベーシック2 / 2-1',
+          'ベーシック2 / 2-2',
+          'ベーシック2 / 3-1',
+          'ベーシック2 / 3-2',
+          'ベーシック2 / 4-1',
+          'ベーシック2 / 4-2',
+          'ベーシック2 / 5-1',
+          'ベーシック2 / 5-2',
+          'ベーシック2 / 6-1',
+          'ベーシック2 / 6-2',
+          'ベーシック2 / 7-1',
+          'ベーシック2 / 7-2',
+          'ベーシック2 / 8-1',
+          'ベーシック2 / 8-2',
+          'ベーシック2 / 9-1',
+          'ベーシック2 / 9-2',
+          'ベーシック2 / 10-1',
+          'ベーシック2 / 10-2',
+          'ベーシック2 / 11-1',
+          'ベーシック2 / 11-2',
+          'ベーシック2 / 12-1',
+          'ベーシック2 / 12-2',
+          'ミドル / 1-1',
+          'ミドル / 1-2',
+          'ミドル / 2-1',
+          'ミドル / 2-2',
+          'ミドル / 3-1',
+          'ミドル / 3-2',
+          'ミドル / 4-1',
+          'ミドル / 4-2',
+          'ミドル / 5-1',
+          'ミドル / 5-2',
+          'ミドル / 6-1',
+          'ミドル / 6-2',
+          'ミドル / 7-1',
+          'ミドル / 7-2',
+          'ミドル / 8-1',
+          'ミドル / 8-2',
+          'ミドル / 9-1',
+          'ミドル / 9-2',
+          'ミドル / 10-1',
+          'ミドル / 10-2',
+          'ミドル / 11-1',
+          'ミドル / 11-2',
+          'ミドル / 12-1',
+          'ミドル / 12-2',
+          'ミドル2 / SU1',
+          'ミドル2 / SU2',
+          'ミドル2 / 1-1',
+          'ミドル2 / 1-2',
+          'ミドル2 / 2-1',
+          'ミドル2 / 2-2',
+          'ミドル2 / 3-1',
+          'ミドル2 / 3-2',
+          'ミドル2 / 4-1',
+          'ミドル2 / 4-2',
+          'ミドル2 / 5-1',
+          'ミドル2 / 5-2',
+          'ミドル2 / 6-1',
+          'ミドル2 / 6-2',
+          'ミドル2 / 7-1',
+          'ミドル2 / 7-2',
+          'ミドル2 / 8-1',
+          'ミドル2 / 8-2',
+          'ミドル2 / 9-1',
+          'ミドル2 / 9-2',
+          'ミドル2 / 10-1',
+          'ミドル2 / 10-2',
+          'ミドル2 / 11-1',
+          'ミドル2 / 11-2',
+          'ミドル2 / 12-1',
+          'ミドル2 / 12-2',
+          'アドバンス / SU1',
+          'アドバンス / SU2',
+          'アドバンス / 1-1',
+          'アドバンス / 1-2',
+          'アドバンス / 2-1',
+          'アドバンス / 2-2',
+          'アドバンス / 3-1',
+          'アドバンス / 3-2',
+          'アドバンス / 4-1',
+          'アドバンス / 4-2',
+          'アドバンス / 5-1',
+          'アドバンス / 5-2',
+          'アドバンス / 6-1',
+          'アドバンス / 6-2',
+          'アドバンス / 7-1',
+          'アドバンス / 7-2',
+          'アドバンス / 8-1',
+          'アドバンス / 8-2',
+          'アドバンス / 9-1',
+          'アドバンス / 9-2',
+          'アドバンス / 10-1',
+          'アドバンス / 10-2',
+          'アドバンス / 11-1',
+          'アドバンス / 11-2',
+          'アドバンス / 12-1',
+          'アドバンス / 12-2'
+      ]::text[]
+      )
+    );
+exception when duplicate_object then null; end $$;
 
 -- ------------------------------------------------------------
 -- 5.5) parent_student_links（保護者アカウント ↔ 生徒）
@@ -213,6 +568,23 @@ alter table public.lessons add column if not exists textbook text;
 alter table public.lessons add column if not exists source_lesson_date date;
 alter table public.lessons add column if not exists source_period   smallint;
 alter table public.lessons add column if not exists source_subject  text;
+alter table public.lessons add column if not exists lesson_classroom text;
+alter table public.lessons add column if not exists created_from_enrollment boolean not null default false;
+
+-- 実施会場（別教室での振替など）。null = 生徒の所属教室と同じ扱い
+do $$ begin
+  alter table public.lessons add constraint lessons_lesson_classroom_check
+    check (lesson_classroom is null or lesson_classroom in (
+      '長浜八幡中山教室',
+      '長浜駅前通り教室',
+      '米原駅前教室',
+      '米原長岡教室',
+      '西宮鳴尾町教室',
+      '出屋敷教室',
+      '長浜神照教室',
+      '学校法人芦屋学園芦屋大学附属幼稚園教室'
+    ));
+exception when duplicate_object then null; end $$;
 
 -- period は 1〜10 のいずれか、または未設定 (null)
 do $$ begin
@@ -343,6 +715,22 @@ exception when duplicate_object then null; end $$;
 create index if not exists lesson_capacities_lookup_idx
   on public.lesson_capacities (classroom, day_of_week, period, subject);
 
+-- 生徒の定例コマ（lesson_capacities）。保存時に出席予定を自動生成する際の参照先。
+alter table public.students add column if not exists enrollment_robot_capacity_id uuid;
+alter table public.students add column if not exists enrollment_prog_capacity_id uuid;
+
+do $$ begin
+  alter table public.students
+    add constraint students_enrollment_robot_capacity_id_fkey
+    foreign key (enrollment_robot_capacity_id) references public.lesson_capacities(id) on delete set null;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.students
+    add constraint students_enrollment_prog_capacity_id_fkey
+    foreign key (enrollment_prog_capacity_id) references public.lesson_capacities(id) on delete set null;
+exception when duplicate_object then null; end $$;
+
 drop trigger if exists lesson_capacities_set_updated_at on public.lesson_capacities;
 create trigger lesson_capacities_set_updated_at
   before update on public.lesson_capacities
@@ -451,7 +839,11 @@ as $get_makeup$
       and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
   ),
   occupied as (
-    select s.classroom, l.period, l.subject, count(*)::int as occ
+    select
+      coalesce(l.lesson_classroom, s.classroom) as classroom,
+      l.period,
+      l.subject,
+      count(*)::int as occ
     from public.lessons l
     join public.students s on s.id = l.student_id
     where l.lesson_date = target_date
@@ -459,7 +851,7 @@ as $get_makeup$
       and l.attendance in ('present', 'makeup')
       and l.period is not null
       and l.subject is not null
-    group by s.classroom, l.period, l.subject
+    group by 1, l.period, l.subject
   )
   select
     c.classroom,
@@ -553,6 +945,7 @@ grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, t
 
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
+drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text);
 
 -- (c) 振替予約を 容量チェック付き でアトミックに作成（欠席元の登録・更新も同時に）
 create or replace function public.book_makeup_lesson(
@@ -563,7 +956,8 @@ create or replace function public.book_makeup_lesson(
   p_source_lesson_date date,
   p_source_period      smallint,
   p_source_subject     text,
-  p_text_memo          text default null
+  p_text_memo          text default null,
+  p_lesson_classroom   text default null
 )
 returns uuid
 language plpgsql
@@ -572,6 +966,7 @@ set search_path = public
 as $book_makeup$
 declare
   v_student    record;
+  v_venue      text;
   v_max        smallint;
   v_current    bigint;
   v_lesson_id  uuid;
@@ -612,10 +1007,15 @@ begin
     raise exception '所属教室が未設定の生徒のため申請できません。教室にお問い合わせください。';
   end if;
 
+  v_venue := coalesce(nullif(trim(p_lesson_classroom), ''), v_student.classroom);
+  if v_venue is null then
+    raise exception '実施会場を特定できません。';
+  end if;
+
   select c.max_students
     into v_max
     from public.lesson_capacities c
-   where c.classroom   = v_student.classroom
+   where c.classroom   = v_venue
      and c.day_of_week = extract(dow from p_lesson_date)::smallint
      and c.period      = p_period
      and c.subject     = p_subject
@@ -646,7 +1046,7 @@ begin
        where l.lesson_date = p_lesson_date
          and l.period      = p_period
          and l.subject     = p_subject
-         and s.classroom   = v_student.classroom
+         and coalesce(l.lesson_classroom, s.classroom) = v_venue
          and l.status      = 'scheduled'
          and l.attendance  in ('present', 'makeup')
        for update of l
@@ -687,11 +1087,13 @@ begin
   insert into public.lessons (
     student_id, teacher_id, lesson_date, period,
     attendance, subject, status, text_memo,
-    source_lesson_date, source_period, source_subject
+    source_lesson_date, source_period, source_subject,
+    lesson_classroom
   ) values (
     p_student_id, v_student.created_by, p_lesson_date, p_period,
     'makeup', p_subject, 'scheduled', p_text_memo,
-    p_source_lesson_date, p_source_period, p_source_subject
+    p_source_lesson_date, p_source_period, p_source_subject,
+    v_venue
   )
   returning id into v_lesson_id;
 
@@ -699,8 +1101,8 @@ begin
 end;
 $book_makeup$;
 
-revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) from public;
-grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text) to anon, authenticated;
+revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) from public;
+grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) to anon, authenticated;
 
 notify pgrst, 'reload schema';
 
@@ -812,7 +1214,14 @@ create policy "lessons: update (own or admin)"
 create policy "lessons: delete (own or admin)"
   on public.lessons for delete
   to authenticated
-  using (public.is_staff_user() and (teacher_id = auth.uid() or public.is_admin()));
+  using (
+    public.is_staff_user()
+    and (
+      teacher_id = auth.uid()
+      or public.is_admin()
+      or coalesce(lessons.created_from_enrollment, false) = true
+    )
+  );
 
 -- ===== lesson_capacities =====
 -- 認証済みは閲覧可、管理者のみ書込可。

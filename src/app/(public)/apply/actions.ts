@@ -129,6 +129,8 @@ export async function bookMakeupLesson(input: {
   sourcePeriod: number;
   sourceSubject: string;
   textMemo?: string;
+  /** 振替先の実施会場。省略時はお子様の所属教室 */
+  lessonClassroom?: string | null;
 }): Promise<BookResult> {
   if (!input.studentId) return { ok: false, error: "生徒情報が不正です。" };
   if (!isValidDate(input.lessonDate)) {
@@ -167,6 +169,14 @@ export async function bookMakeupLesson(input: {
     };
   }
 
+  const lessonVenue = (input.lessonClassroom ?? "").trim();
+  if (
+    lessonVenue &&
+    !(CLASSROOM_NAMES as readonly string[]).includes(lessonVenue)
+  ) {
+    return { ok: false, error: "実施会場の指定が不正です。" };
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("book_makeup_lesson", {
     p_student_id: input.studentId,
@@ -177,6 +187,7 @@ export async function bookMakeupLesson(input: {
     p_source_period: input.sourcePeriod,
     p_source_subject: input.sourceSubject,
     p_text_memo: input.textMemo?.trim() || null,
+    p_lesson_classroom: lessonVenue || null,
   });
 
   if (error) {

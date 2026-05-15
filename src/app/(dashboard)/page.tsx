@@ -22,6 +22,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
+  effectiveLessonClassroom,
   periodLabel,
   type ClassroomPeriodTime,
   type Lesson,
@@ -33,6 +34,12 @@ type LessonWithStudent = Lesson & {
     name: string;
     grade: string;
     classroom: string | null;
+    next_text_robot: string | null;
+    next_text_programming: string | null;
+    next_text_robot_course?: string | null;
+    next_text_robot_text?: string | null;
+    next_text_programming_course?: string | null;
+    next_text_programming_text?: string | null;
   } | null;
 };
 
@@ -60,7 +67,9 @@ export default async function DashboardHomePage({
     supabase.from("students").select("*", { count: "exact", head: true }),
     supabase
       .from("lessons")
-      .select("*, students ( id, name, grade, classroom )")
+      .select(
+        "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
+      )
       .eq("lesson_date", selectedDate)
       .order("period", { ascending: true, nullsFirst: false })
       .order("status", { ascending: true })
@@ -68,7 +77,9 @@ export default async function DashboardHomePage({
       .returns<LessonWithStudent[]>(),
     supabase
       .from("lessons")
-      .select("*, students ( id, name, grade, classroom )")
+      .select(
+        "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
+      )
       .eq("status", "recorded")
       .order("lesson_date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -76,7 +87,9 @@ export default async function DashboardHomePage({
       .returns<LessonWithStudent[]>(),
     supabase
       .from("lessons")
-      .select("*, students ( id, name, grade, classroom )")
+      .select(
+        "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
+      )
       .eq("status", "scheduled")
       .gt("lesson_date", today)
       .order("lesson_date", { ascending: true })
@@ -220,7 +233,10 @@ function LessonRow({
   const slotRow =
     lesson.period && classroomPeriodTimes.length
       ? resolveClassroomPeriodTime(classroomPeriodTimes, {
-          classroom: lesson.students?.classroom,
+          classroom: effectiveLessonClassroom(
+            lesson,
+            lesson.students?.classroom ?? null
+          ),
           lessonDate: lesson.lesson_date,
           period: lesson.period,
           subject: lesson.subject,
@@ -242,7 +258,12 @@ function LessonRow({
                 {lesson.students.grade}
               </span>
             ) : null}
-            <ClassroomBadge classroom={lesson.students?.classroom} />
+            <ClassroomBadge
+              classroom={effectiveLessonClassroom(
+                lesson,
+                lesson.students?.classroom ?? null
+              )}
+            />
             <SubjectChip subject={lesson.subject} />
             {lesson.period ? (
               <span className="text-xs text-slate-500">

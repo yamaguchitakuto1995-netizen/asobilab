@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
-import { GRADE_LEVELS } from "@/lib/types";
+import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
+import { createClient } from "@/lib/supabase/server";
+import { GRADE_LEVELS, type LessonCapacity } from "@/lib/types";
 import { createStudent } from "../actions";
 
 type SearchParams = Promise<{ error?: string }>;
@@ -13,6 +15,14 @@ export default async function NewStudentPage({
   searchParams: SearchParams;
 }) {
   const { error } = await searchParams;
+  const supabase = await createClient();
+  const { data: capRows } = await supabase
+    .from("lesson_capacities")
+    .select("*")
+    .order("classroom", { ascending: true })
+    .order("day_of_week", { ascending: true })
+    .order("period", { ascending: true })
+    .returns<LessonCapacity[]>();
 
   return (
     <div className="max-w-lg">
@@ -47,7 +57,22 @@ export default async function NewStudentPage({
           </select>
         </Field>
 
-        <ClassroomSubjectsField />
+        <p className="text-xs text-slate-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 leading-relaxed">
+          <span className="font-semibold text-amber-950">プルダウン</span>
+          は学年の下・
+          <a
+            href="#student-next-text-curriculum"
+            className="text-emerald-800 font-semibold underline underline-offset-2"
+          >
+            緑の「次回テキスト」枠
+          </a>
+          にあります（所属教室より<strong>上</strong>）。見えないときは
+          <strong>⌘+Shift+R</strong>。
+        </p>
+
+        <StudentNextTextFormSection />
+
+        <ClassroomSubjectsField capacityRows={capRows ?? []} />
 
         <Field
           label="メモ"

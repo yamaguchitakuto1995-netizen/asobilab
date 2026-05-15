@@ -158,6 +158,20 @@ export type Student = {
   grade: GradeLevel;
   classroom: string | null;
   subjects: string[];
+  /** ロボット受講時のみ。教材リストから選択（`courseNextText.ts`） */
+  next_text_robot: string | null;
+  /** ロボット「コース名」列（プレプライマリー等）。表示・検索用 */
+  next_text_robot_course?: string | null;
+  /** ロボット「テキスト名」列（1-1 または 2周では「1周目 / 1-1」） */
+  next_text_robot_text?: string | null;
+  /** プログラミング受講時のみ。同上 */
+  next_text_programming: string | null;
+  next_text_programming_course?: string | null;
+  next_text_programming_text?: string | null;
+  /** ロボットの定例コマ（lesson_capacities.id）。保存時に出席予定を自動生成 */
+  enrollment_robot_capacity_id?: string | null;
+  /** プログラミングの定例コマ（lesson_capacities.id） */
+  enrollment_prog_capacity_id?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;
@@ -174,13 +188,25 @@ export type Lesson = {
   textbook: string | null;
   status: LessonStatus;
   text_memo: string | null;
+  /** 実施会場。未指定または undefined のときは生徒の所属教室で開催したものとして扱う */
+  lesson_classroom?: string | null;
   /** 振替で埋めた場合: 欠席する元の授業日 */
   source_lesson_date: string | null;
   source_period: number | null;
   source_subject: string | null;
+  /** 生徒登録フローで自動作成した出席予定のとき true */
+  created_from_enrollment?: boolean;
   created_at: string;
   updated_at: string;
 };
+
+/** 授業行の実施会場（未指定なら生徒の所属教室） */
+export function effectiveLessonClassroom(
+  lesson: { lesson_classroom?: string | null },
+  studentClassroom: string | null
+): string | null {
+  return lesson.lesson_classroom ?? studentClassroom ?? null;
+}
 
 /** 1コマ分の振替枠設定 (lesson_capacities テーブルの行) */
 export type LessonCapacity = {

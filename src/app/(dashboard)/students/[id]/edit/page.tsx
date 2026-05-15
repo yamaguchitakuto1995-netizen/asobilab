@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { createClient } from "@/lib/supabase/server";
-import { GRADE_LEVELS, type Student } from "@/lib/types";
+import { GRADE_LEVELS, type LessonCapacity, type Student } from "@/lib/types";
 import { updateStudent } from "../../actions";
 import {
   linkParentToStudent,
@@ -32,6 +33,14 @@ export default async function EditStudentPage({
     .maybeSingle<Student>();
 
   if (!student) notFound();
+
+  const { data: capacityRows } = await supabase
+    .from("lesson_capacities")
+    .select("*")
+    .order("classroom", { ascending: true })
+    .order("day_of_week", { ascending: true })
+    .order("period", { ascending: true })
+    .returns<LessonCapacity[]>();
 
   const { data: linkRows } = await supabase
     .from("parent_student_links")
@@ -76,6 +85,20 @@ export default async function EditStudentPage({
       >
         <input type="hidden" name="id" value={student.id} />
 
+        <p className="text-xs text-slate-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 leading-relaxed">
+          <span className="font-semibold text-amber-950">プルダウンが見えないとき</span>
+          ：誤解が多いので場所を固定しました。名前・学年の<strong>すぐ下</strong>（
+          <a
+            href="#student-next-text-curriculum"
+            className="text-emerald-800 font-semibold underline underline-offset-2"
+          >
+            次回テキストの緑の枠へジャンプ
+          </a>
+          ）に、ロボット／プログラミング別の<strong>コース→テキスト名</strong>のプルダウンがあります。表示されない場合は
+          <strong>⌘+Shift+R</strong>
+          で再読み込みするか、動いている環境がこのコードの最新版か確認してください。
+        </p>
+
         <Field label="名前" htmlFor="name" required>
           <input
             id="name"
@@ -104,9 +127,29 @@ export default async function EditStudentPage({
           </select>
         </Field>
 
+        <StudentNextTextFormSection
+          defaultNextTextRobot={student.next_text_robot}
+          defaultNextTextRobotCourse={student.next_text_robot_course ?? null}
+          defaultNextTextRobotText={student.next_text_robot_text ?? null}
+          defaultNextTextProgramming={student.next_text_programming}
+          defaultNextTextProgrammingCourse={
+            student.next_text_programming_course ?? null
+          }
+          defaultNextTextProgrammingText={
+            student.next_text_programming_text ?? null
+          }
+        />
+
         <ClassroomSubjectsField
           defaultClassroom={student.classroom}
           defaultSubjects={student.subjects ?? []}
+          capacityRows={capacityRows ?? []}
+          defaultEnrollmentRobotCapacityId={
+            student.enrollment_robot_capacity_id ?? null
+          }
+          defaultEnrollmentProgCapacityId={
+            student.enrollment_prog_capacity_id ?? null
+          }
         />
 
         <Field label="メモ" htmlFor="note" hint="連絡先や担当科目など、任意のメモ">

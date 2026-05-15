@@ -56,3 +56,25 @@ export function isValidDate(d: string | undefined | null): d is string {
     date.getDate() === dd
   );
 }
+
+/**
+ * CSV/Excel 貼り付け用: YYYY-MM-DD のほか、Excel が出しがちな YYYY/M/D・YYYY.M.D などを YYYY-MM-DD に正規化する。
+ * 暦日として不正な組み合わせは null。
+ */
+export function parseLessonDateFromPaste(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const t = raw
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, "")
+    .replace(/\u3000/g, "")
+    .trim();
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t) && isValidDate(t)) return t;
+  const m = t.match(/^(\d{4})[./年\-](\d{1,2})[./月\-](\d{1,2})日?$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return isValidDate(iso) ? iso : null;
+}

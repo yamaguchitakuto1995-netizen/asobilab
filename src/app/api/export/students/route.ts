@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   let query = supabase
     .from("students")
-    .select("id, name, grade, classroom, subjects, note, created_at")
+    .select(
+      "id, name, grade, classroom, subjects, note, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text, created_at"
+    )
     .order("created_at", { ascending: false });
 
   if (q) {
@@ -49,7 +51,19 @@ export async function GET(request: NextRequest) {
   const { data: students, error } = await query.returns<
     Pick<
       Student,
-      "id" | "name" | "grade" | "classroom" | "subjects" | "note" | "created_at"
+      | "id"
+      | "name"
+      | "grade"
+      | "classroom"
+      | "subjects"
+      | "next_text_robot"
+      | "next_text_robot_course"
+      | "next_text_robot_text"
+      | "next_text_programming"
+      | "next_text_programming_course"
+      | "next_text_programming_text"
+      | "note"
+      | "created_at"
     >[]
   >();
 
@@ -63,6 +77,12 @@ export async function GET(request: NextRequest) {
     "学年",
     "所属教室",
     "受講教科",
+    "ロボット_コース",
+    "ロボット_テキスト名",
+    "ロボット_表記",
+    "プログラミング_コース",
+    "プログラミング_テキスト名",
+    "プログラミング_表記",
     "メモ",
     "登録日時_UTC",
   ];
@@ -83,6 +103,12 @@ export async function GET(request: NextRequest) {
         s.grade,
         s.classroom ?? "",
         (s.subjects ?? []).join("; "),
+        s.next_text_robot_course ?? "",
+        s.next_text_robot_text ?? "",
+        s.next_text_robot ?? "",
+        s.next_text_programming_course ?? "",
+        s.next_text_programming_text ?? "",
+        s.next_text_programming ?? "",
         s.note ?? "",
         created,
       ])
