@@ -13,10 +13,12 @@ import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
+import { formatDateLong } from "@/lib/date";
 import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import { aggregateLessonTextbookCounts } from "@/lib/lessonTextbookInventory";
 
 export type DailyLessonItem = Lesson & {
   students: {
@@ -73,6 +75,7 @@ export function DailyLessonCarousel({
   });
 
   const totalSlots = groups.length;
+  const dayTextbookCounts = aggregateLessonTextbookCounts(lessons);
 
   return (
     <div className="-mx-4 sm:mx-0">
@@ -80,6 +83,12 @@ export function DailyLessonCarousel({
       <p className="text-xs text-slate-500 mb-2 px-4 sm:px-0">
         ← 横にスワイプして {totalSlots} 件のコマを切り替え
       </p>
+
+      <TextbookInventorySummary
+        title={`${formatDateLong(date)}：この日の教材（全コマ合計の必要冊数）`}
+        items={dayTextbookCounts}
+        className="mb-3 mx-4 sm:mx-0"
+      />
 
       <div
         className="
@@ -118,6 +127,7 @@ function PeriodCard({
 }) {
   const scheduledCount = lessons.filter((l) => l.status === "scheduled").length;
   const recordedCount = lessons.length - scheduledCount;
+  const periodTextbookCounts = aggregateLessonTextbookCounts(lessons);
 
   return (
     <article
@@ -160,6 +170,13 @@ function PeriodCard({
           ) : null}
         </div>
       </header>
+
+      <TextbookInventorySummary
+        title={`このコマの教材（${lessons.length}名分・種類別冊数）`}
+        items={periodTextbookCounts}
+        compact
+        className="border-b border-slate-100 bg-amber-50/40 px-3 py-2.5"
+      />
 
       <ul className="divide-y divide-slate-100 max-h-[60vh] overflow-y-auto">
         {lessons.map((l) => (
@@ -320,5 +337,56 @@ function StudentSlot({
         </p>
       ) : null}
     </Link>
+  );
+}
+
+function TextbookInventorySummary({
+  title,
+  items,
+  compact,
+  className = "",
+}: {
+  title: string;
+  items: { label: string; count: number }[];
+  compact?: boolean;
+  className?: string;
+}) {
+  const total = items.reduce((s, x) => s + x.count, 0);
+  return (
+    <div
+      className={`rounded-xl border border-amber-200/80 bg-amber-50/50 ${className}`}
+      role="region"
+      aria-label={title}
+    >
+      <p
+        className={`font-semibold text-amber-950 ${
+          compact ? "text-[11px] mb-1.5" : "text-xs mb-2"
+        }`}
+      >
+        {title}
+        {!compact ? (
+          <span className="ml-2 font-normal text-amber-900/80">
+            合計 <strong>{total}</strong> 名分（1件＝1冊換算）
+          </span>
+        ) : null}
+      </p>
+      <ul
+        className={`space-y-1 ${
+          compact ? "text-[11px] text-amber-950/90" : "text-xs text-amber-950/90"
+        }`}
+      >
+        {items.map(({ label, count }) => (
+          <li
+            key={`${label}:${count}`}
+            className="flex items-start justify-between gap-2 leading-snug"
+          >
+            <span className="min-w-0 break-words pr-1">{label}</span>
+            <span className="shrink-0 tabular-nums font-semibold text-amber-900">
+              {count}冊
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
