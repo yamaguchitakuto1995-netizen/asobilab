@@ -36,7 +36,11 @@ function readForm(formData: FormData): ReadResult {
   const dayOfWeek = Number(formData.get("day_of_week"));
   const period = Number(formData.get("period"));
   const subject = String(formData.get("subject") ?? "").trim();
-  const maxStudents = Number(formData.get("max_students"));
+  const maxStudentsRaw = formData.get("max_students");
+  const maxStudents =
+    maxStudentsRaw === null || String(maxStudentsRaw).trim() === ""
+      ? 4
+      : Number(maxStudentsRaw);
   const note = String(formData.get("note") ?? "").trim();
   const ordRaw = formData.getAll("week_ordinals");
   const week_ordinals = [

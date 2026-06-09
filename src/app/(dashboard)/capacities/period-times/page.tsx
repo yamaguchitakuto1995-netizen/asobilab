@@ -17,6 +17,9 @@ import {
 type SearchParams = Promise<{
   error?: string;
   imported?: string;
+  updated?: string;
+  csv_dupes?: string;
+  overwrites?: string;
 }>;
 
 export default async function PeriodTimesPage({
@@ -58,14 +61,35 @@ export default async function PeriodTimesPage({
       />
 
       {sp.error ? (
-        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
           {decodeURIComponent(sp.error)}
         </p>
       ) : null}
-      {sp.imported ? (
-        <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-          {decodeURIComponent(sp.imported)} 件を取り込みました。
-        </p>
+      {sp.imported || sp.updated ? (
+        <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
+          {sp.imported ? (
+            <p>新規 {decodeURIComponent(sp.imported)} 件を登録しました。</p>
+          ) : null}
+          {sp.updated ? (
+            <p>既存 {decodeURIComponent(sp.updated)} 件を上書きしました。</p>
+          ) : null}
+        </div>
+      ) : null}
+      {sp.csv_dupes ? (
+        <div className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <p className="font-semibold mb-1">CSV 内の重複（最後の行を採用）</p>
+          <pre className="text-xs whitespace-pre-wrap font-sans leading-relaxed">
+            {sp.csv_dupes}
+          </pre>
+        </div>
+      ) : null}
+      {sp.overwrites ? (
+        <div className="text-sm text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+          <p className="font-semibold mb-1">上書きした既存データ</p>
+          <pre className="text-xs whitespace-pre-wrap font-sans leading-relaxed">
+            {sp.overwrites}
+          </pre>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
@@ -197,6 +221,14 @@ export default async function PeriodTimesPage({
                 任意・メモ
               </li>
             </ul>
+            <p className="text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-2">
+              <span className="font-semibold">重複時:</span>{" "}
+              同じ「教室・開催日・コマ・教科」の行が CSV 内に複数ある場合は
+              <span className="font-medium">最後の行</span>
+              を採用し、どの行が重複したかを取り込み後に表示します。既に登録済みの同じキーは
+              <span className="font-medium">上書き更新</span>
+              します（時刻・メモを CSV の内容に置き換え）。
+            </p>
             <p className="text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-2">
               <span className="font-semibold">注意:</span>{" "}
               各セルにカンマを含めないでください（カンマ区切りの単純パースのため、カンマ入りの値は行全体がずれます）。

@@ -639,7 +639,7 @@ export function AvailabilityPicker({
                         ) : null}
                       </div>
                       <p className="text-xs text-slate-500 mt-1">
-                        現在 {slot.occupied} / {slot.max_students} 名
+                        振替申込 {slot.occupied} / {slot.max_students} 名
                       </p>
                     </div>
                     <span

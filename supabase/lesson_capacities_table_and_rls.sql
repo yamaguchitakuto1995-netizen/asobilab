@@ -27,7 +27,7 @@ create table if not exists public.lesson_capacities (
   week_ordinals  smallint[] not null default array[1,2,3,4,5]::smallint[],
   period         smallint not null,           -- 1〜10コマ目
   subject        text     not null,           -- 'プログラミング' / 'ロボット'
-  max_students   smallint not null,
+  max_students   smallint not null default 4,
   note           text,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
