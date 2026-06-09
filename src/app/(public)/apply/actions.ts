@@ -178,6 +178,46 @@ export async function bookMakeupLesson(input: {
   }
 
   const supabase = await createClient();
+
+  const { data: studentRow } = await supabase
+    .from("students")
+    .select("name, classroom, grade")
+    .eq("id", input.studentId)
+    .maybeSingle<{ name: string; classroom: string | null; grade: string }>();
+
+  if (!studentRow?.classroom) {
+    return {
+      ok: false,
+      error: "生徒情報を確認できませんでした。教室にお問い合わせください。",
+    };
+  }
+
+  const scheduled = await listScheduledLessonsForMakeup({
+    studentId: input.studentId,
+    name: studentRow.name,
+    classroom: studentRow.classroom,
+    grade: studentRow.grade,
+  });
+
+  if (!scheduled.ok) {
+    return { ok: false, error: scheduled.error };
+  }
+
+  const sourceAllowed = scheduled.lessons.some(
+    (l) =>
+      l.lesson_date === input.sourceLessonDate &&
+      l.period === input.sourcePeriod &&
+      l.subject === input.sourceSubject
+  );
+
+  if (!sourceAllowed) {
+    return {
+      ok: false,
+      error:
+        "欠席に指定できるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
+    };
+  }
+
   const { data, error } = await supabase.rpc("book_makeup_lesson", {
     p_student_id: input.studentId,
     p_lesson_date: input.lessonDate,

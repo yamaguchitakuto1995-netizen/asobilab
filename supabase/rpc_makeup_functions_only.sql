@@ -324,26 +324,22 @@ begin
        and period      = p_source_period
        and subject     = p_source_subject
        and status      = 'scheduled'
+       and attendance  = 'present'
   ) into v_src_exists;
 
-  if v_src_exists then
-    update public.lessons
-       set attendance = 'absent',
-           updated_at = now()
-     where student_id  = p_student_id
-       and lesson_date = p_source_lesson_date
-       and period      = p_source_period
-       and subject     = p_source_subject
-       and status      = 'scheduled';
-  else
-    insert into public.lessons (
-      student_id, teacher_id, lesson_date, period,
-      attendance, subject, status
-    ) values (
-      p_student_id, v_student.created_by, p_source_lesson_date, p_source_period,
-      'absent', p_source_subject, 'scheduled'
-    );
+  if not v_src_exists then
+    raise exception '欠席にできるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。';
   end if;
+
+  update public.lessons
+     set attendance = 'absent',
+         updated_at = now()
+   where student_id  = p_student_id
+     and lesson_date = p_source_lesson_date
+     and period      = p_source_period
+     and subject     = p_source_subject
+     and status      = 'scheduled'
+     and attendance  = 'present';
 
   insert into public.lessons (
     student_id, teacher_id, lesson_date, period,

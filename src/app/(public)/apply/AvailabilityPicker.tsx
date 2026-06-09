@@ -13,7 +13,6 @@ import {
 import {
   COURSE_SUBJECTS,
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
-  MAX_PERIOD,
   periodLabel,
   type ClassroomPeriodTime,
   type CourseSubject,
@@ -66,10 +65,6 @@ export function AvailabilityPicker({
     null
   );
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  const [showManual, setShowManual] = useState(false);
-  const [manualDate, setManualDate] = useState("");
-  const [manualPeriod, setManualPeriod] = useState<number | "">("");
-  const [manualSubject, setManualSubject] = useState<string>("");
 
   const [submitting, setSubmitting] = useState(false);
   const [bookedLessonId, setBookedLessonId] = useState<string | null>(null);
@@ -102,11 +97,6 @@ export function AvailabilityPicker({
     });
     return row ? ` · ${formatTimeRange(row.start_time, row.end_time)}` : "";
   }
-
-  const manualSubjectChoices = useMemo(() => {
-    const allowed = new Set(COURSE_SUBJECTS as readonly string[]);
-    return (student.subjects ?? []).filter((s) => allowed.has(s));
-  }, [student.subjects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,7 +282,6 @@ export function AvailabilityPicker({
               setBookedDest(null);
               setSubmitError(null);
               setSource(null);
-              setShowManual(false);
               fetchAvailability(selectedDate);
             }}
             className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2"
@@ -338,7 +327,7 @@ export function AvailabilityPicker({
           1. 欠席する授業（振替の元）を選ぶ
         </p>
         <p className="text-xs text-slate-500 mb-3">
-          登録されている「出席予定」がカードで表示されます。タップすると欠席にするコマとして使います。
+          教室で登録されている「出席予定」のカードだけが表示されます。欠席にしたいコマをタップして選んでください（日付の自由入力はできません）。
         </p>
         {suggestError ? (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
@@ -365,7 +354,6 @@ export function AvailabilityPicker({
                       period: row.period,
                       subject: row.subject,
                     });
-                    setShowManual(false);
                     setSubmitError(null);
                   }}
                   className={`text-left rounded-2xl border bg-white p-4 shadow-sm transition ${
@@ -394,102 +382,13 @@ export function AvailabilityPicker({
             })}
           </div>
         ) : (
-          <p className="text-xs text-slate-500 mb-2">
-            今後の「出席予定」が一覧にありません。下のフォームから欠席日を入力してください。
-          </p>
-        )}
-
-        {suggestions && suggestions.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => setShowManual((v) => !v)}
-            className="text-xs text-brand-600 hover:underline mb-2"
-          >
-            {showManual ? "一覧から選び直す" : "日程が一覧にない場合は入力する"}
-          </button>
-        ) : null}
-
-        {showManual || (suggestions !== null && suggestions.length === 0) ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-            <label className="block text-xs font-medium text-slate-600">
-              欠席する日
-              <input
-                type="date"
-                value={manualDate}
-                onChange={(e) => setManualDate(e.target.value)}
-                className={`${inputClass} mt-1`}
-              />
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              コマ
-              <select
-                value={manualPeriod === "" ? "" : String(manualPeriod)}
-                onChange={(e) =>
-                  setManualPeriod(
-                    e.target.value === "" ? "" : Number(e.target.value)
-                  )
-                }
-                className={`${inputClass} mt-1`}
-              >
-                <option value="">選択</option>
-                {Array.from({ length: MAX_PERIOD }, (_, i) => i + 1).map((p) => (
-                  <option key={p} value={p}>
-                    {p}コマ目
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              教科
-              <select
-                value={manualSubject}
-                onChange={(e) => setManualSubject(e.target.value)}
-                className={`${inputClass} mt-1`}
-              >
-                <option value="">選択</option>
-                {manualSubjectChoices.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                if (!isValidDate(manualDate)) {
-                  setSubmitError("欠席日を入力してください。");
-                  return;
-                }
-                if (
-                  manualPeriod === "" ||
-                  manualPeriod < 1 ||
-                  manualPeriod > MAX_PERIOD
-                ) {
-                  setSubmitError("欠席のコマを選んでください。");
-                  return;
-                }
-                if (!manualSubject) {
-                  setSubmitError("欠席の教科を選んでください。");
-                  return;
-                }
-                if (!studentSubjects.has(manualSubject)) {
-                  setSubmitError("受講していない教科は選べません。");
-                  return;
-                }
-                setSubmitError(null);
-                setSource({
-                  lessonDate: manualDate,
-                  period: manualPeriod,
-                  subject: manualSubject,
-                });
-              }}
-              className="w-full rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium py-2"
-            >
-              この内容を欠席に設定
-            </button>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 leading-relaxed">
+            <p className="font-semibold mb-1">表示できる出席予定がありません</p>
+            <p>
+              振替の欠席元は、ここに表示される出席予定のカードからのみ選べます。一覧にない日程を欠席にしたい場合は、所属教室までお問い合わせください。
+            </p>
           </div>
-        ) : null}
+        )}
 
         {source ? (
           <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-2">
@@ -498,11 +397,11 @@ export function AvailabilityPicker({
             {timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)}{" "}
             {source.subject}
           </p>
-        ) : (
+        ) : suggestions !== null && suggestions.length > 0 ? (
           <p className="text-xs text-slate-500 mt-2">
-            欠席する授業を選ぶと、振替先の日付・コマを選べます。
+            上の出席予定カードを選ぶと、振替先の日付・コマを選べます。
           </p>
-        )}
+        ) : null}
       </div>
 
       <div
