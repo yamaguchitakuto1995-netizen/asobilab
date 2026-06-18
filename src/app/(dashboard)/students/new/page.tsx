@@ -3,6 +3,7 @@ import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { GRADE_LEVELS, type LessonCapacity } from "@/lib/types";
 import { createStudent } from "../actions";
@@ -16,6 +17,7 @@ export default async function NewStudentPage({
 }) {
   const { error } = await searchParams;
   const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
   const { data: capRows } = await supabase
     .from("lesson_capacities")
     .select("*")
@@ -72,7 +74,10 @@ export default async function NewStudentPage({
 
         <StudentNextTextFormSection />
 
-        <ClassroomSubjectsField capacityRows={capRows ?? []} />
+        <ClassroomSubjectsField
+          classrooms={classrooms}
+          capacityRows={capRows ?? []}
+        />
 
         <Field
           label="メモ"

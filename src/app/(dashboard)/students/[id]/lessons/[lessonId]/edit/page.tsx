@@ -4,6 +4,7 @@ import { LessonForm } from "@/components/LessonForm";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { createClient } from "@/lib/supabase/server";
 import type { Lesson, Student } from "@/lib/types";
@@ -24,7 +25,8 @@ export default async function EditLessonPage({
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const [{ data: student }, { data: lesson }, periodTimes] = await Promise.all([
+  const [{ data: student }, { data: lesson }, periodTimes, classrooms] =
+    await Promise.all([
     supabase
       .from("students")
       .select(
@@ -53,6 +55,7 @@ export default async function EditLessonPage({
       .eq("id", lessonId)
       .maybeSingle<Lesson>(),
     fetchClassroomPeriodTimes(supabase),
+    fetchClassrooms(supabase),
   ]);
 
   if (!student || !lesson) notFound();
@@ -117,6 +120,7 @@ export default async function EditLessonPage({
         action={updateLesson}
         studentSubjects={student.subjects ?? []}
         studentClassroom={student.classroom}
+        classrooms={classrooms}
         classroomPeriodTimes={periodTimes}
         defaultValues={{
           lessonDate: lesson.lesson_date,

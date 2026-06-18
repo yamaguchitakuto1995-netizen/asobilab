@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import {
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   MAX_PERIOD,
   classroomSubjects,
+  type ClassroomRecord,
   type CourseSubject,
 } from "@/lib/types";
 
@@ -31,7 +32,10 @@ type ReadResult =
   | { ok: true; value: ParsedCapacity }
   | { ok: false; error: string };
 
-function readForm(formData: FormData): ReadResult {
+function readForm(
+  formData: FormData,
+  classrooms: readonly ClassroomRecord[]
+): ReadResult {
   const classroom = String(formData.get("classroom") ?? "").trim();
   const dayOfWeek = Number(formData.get("day_of_week"));
   const period = Number(formData.get("period"));
@@ -51,7 +55,7 @@ function readForm(formData: FormData): ReadResult {
     ),
   ].sort((a, b) => a - b);
 
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) {
+  if (!isKnownClassroom(classroom, classrooms)) {
     return { ok: false, error: "教室の選択が不正です。" };
   }
   if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
@@ -63,8 +67,9 @@ function readForm(formData: FormData): ReadResult {
   if (!(COURSE_SUBJECTS as readonly string[]).includes(subject)) {
     return { ok: false, error: "教科が不正です。" };
   }
-  // 教室で開講していない教科を弾く
-  if (!classroomSubjects(classroom).includes(subject as CourseSubject)) {
+  if (
+    !classroomSubjects(classroom, classrooms).includes(subject as CourseSubject)
+  ) {
     return {
       ok: false,
       error: `${classroom} では「${subject}」を開講していません。`,
@@ -95,10 +100,11 @@ function readForm(formData: FormData): ReadResult {
 }
 
 export async function createCapacity(formData: FormData) {
-  const parsed = readForm(formData);
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  const parsed = readForm(formData, classrooms);
   if (!parsed.ok) fail(parsed.error);
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("lesson_capacities")
     .insert(parsed.value);
@@ -118,10 +124,11 @@ export async function updateCapacity(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) redirect(BASE);
 
-  const parsed = readForm(formData);
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  const parsed = readForm(formData, classrooms);
   if (!parsed.ok) fail(parsed.error);
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("lesson_capacities")
     .update(parsed.value)

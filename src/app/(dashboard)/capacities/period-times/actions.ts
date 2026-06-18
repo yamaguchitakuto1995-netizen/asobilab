@@ -13,13 +13,25 @@ import {
   periodTimeSlotLabelFromRow,
 } from "@/lib/periodTimeCsvImport";
 import { formatTimeRange } from "@/lib/periodTimes";
+import {
+  createScheduledLessonsForPeriodTimes,
+  removeEnrollmentLessonsForPeriodTime,
+  resyncAllRegularAttendance,
+} from "@/lib/regularAttendanceSync";
+import {
+  ensureRegularSlotCapacitiesForPeriodTime,
+  readRegularSlotFromForm,
+  validateLessonDateMatchesRegularSlot,
+} from "@/lib/ensureRegularSlotCapacities";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
+import type { RegularWeekGroupId } from "@/lib/regularSlot";
 import { createClient } from "@/lib/supabase/server";
 import {
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   MAX_PERIOD,
   classroomSubjects,
   type ClassroomPeriodTime,
+  type ClassroomRecord,
   type CourseSubject,
 } from "@/lib/types";
 
@@ -46,7 +58,8 @@ function readSubject(formData: FormData): string | null {
 }
 
 function readParsed(
-  formData: FormData
+  formData: FormData,
+  classrooms: readonly ClassroomRecord[]
 ): { ok: true; value: Parsed } | { ok: false; error: string } {
   const classroom = String(formData.get("classroom") ?? "").trim();
   const lesson_date = String(formData.get("lesson_date") ?? "").trim();
@@ -56,7 +69,7 @@ function readParsed(
   const end_time = String(formData.get("end_time") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
 
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) {
+  if (!isKnownClassroom(classroom, classrooms)) {
     return { ok: false, error: "教室の選択が不正です。" };
   }
   if (!isValidDate(lesson_date)) {
@@ -70,7 +83,7 @@ function readParsed(
   }
   if (
     subject &&
-    !classroomSubjects(classroom).includes(subject as CourseSubject)
+    !classroomSubjects(classroom, classrooms).includes(subject as CourseSubject)
   ) {
     return {
       ok: false,
@@ -101,14 +114,87 @@ function readParsed(
   };
 }
 
+async function applyRegularSlotForPeriodTime(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  formData: FormData,
+  parsed: Parsed,
+  classrooms: readonly ClassroomRecord[]
+): Promise<{ capacityCreated: number; error?: string }> {
+  const slot = readRegularSlotFromForm(formData, parsed.period);
+  if (!slot.ok) {
+    return { capacityCreated: 0, error: slot.error };
+  }
+
+  const dateErr = validateLessonDateMatchesRegularSlot(
+    parsed.lesson_date,
+    slot.parts
+  );
+  if (dateErr) {
+    return { capacityCreated: 0, error: dateErr };
+  }
+
+  const subjects = parsed.subject
+    ? [parsed.subject]
+    : [...classroomSubjects(parsed.classroom, classrooms)];
+
+  const ensured = await ensureRegularSlotCapacitiesForPeriodTime(supabase, {
+    classroom: parsed.classroom,
+    subjects,
+    regularSlot: slot.parts,
+  });
+  if (ensured.error) {
+    return { capacityCreated: 0, error: ensured.error };
+  }
+  return { capacityCreated: ensured.created };
+}
+
+async function ensureRegularSlotFromParsedRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  parsed: {
+    classroom: string;
+    period: number;
+    subject: string | null;
+    regular_week_group: RegularWeekGroupId;
+    regular_day_of_week: number;
+  },
+  classrooms: readonly ClassroomRecord[]
+): Promise<{ capacityCreated: number; error?: string }> {
+  const subjects = parsed.subject
+    ? [parsed.subject]
+    : [...classroomSubjects(parsed.classroom, classrooms)];
+
+  const ensured = await ensureRegularSlotCapacitiesForPeriodTime(supabase, {
+    classroom: parsed.classroom,
+    subjects,
+    regularSlot: {
+      weekGroupId: parsed.regular_week_group,
+      dayOfWeek: parsed.regular_day_of_week,
+      period: parsed.period,
+    },
+  });
+  if (ensured.error) {
+    return { capacityCreated: 0, error: ensured.error };
+  }
+  return { capacityCreated: ensured.created };
+}
+
 export async function createPeriodTime(formData: FormData) {
   const u = await getCurrentUser();
   if (!u?.isAdmin) redirect("/capacities");
 
-  const parsed = readParsed(formData);
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  const parsed = readParsed(formData, classrooms);
   if (!parsed.ok) fail(parsed.error);
 
-  const supabase = await createClient();
+  const regular = await applyRegularSlotForPeriodTime(
+    supabase,
+    formData,
+    parsed.value,
+    classrooms
+  );
+  if (regular.error) fail(regular.error);
+
   const key = periodTimeNaturalKey(parsed.value);
   const { data: existingRows } = await supabase
     .from("classroom_period_times")
@@ -126,14 +212,31 @@ export async function createPeriodTime(formData: FormData) {
 
     if (error) fail(error.message);
 
+    const sync = await createScheduledLessonsForPeriodTimes(
+      supabase,
+      [parsed.value],
+      u.id
+    );
+    if (sync.error) fail(`時刻は保存しましたが出席予定の連動に失敗: ${sync.error}`);
+
     revalidatePath(BASE);
     revalidatePath("/capacities");
+    revalidatePath("/");
+    revalidatePath("/students");
     const label = periodTimeSlotLabelFromRow(parsed.value);
     const before = formatTimeRange(existing.start_time, existing.end_time);
     const after = formatTimeRange(parsed.value.start_time, parsed.value.end_time);
-    redirect(
-      `${BASE}?updated=1&overwrites=${encodeURIComponent(`${label}: ${before} → ${after}`)}`
-    );
+    const params = new URLSearchParams({
+      updated: "1",
+      overwrites: `${label}: ${before} → ${after}`,
+    });
+    if (sync.created > 0) {
+      params.set("scheduled", String(sync.created));
+    }
+    if (regular.capacityCreated > 0) {
+      params.set("capacities", String(regular.capacityCreated));
+    }
+    redirect(`${BASE}?${params.toString()}`);
   }
 
   const { error } = await supabase
@@ -147,9 +250,26 @@ export async function createPeriodTime(formData: FormData) {
     fail(error.message);
   }
 
+  const sync = await createScheduledLessonsForPeriodTimes(
+    supabase,
+    [parsed.value],
+    u.id
+  );
+  if (sync.error) fail(`時刻は登録しましたが出席予定の連動に失敗: ${sync.error}`);
+
   revalidatePath(BASE);
   revalidatePath("/capacities");
-  redirect(BASE);
+  revalidatePath("/");
+  revalidatePath("/students");
+  const params = new URLSearchParams();
+  if (sync.created > 0) {
+    params.set("scheduled", String(sync.created));
+  }
+  if (regular.capacityCreated > 0) {
+    params.set("capacities", String(regular.capacityCreated));
+  }
+  const qs = params.toString();
+  redirect(qs ? `${BASE}?${qs}` : BASE);
 }
 
 export async function updatePeriodTime(formData: FormData) {
@@ -159,10 +279,19 @@ export async function updatePeriodTime(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   if (!id) redirect(BASE);
 
-  const parsed = readParsed(formData);
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  const parsed = readParsed(formData, classrooms);
   if (!parsed.ok) fail(parsed.error);
 
-  const supabase = await createClient();
+  const regular = await applyRegularSlotForPeriodTime(
+    supabase,
+    formData,
+    parsed.value,
+    classrooms
+  );
+  if (regular.error) fail(regular.error);
+
   const { error } = await supabase
     .from("classroom_period_times")
     .update(parsed.value)
@@ -175,9 +304,44 @@ export async function updatePeriodTime(formData: FormData) {
     fail(error.message);
   }
 
+  const sync = await createScheduledLessonsForPeriodTimes(
+    supabase,
+    [parsed.value],
+    u.id
+  );
+  if (sync.error) fail(`時刻は更新しましたが出席予定の連動に失敗: ${sync.error}`);
+
   revalidatePath(BASE);
   revalidatePath("/capacities");
-  redirect(BASE);
+  revalidatePath("/");
+  revalidatePath("/students");
+  const params = new URLSearchParams();
+  if (sync.created > 0) {
+    params.set("scheduled", String(sync.created));
+  }
+  if (regular.capacityCreated > 0) {
+    params.set("capacities", String(regular.capacityCreated));
+  }
+  const qs = params.toString();
+  redirect(qs ? `${BASE}?${qs}` : BASE);
+}
+
+/** 登録済みコマ時刻とレギュラー出席コマから、出席予定を一括再作成（管理者向け） */
+export async function resyncScheduledLessonsFromPeriodTimes() {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect("/capacities");
+
+  const supabase = await createClient();
+  const sync = await resyncAllRegularAttendance(supabase, u.id);
+  if (sync.error) fail(sync.error);
+
+  revalidatePath(BASE);
+  revalidatePath("/capacities");
+  revalidatePath("/");
+  revalidatePath("/students");
+
+  const params = new URLSearchParams({ resynced: String(sync.created) });
+  redirect(`${BASE}?${params.toString()}`);
 }
 
 export async function deletePeriodTime(formData: FormData) {
@@ -188,6 +352,12 @@ export async function deletePeriodTime(formData: FormData) {
   if (!id) redirect(BASE);
 
   const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("classroom_period_times")
+    .select("classroom, lesson_date, period, subject")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("classroom_period_times")
     .delete()
@@ -195,8 +365,17 @@ export async function deletePeriodTime(formData: FormData) {
 
   if (error) fail(error.message);
 
+  if (row) {
+    const removed = await removeEnrollmentLessonsForPeriodTime(supabase, row);
+    if (removed.error) {
+      fail(`時刻は削除しましたが出席予定の削除に失敗: ${removed.error}`);
+    }
+  }
+
   revalidatePath(BASE);
   revalidatePath("/capacities");
+  revalidatePath("/");
+  revalidatePath("/students");
   redirect(BASE);
 }
 
@@ -205,11 +384,13 @@ export async function importPeriodTimesCsv(formData: FormData) {
   const u = await getCurrentUser();
   if (!u?.isAdmin) redirect("/capacities");
 
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+
   const raw = String(formData.get("csv") ?? "");
-  const parsedResult = parsePeriodTimesCsv(raw);
+  const parsedResult = parsePeriodTimesCsv(raw, classrooms);
   if (!parsedResult.ok) fail(parsedResult.error);
 
-  const supabase = await createClient();
   const { data: existingRows } = await supabase
     .from("classroom_period_times")
     .select("*");
@@ -218,6 +399,19 @@ export async function importPeriodTimesCsv(formData: FormData) {
     parsedResult.parsed,
     (existingRows ?? []) as ClassroomPeriodTime[]
   );
+
+  let capacityCreated = 0;
+  for (const row of plan.rows) {
+    const ensured = await ensureRegularSlotFromParsedRow(
+      supabase,
+      row,
+      classrooms
+    );
+    if (ensured.error) {
+      fail(`${periodTimeSlotLabelFromRow(row)}: ${ensured.error}`);
+    }
+    capacityCreated += ensured.capacityCreated;
+  }
 
   for (const { id, row } of plan.toUpdate) {
     const { error } = await supabase
@@ -239,7 +433,7 @@ export async function importPeriodTimesCsv(formData: FormData) {
   if (plan.toInsert.length > 0) {
     const { error } = await supabase
       .from("classroom_period_times")
-      .insert(plan.toInsert);
+      .insert(plan.toInsert.map((item) => item.dbRow));
 
     if (error) {
       if (error.code === "23505") {
@@ -251,8 +445,23 @@ export async function importPeriodTimesCsv(formData: FormData) {
     }
   }
 
+  const syncSlots = [
+    ...plan.toInsert.map((item) => item.dbRow),
+    ...plan.toUpdate.map((u) => u.row),
+  ];
+  const sync = await createScheduledLessonsForPeriodTimes(
+    supabase,
+    syncSlots,
+    u.id
+  );
+  if (sync.error) {
+    fail(`CSV取り込みは完了しましたが出席予定の連動に失敗: ${sync.error}`);
+  }
+
   revalidatePath(BASE);
   revalidatePath("/capacities");
+  revalidatePath("/");
+  revalidatePath("/students");
 
   const params = new URLSearchParams();
   if (plan.toInsert.length > 0) {
@@ -260,6 +469,12 @@ export async function importPeriodTimesCsv(formData: FormData) {
   }
   if (plan.toUpdate.length > 0) {
     params.set("updated", String(plan.toUpdate.length));
+  }
+  if (sync.created > 0) {
+    params.set("scheduled", String(sync.created));
+  }
+  if (capacityCreated > 0) {
+    params.set("capacities", String(capacityCreated));
   }
   const csvDupes = formatCsvDuplicateMessage(plan.csvDuplicates);
   if (csvDupes) params.set("csv_dupes", csvDupes);

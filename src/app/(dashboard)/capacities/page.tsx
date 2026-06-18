@@ -6,8 +6,9 @@ import { SubjectChip } from "@/components/SubjectChip";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { getCurrentUser } from "@/lib/auth";
 import { DAYS_OF_WEEK, dayLabel } from "@/lib/days";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
-import { CLASSROOMS, formatWeekOrdinals, type LessonCapacity } from "@/lib/types";
+import { formatWeekOrdinals, type LessonCapacity } from "@/lib/types";
 import { createCapacity, deleteCapacity } from "./actions";
 
 type SearchParams = Promise<{ error?: string }>;
@@ -20,6 +21,7 @@ export default async function CapacitiesPage({
   const { error } = await searchParams;
   const user = await getCurrentUser();
   const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
 
   const { data: capacities } = await supabase
     .from("lesson_capacities")
@@ -90,12 +92,12 @@ export default async function CapacitiesPage({
           </div>
         ) : (
           <div className="space-y-4">
-            {CLASSROOMS.map((c) => {
+            {classrooms.map((c) => {
               const dayMap = grouped.get(c.name);
               if (!dayMap) return null;
               return (
                 <div
-                  key={c.name}
+                  key={c.id}
                   className="bg-white border border-slate-200 rounded-2xl overflow-hidden"
                 >
                   <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
@@ -177,6 +179,7 @@ export default async function CapacitiesPage({
         <section className="space-y-3">
           <h2 className="text-base font-semibold">新規追加</h2>
           <CapacityForm
+            classrooms={classrooms}
             action={createCapacity}
             takenKeys={taken}
             submitLabel="この枠を追加"

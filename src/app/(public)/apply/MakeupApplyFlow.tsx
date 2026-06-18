@@ -2,17 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { Field, inputClass } from "@/components/Field";
-import { CLASSROOMS, GRADE_LEVELS, type ClassroomPeriodTime } from "@/lib/types";
+import { GRADE_LEVELS, type ClassroomPeriodTime, type ClassroomRecord } from "@/lib/types";
 import { AvailabilityPicker } from "./AvailabilityPicker";
 import { lookupStudent, type FoundStudent } from "./actions";
 
 type Props = {
-  /** 教室コマの時刻マスタ（サーバーで読み込み、コマ表示に利用） */
   periodTimes?: ClassroomPeriodTime[];
+  classrooms?: ClassroomRecord[];
 };
 
 /** 保護者の振替申請フロー全体を管理する Client Component */
-export function MakeupApplyFlow({ periodTimes = [] }: Props) {
+export function MakeupApplyFlow({ periodTimes = [], classrooms = [] }: Props) {
   const [student, setStudent] = useState<FoundStudent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -91,8 +91,8 @@ export function MakeupApplyFlow({ periodTimes = [] }: Props) {
               <option value="" disabled>
                 選択してください
               </option>
-              {CLASSROOMS.map((c) => (
-                <option key={c.name} value={c.name}>
+              {classrooms.map((c) => (
+                <option key={c.id} value={c.name}>
                   {c.name}
                 </option>
               ))}

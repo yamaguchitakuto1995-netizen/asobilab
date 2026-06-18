@@ -1,13 +1,20 @@
 import { parseLessonDateFromPaste } from "@/lib/date";
+import { validateLessonDateMatchesRegularSlot } from "@/lib/ensureRegularSlotCapacities";
 import { formatTimeRange } from "@/lib/periodTimes";
 import {
-  CLASSROOM_NAMES,
+  parseDayOfWeekCell,
+  parseWeekGroupCell,
+  type RegularWeekGroupId,
+} from "@/lib/regularSlot";
+import {
+  classroomSubjects,
   COURSE_SUBJECTS,
   MAX_PERIOD,
-  classroomSubjects,
   type ClassroomPeriodTime,
+  type ClassroomRecord,
   type CourseSubject,
 } from "@/lib/types";
+import { isKnownClassroom } from "@/lib/classrooms";
 
 export type PeriodTimeCsvRow = {
   classroom: string;
@@ -22,6 +29,8 @@ export type PeriodTimeCsvRow = {
 export type PeriodTimeCsvParsedRow = PeriodTimeCsvRow & {
   /** CSV 上の行番号（1行目=ヘッダー、2行目=データ1） */
   line: number;
+  regular_week_group: RegularWeekGroupId;
+  regular_day_of_week: number;
 };
 
 export type PeriodTimeCsvDuplicateGroup = {
@@ -39,10 +48,11 @@ export type PeriodTimeCsvOverwrite = {
 export type PeriodTimeCsvImportPlan = {
   rows: PeriodTimeCsvParsedRow[];
   csvDuplicates: PeriodTimeCsvDuplicateGroup[];
-  toInsert: PeriodTimeCsvRow[];
+  toInsert: { dbRow: PeriodTimeCsvRow; parsed: PeriodTimeCsvParsedRow }[];
   toUpdate: {
     id: string;
     row: PeriodTimeCsvRow;
+    parsed: PeriodTimeCsvParsedRow;
     overwrite: PeriodTimeCsvOverwrite;
   }[];
 };
@@ -97,8 +107,13 @@ function parseDataRow(
     iStart: number;
     iEnd: number;
     iNote: number;
-  }
-): PeriodTimeCsvParsedRow | null {
+    iWeekGroup: number;
+    iDayOfWeek: number;
+  },
+  classrooms: readonly ClassroomRecord[]
+):
+  | { ok: true; row: PeriodTimeCsvParsedRow }
+  | { ok: false; line: number; error: string } {
   const classroom = normalizePasteCell(cells[cols.iClass] ?? "");
   const lesson_date = parseLessonDateFromPaste(cells[cols.iDate] ?? "");
   const period = Number(cells[cols.iPeriod]);
@@ -111,33 +126,86 @@ function parseDataRow(
   const end_time = parseTimeCell(cells[cols.iEnd] ?? "");
   const note =
     cols.iNote >= 0 ? (cells[cols.iNote] ?? "").trim() || null : null;
+  const regular_week_group = parseWeekGroupCell(
+    cells[cols.iWeekGroup] ?? ""
+  );
+  const regular_day_of_week = parseDayOfWeekCell(
+    cells[cols.iDayOfWeek] ?? ""
+  );
 
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) return null;
-  if (!lesson_date) return null;
-  if (!Number.isInteger(period) || period < 1 || period > MAX_PERIOD) return null;
-  if (subject && !(COURSE_SUBJECTS as readonly string[]).includes(subject))
-    return null;
+  if (!isKnownClassroom(classroom, classrooms)) {
+    return { ok: false, line, error: `教室「${classroom || "（空）"}」が不正です` };
+  }
+  if (!lesson_date) {
+    return { ok: false, line, error: "lesson_date が不正です" };
+  }
+  if (!Number.isInteger(period) || period < 1 || period > MAX_PERIOD) {
+    return { ok: false, line, error: `period「${cells[cols.iPeriod] ?? ""}」が不正です` };
+  }
+  if (subject && !(COURSE_SUBJECTS as readonly string[]).includes(subject)) {
+    return { ok: false, line, error: `subject「${subject}」が不正です` };
+  }
   if (
     subject &&
-    !classroomSubjects(classroom).includes(subject as CourseSubject)
-  )
-    return null;
-  if (!start_time || !end_time) return null;
-  if (start_time >= end_time) return null;
+    !classroomSubjects(classroom, classrooms).includes(subject as CourseSubject)
+  ) {
+    return {
+      ok: false,
+      line,
+      error: `教室「${classroom}」に subject「${subject}」はありません`,
+    };
+  }
+  if (!start_time || !end_time) {
+    return { ok: false, line, error: "start_time / end_time が不正です" };
+  }
+  if (start_time >= end_time) {
+    return { ok: false, line, error: "開始時刻は終了時刻より前にしてください" };
+  }
+  if (!regular_week_group) {
+    return {
+      ok: false,
+      line,
+      error: `regular_week_group「${cells[cols.iWeekGroup] ?? ""}」が不正です（1-3 または 2-4）`,
+    };
+  }
+  if (regular_day_of_week === null) {
+    return {
+      ok: false,
+      line,
+      error: `regular_day_of_week「${cells[cols.iDayOfWeek] ?? ""}」が不正です`,
+    };
+  }
+
+  const slotErr = validateLessonDateMatchesRegularSlot(lesson_date, {
+    weekGroupId: regular_week_group,
+    dayOfWeek: regular_day_of_week,
+    period,
+  });
+  if (slotErr) {
+    return { ok: false, line, error: slotErr };
+  }
 
   return {
-    line,
-    classroom,
-    lesson_date,
-    period,
-    subject,
-    start_time,
-    end_time,
-    note,
+    ok: true,
+    row: {
+      line,
+      classroom,
+      lesson_date,
+      period,
+      subject,
+      start_time,
+      end_time,
+      note,
+      regular_week_group,
+      regular_day_of_week,
+    },
   };
 }
 
-export function parsePeriodTimesCsv(raw: string):
+export function parsePeriodTimesCsv(
+  raw: string,
+  classrooms: readonly ClassroomRecord[]
+):
   | { ok: true; parsed: PeriodTimeCsvParsedRow[] }
   | { ok: false; error: string } {
   const text = raw.replace(/^\uFEFF/, "").trim();
@@ -158,21 +226,56 @@ export function parsePeriodTimesCsv(raw: string):
   const iStart = idx("start_time");
   const iEnd = idx("end_time");
   const iNote = idx("note");
+  const iWeekGroup = idx("regular_week_group");
+  const iDayOfWeek = idx("regular_day_of_week");
 
-  if (iClass < 0 || iDate < 0 || iPeriod < 0 || iStart < 0 || iEnd < 0) {
+  if (
+    iClass < 0 ||
+    iDate < 0 ||
+    iPeriod < 0 ||
+    iStart < 0 ||
+    iEnd < 0 ||
+    iWeekGroup < 0 ||
+    iDayOfWeek < 0
+  ) {
     return {
       ok: false,
       error:
-        "必須列: classroom, lesson_date, period, start_time, end_time（日付は YYYY-MM-DD または Excel の 2026/5/10 形式）",
+        "必須列: classroom, lesson_date, period, regular_week_group, regular_day_of_week, start_time, end_time（日付は YYYY-MM-DD または Excel の 2026/5/10 形式）",
     };
   }
 
-  const cols = { iClass, iDate, iPeriod, iSub, iStart, iEnd, iNote };
+  const cols = {
+    iClass,
+    iDate,
+    iPeriod,
+    iSub,
+    iStart,
+    iEnd,
+    iNote,
+    iWeekGroup,
+    iDayOfWeek,
+  };
   const parsed: PeriodTimeCsvParsedRow[] = [];
+  const errors: string[] = [];
 
   for (let r = 1; r < lines.length; r++) {
-    const row = parseDataRow(splitTableRow(lines[r]), r + 1, cols);
-    if (row) parsed.push(row);
+    const result = parseDataRow(splitTableRow(lines[r]), r + 1, cols, classrooms);
+    if (result.ok) {
+      parsed.push(result.row);
+    } else {
+      errors.push(`${result.line}行目: ${result.error}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    const shown = errors.slice(0, 8);
+    const rest = errors.length - shown.length;
+    return {
+      ok: false,
+      error:
+        shown.join("\n") + (rest > 0 ? `\n（他 ${rest} 件のエラー）` : ""),
+    };
   }
 
   if (parsed.length === 0) {
@@ -226,23 +329,30 @@ export function buildPeriodTimeImportPlan(
     existing.map((e) => [periodTimeNaturalKey(e), e] as const)
   );
 
-  const toInsert: PeriodTimeCsvRow[] = [];
+  const toInsert: PeriodTimeCsvImportPlan["toInsert"] = [];
   const toUpdate: PeriodTimeCsvImportPlan["toUpdate"] = [];
 
-  for (const { line: _line, ...row } of rows) {
-    const ex = existingByKey.get(periodTimeNaturalKey(row));
+  for (const row of rows) {
+    const {
+      line: _line,
+      regular_week_group: _wg,
+      regular_day_of_week: _dow,
+      ...dbRow
+    } = row;
+    const ex = existingByKey.get(periodTimeNaturalKey(dbRow));
     if (ex) {
       toUpdate.push({
         id: ex.id,
-        row,
+        row: dbRow,
+        parsed: row,
         overwrite: {
-          label: periodTimeSlotLabelFromRow(row),
+          label: periodTimeSlotLabelFromRow(dbRow),
           before: formatTimeRange(ex.start_time, ex.end_time),
-          after: formatTimeRange(row.start_time, row.end_time),
+          after: formatTimeRange(dbRow.start_time, dbRow.end_time),
         },
       });
     } else {
-      toInsert.push(row);
+      toInsert.push({ dbRow, parsed: row });
     }
   }
 

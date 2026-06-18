@@ -2,41 +2,26 @@
 
 import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
-import { dayLabel } from "@/lib/days";
-import { ENROLLMENT_SCHEDULE_HORIZON_DAYS } from "@/lib/enrollmentSchedule";
+import { RegularSlotPickerField } from "@/components/RegularSlotPickerField";
 import {
-  CLASSROOMS,
   classroomSubjects,
-  formatWeekOrdinals,
+  type ClassroomRecord,
   type CourseSubject,
   type LessonCapacity,
 } from "@/lib/types";
 
-function capacityMenuLabel(c: LessonCapacity): string {
-  return `${formatWeekOrdinals(c.week_ordinals)}${dayLabel(c.day_of_week)} · ${c.period}コマ`;
-}
-
 type Props = {
+  classrooms: ClassroomRecord[];
   defaultClassroom?: string | null;
   defaultSubjects?: string[];
-  /** 振替枠マスタ。所属教室・教科で絞り込んで定例コマを選ぶ */
   capacityRows?: LessonCapacity[];
   defaultEnrollmentRobotCapacityId?: string | null;
   defaultEnrollmentProgCapacityId?: string | null;
-  /** 所属教室を必須にするか (デフォルト true) */
   required?: boolean;
 };
 
-/**
- * 「所属教室」セレクトと「受講教科」チェックボックスを束ねた入力部品。
- *
- * - 教室を選ぶと、その教室で開講している教科のみがチェック候補になる
- * - 教室変更時、新しい教室で開講していない教科は自動で外れる
- * - submit 時には form data に classroom と subjects[] が含まれる
- *
- * 次回テキストのプルダウンはページ側で StudentNextTextFormSection として別置き。
- */
 export function ClassroomSubjectsField({
+  classrooms,
   defaultClassroom,
   defaultSubjects = [],
   capacityRows = [],
@@ -48,63 +33,25 @@ export function ClassroomSubjectsField({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(defaultSubjects)
   );
-  const [robotCapId, setRobotCapId] = useState(
-    () => defaultEnrollmentRobotCapacityId ?? ""
-  );
-  const [progCapId, setProgCapId] = useState(
-    () => defaultEnrollmentProgCapacityId ?? ""
-  );
 
   const allowed = useMemo<readonly CourseSubject[]>(
-    () => (classroom ? classroomSubjects(classroom) : []),
-    [classroom]
+    () => (classroom ? classroomSubjects(classroom, classrooms) : []),
+    [classroom, classrooms]
   );
-
-  const robotOptions = useMemo(
-    () =>
-      classroom
-        ? capacityRows.filter(
-            (c) => c.classroom === classroom && c.subject === "ロボット"
-          )
-        : [],
-    [classroom, capacityRows]
-  );
-
-  const progOptions = useMemo(
-    () =>
-      classroom
-        ? capacityRows.filter(
-            (c) => c.classroom === classroom && c.subject === "プログラミング"
-          )
-        : [],
-    [classroom, capacityRows]
-  );
-
-  const robotSelectValue = robotOptions.some((c) => c.id === robotCapId)
-    ? robotCapId
-    : "";
-  const progSelectValue = progOptions.some((c) => c.id === progCapId)
-    ? progCapId
-    : "";
 
   function handleClassroomChange(next: string) {
     setClassroom(next);
-    setRobotCapId("");
-    setProgCapId("");
-    const allowedNow = new Set<string>(classroomSubjects(next));
+    const allowedNow = new Set<string>(
+      classroomSubjects(next, classrooms) as string[]
+    );
     setSelected((prev) => new Set([...prev].filter((s) => allowedNow.has(s))));
   }
 
   function toggleSubject(subject: string) {
     setSelected((prev) => {
       const n = new Set(prev);
-      if (n.has(subject)) {
-        n.delete(subject);
-        if (subject === "ロボット") setRobotCapId("");
-        if (subject === "プログラミング") setProgCapId("");
-      } else {
-        n.add(subject);
-      }
+      if (n.has(subject)) n.delete(subject);
+      else n.add(subject);
       return n;
     });
   }
@@ -123,8 +70,8 @@ export function ClassroomSubjectsField({
           <option value="" disabled>
             選択してください
           </option>
-          {CLASSROOMS.map((c) => (
-            <option key={c.name} value={c.name}>
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.name}>
               {c.name}（{c.subjects.join(" / ")}）
             </option>
           ))}
@@ -172,61 +119,25 @@ export function ClassroomSubjectsField({
       </Field>
 
       {classroom && selected.has("ロボット") ? (
-        robotOptions.length > 0 ? (
-          <Field
-            label="ロボット・定例コマ（任意）"
-            htmlFor="enrollment_robot_capacity_id"
-            hint={`教室の振替枠設定と同じ曜日・第何週・コマを選ぶと、今日から約 ${ENROLLMENT_SCHEDULE_HORIZON_DAYS} 日先まで「出席予定」が自動登録されます。編集で変えると、未実施の自動予定は置き換わります。`}
-          >
-            <select
-              id="enrollment_robot_capacity_id"
-              name="enrollment_robot_capacity_id"
-              className={inputClass}
-              value={robotSelectValue}
-              onChange={(e) => setRobotCapId(e.target.value)}
-            >
-              <option value="">自動で出席予定を作らない</option>
-              {robotOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {capacityMenuLabel(c)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            この教室のロボット枠が「教室・振替の設定」にまだありません。先に枠を登録すると、ここで選べます。
-          </p>
-        )
+        <RegularSlotPickerField
+          key={`robot-${classroom}-${defaultEnrollmentRobotCapacityId ?? ""}`}
+          subject="ロボット"
+          namePrefix="enrollment_robot"
+          classroom={classroom}
+          capacityRows={capacityRows}
+          defaultCapacityId={defaultEnrollmentRobotCapacityId}
+        />
       ) : null}
 
       {classroom && selected.has("プログラミング") ? (
-        progOptions.length > 0 ? (
-          <Field
-            label="プログラミング・定例コマ（任意）"
-            htmlFor="enrollment_prog_capacity_id"
-            hint={`教室の振替枠設定と同じ曜日・第何週・コマを選ぶと、今日から約 ${ENROLLMENT_SCHEDULE_HORIZON_DAYS} 日先まで「出席予定」が自動登録されます。`}
-          >
-            <select
-              id="enrollment_prog_capacity_id"
-              name="enrollment_prog_capacity_id"
-              className={inputClass}
-              value={progSelectValue}
-              onChange={(e) => setProgCapId(e.target.value)}
-            >
-              <option value="">自動で出席予定を作らない</option>
-              {progOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {capacityMenuLabel(c)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            この教室のプログラミング枠が「教室・振替の設定」にまだありません。先に枠を登録すると、ここで選べます。
-          </p>
-        )
+        <RegularSlotPickerField
+          key={`prog-${classroom}-${defaultEnrollmentProgCapacityId ?? ""}`}
+          subject="プログラミング"
+          namePrefix="enrollment_prog"
+          classroom={classroom}
+          capacityRows={capacityRows}
+          defaultCapacityId={defaultEnrollmentProgCapacityId}
+        />
       ) : null}
     </>
   );

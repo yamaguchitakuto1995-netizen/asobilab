@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CLASSROOMS } from "@/lib/types";
 import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
@@ -21,12 +20,16 @@ type SectionProps = TextFields & {
 
 type SummaryProps = TextFields & {
   classroom?: string | null;
+  /** 教室マスタの開講教科（未指定時は受講教科のみ表示） */
+  offeredSubjects?: string[] | null;
 };
 
-function coursesOfferedAtClassroom(classroom: string | null | undefined): string[] {
-  if (!classroom) return [];
-  const row = CLASSROOMS.find((c) => c.name === classroom);
-  return row ? [...row.subjects] : [];
+function coursesOfferedAtClassroom(
+  classroom: string | null | undefined,
+  offeredSubjects?: string[] | null
+): string[] {
+  if (offeredSubjects?.length) return offeredSubjects;
+  return [];
 }
 
 function NextTextDetailBlock({
@@ -168,6 +171,7 @@ export function StudentTextInfoSection({
 export function StudentTextInfoSummary({
   subjects = [],
   classroom = null,
+  offeredSubjects = null,
   next_text_robot,
   next_text_programming,
   next_text_robot_course,
@@ -176,7 +180,7 @@ export function StudentTextInfoSummary({
   next_text_programming_text,
 }: SummaryProps) {
   const subj = Array.isArray(subjects) ? subjects : [];
-  const offered = coursesOfferedAtClassroom(classroom);
+  const offered = coursesOfferedAtClassroom(classroom, offeredSubjects);
   const effective = new Set<string>([...subj, ...offered]);
 
   const robotResolved = resolveRobotNextTextPartsForStudent({

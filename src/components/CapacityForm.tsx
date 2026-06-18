@@ -4,14 +4,15 @@ import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
 import { DAYS_OF_WEEK } from "@/lib/days";
 import {
-  CLASSROOMS,
+  classroomSubjects,
   PERIOD_OPTIONS,
   WEEK_ORDINAL_OPTIONS,
-  classroomSubjects,
+  type ClassroomRecord,
   type LessonCapacity,
 } from "@/lib/types";
 
 type Props = {
+  classrooms: ClassroomRecord[];
   /** 既存値があれば編集モード */
   defaultValue?: LessonCapacity;
   /** Server Action */
@@ -22,6 +23,7 @@ type Props = {
 };
 
 export function CapacityForm({
+  classrooms,
   defaultValue,
   action,
   takenKeys = [],
@@ -35,8 +37,8 @@ export function CapacityForm({
   const [subject, setSubject] = useState<string>(defaultValue?.subject ?? "");
 
   const subjectChoices = useMemo(
-    () => (classroom ? classroomSubjects(classroom) : []),
-    [classroom]
+    () => (classroom ? classroomSubjects(classroom, classrooms) : []),
+    [classroom, classrooms]
   );
 
   const currentKey =
@@ -81,8 +83,8 @@ export function CapacityForm({
           <option value="" disabled>
             選択してください
           </option>
-          {CLASSROOMS.map((c) => (
-            <option key={c.name} value={c.name}>
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.name}>
               {c.name}
             </option>
           ))}

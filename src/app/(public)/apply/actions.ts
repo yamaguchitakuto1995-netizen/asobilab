@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { isValidDate, shiftDate, todayIso } from "@/lib/date";
 import {
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   GRADE_LEVELS,
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
@@ -50,14 +50,16 @@ export async function lookupStudent(input: {
   const grade = input.grade.trim();
 
   if (!name) return { ok: false, error: "お名前を入力してください。" };
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) {
+
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  if (!isKnownClassroom(classroom, classrooms)) {
     return { ok: false, error: "所属教室を選択してください。" };
   }
   if (!GRADE_LEVELS.includes(grade as GradeLevel)) {
     return { ok: false, error: "学年を選択してください。" };
   }
 
-  const supabase = await createClient();
   const { data, error } = await supabase.rpc("find_student_for_makeup", {
     p_name: name,
     p_classroom: classroom,
@@ -98,14 +100,16 @@ export async function listScheduledLessonsForMakeup(input: {
   const name = input.name.trim();
   const classroom = input.classroom.trim();
   const grade = input.grade.trim();
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(classroom)) {
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+
+  if (!isKnownClassroom(classroom, classrooms)) {
     return { ok: false, error: "教室が不正です。" };
   }
   if (!GRADE_LEVELS.includes(grade as GradeLevel)) {
     return { ok: false, error: "学年が不正です。" };
   }
 
-  const supabase = await createClient();
   const { data, error } = await supabase.rpc("list_scheduled_lessons_for_makeup", {
     p_student_id: input.studentId,
     p_name: name,
@@ -170,14 +174,15 @@ export async function bookMakeupLesson(input: {
   }
 
   const lessonVenue = (input.lessonClassroom ?? "").trim();
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+
   if (
     lessonVenue &&
-    !(CLASSROOM_NAMES as readonly string[]).includes(lessonVenue)
+    !isKnownClassroom(lessonVenue, classrooms)
   ) {
     return { ok: false, error: "実施会場の指定が不正です。" };
   }
-
-  const supabase = await createClient();
 
   const { data: studentRow } = await supabase
     .from("students")

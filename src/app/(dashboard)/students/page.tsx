@@ -3,24 +3,40 @@ import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentTextInfoSummary } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
+import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
-import { CLASSROOM_NAMES, CLASSROOMS, type Student } from "@/lib/types";
+import { STUDENT_CSV_HEADER } from "@/lib/studentCsvImport";
+import { type Student } from "@/lib/types";
+import { importStudentsCsv } from "./actions";
 
-type SearchParams = Promise<{ q?: string; classroom?: string }>;
+type SearchParams = Promise<{
+  q?: string;
+  classroom?: string;
+  error?: string;
+  imported?: string;
+  csv_updated?: string;
+  classroom_created?: string;
+}>;
 
 export default async function StudentsPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { q = "", classroom = "" } = await searchParams;
+  const {
+    q = "",
+    classroom = "",
+    error: pageError,
+    imported,
+    csv_updated,
+  } = await searchParams;
   const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
 
   const isUnassigned = classroom === "__none__";
   const validClassroom =
-    classroom && (CLASSROOM_NAMES as readonly string[]).includes(classroom)
-      ? classroom
-      : "";
+    classroom && isKnownClassroom(classroom, classrooms) ? classroom : "";
 
   let query = supabase
     .from("students")
@@ -55,6 +71,9 @@ export default async function StudentsPage({
   if (q.trim()) exportParams.set("q", q.trim());
   if (validClassroom) exportParams.set("classroom", validClassroom);
   else if (isUnassigned) exportParams.set("classroom", "__none__");
+  const offeredByClassroom = new Map(
+    classrooms.map((c) => [c.name, c.subjects] as const)
+  );
   const exportHref =
     exportParams.size > 0
       ? `/api/export/students?${exportParams.toString()}`
@@ -64,7 +83,7 @@ export default async function StudentsPage({
     <div>
       <PageHeader
         title="生徒一覧"
-        description="所属教室・名前で絞り込めます。CSV はログイン中のみ取得でき、表示中の条件がそのまま反映されます。"
+        description="所属教室・名前で絞り込めます。CSV 取り込みではレギュラー出席コマ（第1/3・第2/4 週）も一括設定できます。"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <a
@@ -83,6 +102,18 @@ export default async function StudentsPage({
         }
       />
 
+      {pageError ? (
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 whitespace-pre-wrap mb-4">
+          {decodeURIComponent(pageError)}
+        </p>
+      ) : null}
+      {imported || csv_updated ? (
+        <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1 mb-4">
+          {imported ? <p>新規 {imported} 件を登録しました。</p> : null}
+          {csv_updated ? <p>既存 {csv_updated} 件を更新しました。</p> : null}
+        </div>
+      ) : null}
+
       <p className="text-[11px] text-slate-400 mb-3">
         CSV には氏名・学年・メモなどが含まれます。Google
         スプレッドシートへ貼る場合も、共有範囲にご注意ください。
@@ -96,13 +127,13 @@ export default async function StudentsPage({
           href={q ? `/students?q=${encodeURIComponent(q)}` : "/students"}
           active={!validClassroom}
         />
-        {CLASSROOMS.map((c) => {
+        {classrooms.map((c) => {
           const params = new URLSearchParams();
           if (q) params.set("q", q);
           params.set("classroom", c.name);
           return (
             <ClassroomChipLink
-              key={c.name}
+              key={c.id}
               label={c.name}
               count={counts.get(c.name) ?? 0}
               href={`/students?${params.toString()}`}
@@ -142,8 +173,8 @@ export default async function StudentsPage({
           className="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         >
           <option value="">所属教室で絞り込み</option>
-          {CLASSROOMS.map((c) => (
-            <option key={c.name} value={c.name}>
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.name}>
               {c.name}
             </option>
           ))}
@@ -193,6 +224,11 @@ export default async function StudentsPage({
                   </div>
                   <StudentTextInfoSummary
                     classroom={s.classroom}
+                    offeredSubjects={
+                      s.classroom
+                        ? offeredByClassroom.get(s.classroom) ?? null
+                        : null
+                    }
                     subjects={s.subjects}
                     next_text_robot={s.next_text_robot}
                     next_text_robot_course={s.next_text_robot_course ?? null}
@@ -232,6 +268,53 @@ export default async function StudentsPage({
           ) : null}
         </div>
       )}
+
+      <section className="mt-10 space-y-3">
+        <h2 className="text-base font-semibold">CSV 一括取り込み</h2>
+        <div className="text-xs text-slate-600 leading-relaxed space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+          <p>
+            <span className="font-semibold text-slate-700">手順:</span>{" "}
+            ヘッダー行を含む CSV を貼り付けて「取り込む」。{" "}
+            <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
+              student_id
+            </code>{" "}
+            が空なら新規、UUID があれば更新します。
+          </p>
+          <p>
+            <span className="font-semibold text-slate-700">レギュラー出席コマ:</span>{" "}
+            週グループは{" "}
+            <span className="font-medium">第1/3</span> または{" "}
+            <span className="font-medium">第2/4</span>。曜日は「月」「土曜」など。コマは 1〜10。
+            受講教科ごとに3列ずつ指定します（受講していない教科の列は空欄）。
+          </p>
+          <p>
+            ヘッダー例:{" "}
+            <code className="text-[11px] bg-white px-1 rounded border border-slate-200 break-all">
+              {STUDENT_CSV_HEADER}
+            </code>
+          </p>
+          <p>
+            サンプル:{" "}
+            <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
+              samples/students_import_sample.csv
+            </code>
+          </p>
+        </div>
+        <form action={importStudentsCsv} className="space-y-2">
+          <textarea
+            name="csv"
+            rows={8}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+            placeholder="ヘッダー行を含む CSV を貼り付け"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium px-4 py-2"
+          >
+            取り込む
+          </button>
+        </form>
+      </section>
     </div>
   );
 }

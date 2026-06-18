@@ -2,20 +2,24 @@
 
 import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
+import { RegularSlotLinkFields } from "@/components/RegularSlotLinkFields";
+import { inferRegularSlotFromLessonDate } from "@/lib/ensureRegularSlotCapacities";
 import {
-  CLASSROOMS,
-  PERIOD_OPTIONS,
   classroomSubjects,
+  PERIOD_OPTIONS,
   type ClassroomPeriodTime,
+  type ClassroomRecord,
 } from "@/lib/types";
 
 type Props = {
+  classrooms: ClassroomRecord[];
   defaultValue?: ClassroomPeriodTime;
   action: (formData: FormData) => Promise<void>;
   submitLabel?: string;
 };
 
 export function PeriodTimeForm({
+  classrooms,
   defaultValue,
   action,
   submitLabel = "保存",
@@ -23,14 +27,25 @@ export function PeriodTimeForm({
   const [classroom, setClassroom] = useState<string>(
     defaultValue?.classroom ?? ""
   );
+  const [lessonDate, setLessonDate] = useState<string>(
+    defaultValue?.lesson_date ?? ""
+  );
   const [period, setPeriod] = useState<number | "">(defaultValue?.period ?? "");
   const [subject, setSubject] = useState<string>(
     defaultValue?.subject ?? "__common__"
   );
 
+  const defaultRegularParts = useMemo(() => {
+    if (!defaultValue?.lesson_date || !defaultValue.period) return null;
+    return inferRegularSlotFromLessonDate(
+      defaultValue.lesson_date,
+      defaultValue.period
+    );
+  }, [defaultValue]);
+
   const subjectChoices = useMemo(
-    () => (classroom ? classroomSubjects(classroom) : []),
-    [classroom]
+    () => (classroom ? classroomSubjects(classroom, classrooms) : []),
+    [classroom, classrooms]
   );
 
   const toTimeInput = (t: string | undefined) =>
@@ -60,8 +75,8 @@ export function PeriodTimeForm({
           <option value="" disabled>
             選択してください
           </option>
-          {CLASSROOMS.map((c) => (
-            <option key={c.name} value={c.name}>
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.name}>
               {c.name}
             </option>
           ))}
@@ -73,14 +88,15 @@ export function PeriodTimeForm({
           label="開催日"
           htmlFor="pt_lesson_date"
           required
-          hint="第◯週ではなく、そのコマが行われる暦日を指定します。同じ週でも日付ごとに時間が違えば、日付ごとに行を分けて登録してください。"
+          hint="そのコマが行われる暦日（祝日など日付ごとの設定用）。"
         >
           <input
             id="pt_lesson_date"
             name="lesson_date"
             type="date"
             required
-            defaultValue={defaultValue?.lesson_date ?? ""}
+            value={lessonDate}
+            onChange={(e) => setLessonDate(e.target.value)}
             className={inputClass}
           />
         </Field>
@@ -106,10 +122,16 @@ export function PeriodTimeForm({
         </Field>
       </div>
 
+      <RegularSlotLinkFields
+        lessonDate={lessonDate}
+        period={period}
+        defaultParts={defaultRegularParts}
+      />
+
       <Field
         label="教科"
         htmlFor="pt_subject"
-        hint="「共通」を選ぶと、ロボット・プログラミングどちらもこの時間で表示されます。教科で別時間ならここで選びます。"
+        hint="「共通」は全教科同時刻。教科別の場合は生徒のレギュラーコマ連動もその教科のみ。"
       >
         <select
           id="pt_subject"

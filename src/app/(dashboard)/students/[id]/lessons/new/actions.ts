@@ -2,15 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
 import {
   ATTENDANCE_OPTIONS,
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   LESSON_STATUS_OPTIONS,
   MAX_PERIOD,
   type AttendanceStatus,
+  type ClassroomRecord,
   type CourseSubject,
   type LessonStatus,
 } from "@/lib/types";
@@ -18,13 +19,16 @@ import {
 const ATTENDANCE_VALUES = ATTENDANCE_OPTIONS.map((o) => o.value) as readonly AttendanceStatus[];
 const STATUS_VALUES = LESSON_STATUS_OPTIONS.map((o) => o.value) as readonly LessonStatus[];
 
-function readLessonClassroom(formData: FormData): {
+function readLessonClassroom(
+  formData: FormData,
+  classrooms: readonly ClassroomRecord[]
+): {
   value: string | null;
   error?: string;
 } {
   const raw = String(formData.get("lesson_classroom") ?? "").trim();
   if (!raw) return { value: null };
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(raw)) {
+  if (!isKnownClassroom(raw, classrooms)) {
     return { value: null, error: "実施会場の選択が不正です。" };
   }
   return { value: raw };
@@ -49,11 +53,15 @@ export async function createLesson(formData: FormData) {
   const statusRaw = String(formData.get("status") ?? "recorded");
   const textMemo = String(formData.get("text_memo") ?? "").trim();
   const periodResult = readPeriod(String(formData.get("period") ?? ""));
-  const lessonVenue = readLessonClassroom(formData);
 
   const newPath = `/students/${studentId}/lessons/new`;
 
   if (!studentId) redirect("/students");
+
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+  const lessonVenue = readLessonClassroom(formData, classrooms);
+
   if (!lessonDate) {
     redirect(`${newPath}?error=${encodeURIComponent("授業日を選択してください。")}`);
   }
@@ -82,7 +90,6 @@ export async function createLesson(formData: FormData) {
     subject = subjectRaw as CourseSubject;
   }
 
-  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

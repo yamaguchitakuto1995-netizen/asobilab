@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
 import { PeriodTimeForm } from "@/components/PeriodTimeForm";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import type { ClassroomPeriodTime } from "@/lib/types";
 import { updatePeriodTime } from "../../actions";
@@ -15,11 +16,14 @@ export default async function EditPeriodTimePage({ params }: { params: Params })
 
   const { id } = await params;
   const supabase = await createClient();
-  const { data: row } = await supabase
-    .from("classroom_period_times")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle<ClassroomPeriodTime>();
+  const [classrooms, { data: row }] = await Promise.all([
+    fetchClassrooms(supabase),
+    supabase
+      .from("classroom_period_times")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle<ClassroomPeriodTime>(),
+  ]);
 
   if (!row) notFound();
 
@@ -33,6 +37,7 @@ export default async function EditPeriodTimePage({ params }: { params: Params })
       </Link>
       <PageHeader title="コマの時刻を編集" />
       <PeriodTimeForm
+        classrooms={classrooms}
         defaultValue={row}
         action={updatePeriodTime}
         submitLabel="保存する"

@@ -4,6 +4,7 @@ import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { GRADE_LEVELS, type LessonCapacity, type Student } from "@/lib/types";
 import { updateStudent } from "../../actions";
@@ -25,6 +26,7 @@ export default async function EditStudentPage({
   const { id } = await params;
   const { error, parentError, parentMsg } = await searchParams;
   const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
 
   const { data: student } = await supabase
     .from("students")
@@ -141,6 +143,7 @@ export default async function EditStudentPage({
         />
 
         <ClassroomSubjectsField
+          classrooms={classrooms}
           defaultClassroom={student.classroom}
           defaultSubjects={student.subjects ?? []}
           capacityRows={capacityRows ?? []}

@@ -2,13 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  fetchClassrooms,
+  isKnownClassroom,
+  validateClassroomSubjects,
+} from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import {
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   GRADE_LEVELS,
-  classroomSubjects,
   type ClassroomName,
+  type ClassroomRecord,
   type CourseSubject,
   type GradeLevel,
 } from "@/lib/types";
@@ -18,48 +23,84 @@ import {
   isProgrammingNextText,
   isRobotNextText,
 } from "@/lib/courseNextText";
+import {
+  parseRegularSlotCells,
+  regularSlotLabel,
+  resolveEnrollmentCapacityId,
+} from "@/lib/regularSlot";
+import {
+  parseStudentsCsv,
+  resolveStudentCsvSlots,
+} from "@/lib/studentCsvImport";
 import { syncEnrollmentLessons } from "@/lib/syncEnrollmentLessons";
+import type { LessonCapacity } from "@/lib/types";
 
-const CAPACITY_ID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STUDENTS_BASE = "/students";
 
-function readEnrollmentCapacityId(formData: FormData, field: string): {
-  value: string | null;
-  error?: string;
-} {
-  const raw = String(formData.get(field) ?? "").trim();
-  if (!raw) return { value: null };
-  if (!CAPACITY_ID_RE.test(raw)) {
-    return { value: null, error: "定例コマの指定が不正です。" };
-  }
-  return { value: raw };
-}
-
-async function validateEnrollmentCapacity(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+function readEnrollmentSlotFromForm(
+  formData: FormData,
+  prefix: "enrollment_robot" | "enrollment_prog",
+  subject: "ロボット" | "プログラミング",
   classroom: ClassroomName | null,
   subjects: CourseSubject[],
-  capacityId: string | null,
-  subject: "ロボット" | "プログラミング"
-): Promise<string | null> {
-  if (!capacityId) return null;
-  if (!classroom) {
-    return "定例コマを選ぶ場合は所属教室も指定してください。";
+  capacities: LessonCapacity[]
+): { value: string | null; error?: string } {
+  if (!subjects.includes(subject)) {
+    return { value: null };
   }
-  if (!subjects.includes(subject)) return null;
 
+  const weekGroup = String(formData.get(`${prefix}_week_group`) ?? "").trim();
+  const dayRaw = String(formData.get(`${prefix}_day_of_week`) ?? "").trim();
+  const periodRaw = String(formData.get(`${prefix}_period`) ?? "").trim();
+
+  if (!weekGroup && !dayRaw && !periodRaw) {
+    return {
+      value: null,
+      error: `${subject}受講の場合、レギュラー出席コマ（週グループ・曜日・コマ）を設定してください。`,
+    };
+  }
+
+  const parsed = parseRegularSlotCells(weekGroup, dayRaw, periodRaw);
+  if (!parsed.ok) {
+    return {
+      value: null,
+      error: `${subject}のレギュラー出席コマ: ${parsed.error}`,
+    };
+  }
+
+  if (!classroom) {
+    return {
+      value: null,
+      error: `${subject}のレギュラー出席コマを選ぶ場合は所属教室も指定してください。`,
+    };
+  }
+
+  const id = resolveEnrollmentCapacityId(capacities, {
+    classroom,
+    subject,
+    weekGroupId: parsed.parts.weekGroupId,
+    dayOfWeek: parsed.parts.dayOfWeek,
+    period: parsed.parts.period,
+  });
+
+  if (!id) {
+    return {
+      value: null,
+      error: `${subject}のレギュラー出席コマ（${regularSlotLabel(parsed.parts)}）が「教室・振替の設定」にありません。先に第1・3週または第2・4週の枠を登録してください。`,
+    };
+  }
+
+  return { value: id };
+}
+
+async function loadLessonCapacities(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<LessonCapacity[]> {
   const { data, error } = await supabase
     .from("lesson_capacities")
-    .select("id, classroom, subject")
-    .eq("id", capacityId)
-    .maybeSingle();
-
-  if (error) return error.message;
-  if (!data) return "定例コマが見つかりません。振替枠設定を確認してください。";
-  if (data.classroom !== classroom || data.subject !== subject) {
-    return "定例コマが所属教室・受講教科と一致しません。";
-  }
-  return null;
+    .select("id, classroom, day_of_week, week_ordinals, period, subject");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as LessonCapacity[];
 }
 
 function readSubjects(formData: FormData): CourseSubject[] {
@@ -69,30 +110,29 @@ function readSubjects(formData: FormData): CourseSubject[] {
   );
 }
 
-function readClassroom(formData: FormData): {
+function readClassroom(
+  formData: FormData,
+  classrooms: readonly ClassroomRecord[]
+): {
   value: ClassroomName | null;
   error?: string;
 } {
   const raw = String(formData.get("classroom") ?? "").trim();
   if (!raw) return { value: null };
-  if (!(CLASSROOM_NAMES as readonly string[]).includes(raw)) {
+  if (!isKnownClassroom(raw, classrooms)) {
     return { value: null, error: "所属教室の選択が不正です。" };
   }
-  return { value: raw as ClassroomName };
+  return { value: raw };
 }
 
 /** 受講教科が、選択した教室で開講しているものだけかを検証 */
 function validateSubjectsAgainstClassroom(
   classroom: ClassroomName | null,
-  subjects: CourseSubject[]
+  subjects: CourseSubject[],
+  classrooms: readonly ClassroomRecord[]
 ): string | null {
   if (!classroom) return null;
-  const allowed = new Set(classroomSubjects(classroom));
-  const invalid = subjects.filter((s) => !allowed.has(s));
-  if (invalid.length > 0) {
-    return `${classroom} では「${invalid.join("・")}」を開講していません。`;
-  }
-  return null;
+  return validateClassroomSubjects(classroom, subjects, classrooms);
 }
 
 function readNextTextRobot(
@@ -180,7 +220,19 @@ export async function createStudent(formData: FormData) {
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
-  const classroomResult = readClassroom(formData);
+
+  const supabase = await createClient();
+  let classrooms: ClassroomRecord[];
+  try {
+    classrooms = await fetchClassrooms(supabase);
+  } catch (e) {
+    redirect(
+      `/students/new?error=${encodeURIComponent(
+        e instanceof Error ? e.message : "教室一覧の読み込みに失敗しました。"
+      )}`
+    );
+  }
+  const classroomResult = readClassroom(formData, classrooms);
 
   if (!name) {
     redirect(
@@ -199,7 +251,8 @@ export async function createStudent(formData: FormData) {
   }
   const subjectMismatch = validateSubjectsAgainstClassroom(
     classroomResult.value,
-    subjects
+    subjects,
+    classrooms
   );
   if (subjectMismatch) {
     redirect(`/students/new?error=${encodeURIComponent(subjectMismatch)}`);
@@ -215,41 +268,38 @@ export async function createStudent(formData: FormData) {
     redirect(`/students/new?error=${encodeURIComponent(nextProg.error)}`);
   }
 
-  const robotCap = readEnrollmentCapacityId(
+  let capacities: LessonCapacity[];
+  try {
+    capacities = await loadLessonCapacities(supabase);
+  } catch (e) {
+    redirect(
+      `/students/new?error=${encodeURIComponent(
+        e instanceof Error ? e.message : "振替枠の読み込みに失敗しました。"
+      )}`
+    );
+  }
+
+  const robotCap = readEnrollmentSlotFromForm(
     formData,
-    "enrollment_robot_capacity_id"
+    "enrollment_robot",
+    "ロボット",
+    classroomResult.value,
+    subjects,
+    capacities
   );
-  const progCap = readEnrollmentCapacityId(
+  const progCap = readEnrollmentSlotFromForm(
     formData,
-    "enrollment_prog_capacity_id"
+    "enrollment_prog",
+    "プログラミング",
+    classroomResult.value,
+    subjects,
+    capacities
   );
   if (robotCap.error) {
     redirect(`/students/new?error=${encodeURIComponent(robotCap.error)}`);
   }
   if (progCap.error) {
     redirect(`/students/new?error=${encodeURIComponent(progCap.error)}`);
-  }
-
-  const supabase = await createClient();
-  const capErrRobot = await validateEnrollmentCapacity(
-    supabase,
-    classroomResult.value,
-    subjects,
-    robotCap.value,
-    "ロボット"
-  );
-  if (capErrRobot) {
-    redirect(`/students/new?error=${encodeURIComponent(capErrRobot)}`);
-  }
-  const capErrProg = await validateEnrollmentCapacity(
-    supabase,
-    classroomResult.value,
-    subjects,
-    progCap.value,
-    "プログラミング"
-  );
-  if (capErrProg) {
-    redirect(`/students/new?error=${encodeURIComponent(capErrProg)}`);
   }
 
   const {
@@ -309,11 +359,23 @@ export async function updateStudent(formData: FormData) {
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
-  const classroomResult = readClassroom(formData);
 
   if (!id) redirect("/students");
 
   const editPath = `/students/${id}/edit`;
+
+  const supabase = await createClient();
+  let classrooms: ClassroomRecord[];
+  try {
+    classrooms = await fetchClassrooms(supabase);
+  } catch (e) {
+    redirect(
+      `${editPath}?error=${encodeURIComponent(
+        e instanceof Error ? e.message : "教室一覧の読み込みに失敗しました。"
+      )}`
+    );
+  }
+  const classroomResult = readClassroom(formData, classrooms);
 
   if (!name) {
     redirect(`${editPath}?error=${encodeURIComponent("名前を入力してください。")}`);
@@ -326,7 +388,8 @@ export async function updateStudent(formData: FormData) {
   }
   const subjectMismatch = validateSubjectsAgainstClassroom(
     classroomResult.value,
-    subjects
+    subjects,
+    classrooms
   );
   if (subjectMismatch) {
     redirect(`${editPath}?error=${encodeURIComponent(subjectMismatch)}`);
@@ -342,42 +405,38 @@ export async function updateStudent(formData: FormData) {
     redirect(`${editPath}?error=${encodeURIComponent(nextProg.error)}`);
   }
 
-  const robotCap = readEnrollmentCapacityId(
+  let capacities: LessonCapacity[];
+  try {
+    capacities = await loadLessonCapacities(supabase);
+  } catch (e) {
+    redirect(
+      `${editPath}?error=${encodeURIComponent(
+        e instanceof Error ? e.message : "振替枠の読み込みに失敗しました。"
+      )}`
+    );
+  }
+
+  const robotCap = readEnrollmentSlotFromForm(
     formData,
-    "enrollment_robot_capacity_id"
+    "enrollment_robot",
+    "ロボット",
+    classroomResult.value,
+    subjects,
+    capacities
   );
-  const progCap = readEnrollmentCapacityId(
+  const progCap = readEnrollmentSlotFromForm(
     formData,
-    "enrollment_prog_capacity_id"
+    "enrollment_prog",
+    "プログラミング",
+    classroomResult.value,
+    subjects,
+    capacities
   );
   if (robotCap.error) {
     redirect(`${editPath}?error=${encodeURIComponent(robotCap.error)}`);
   }
   if (progCap.error) {
     redirect(`${editPath}?error=${encodeURIComponent(progCap.error)}`);
-  }
-
-  const supabase = await createClient();
-
-  const capErrRobot = await validateEnrollmentCapacity(
-    supabase,
-    classroomResult.value,
-    subjects,
-    robotCap.value,
-    "ロボット"
-  );
-  if (capErrRobot) {
-    redirect(`${editPath}?error=${encodeURIComponent(capErrRobot)}`);
-  }
-  const capErrProg = await validateEnrollmentCapacity(
-    supabase,
-    classroomResult.value,
-    subjects,
-    progCap.value,
-    "プログラミング"
-  );
-  if (capErrProg) {
-    redirect(`${editPath}?error=${encodeURIComponent(capErrProg)}`);
   }
 
   const {
@@ -446,4 +505,125 @@ export async function deleteStudent(formData: FormData) {
   revalidatePath("/students");
   revalidatePath("/");
   redirect("/students");
+}
+
+function importFail(msg: string): never {
+  redirect(`${STUDENTS_BASE}?error=${encodeURIComponent(msg)}`);
+}
+
+/** CSV 一括取り込み（新規・更新）。レギュラー出席コマは第1/3・第2/4 週グループ */
+export async function importStudentsCsv(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.accountRole !== "staff") {
+    redirect("/login");
+  }
+
+  const raw = String(formData.get("csv") ?? "");
+  const supabase = await createClient();
+
+  let classrooms: ClassroomRecord[];
+  try {
+    classrooms = await fetchClassrooms(supabase);
+  } catch (e) {
+    importFail(
+      e instanceof Error ? e.message : "教室一覧の読み込みに失敗しました。"
+    );
+  }
+
+  const parsedResult = parseStudentsCsv(raw, classrooms);
+  if (!parsedResult.ok) importFail(parsedResult.error);
+
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) redirect("/login");
+
+  let capacities: LessonCapacity[];
+  try {
+    capacities = await loadLessonCapacities(supabase);
+  } catch (e) {
+    importFail(
+      e instanceof Error ? e.message : "振替枠の読み込みに失敗しました。"
+    );
+  }
+
+  let created = 0;
+  let updated = 0;
+
+  for (const row of parsedResult.parsed) {
+    const slots = resolveStudentCsvSlots(row, capacities);
+    if (slots.error) importFail(`${row.line}行目: ${slots.error}`);
+
+    const payload = {
+      name: row.name,
+      grade: row.grade,
+      classroom: row.classroom,
+      subjects: row.subjects,
+      enrollment_robot_capacity_id: slots.robotCapacityId,
+      enrollment_prog_capacity_id: slots.progCapacityId,
+      note: row.note,
+    };
+
+    if (row.student_id) {
+      const { data: existing } = await supabase
+        .from("students")
+        .select("id")
+        .eq("id", row.student_id)
+        .maybeSingle();
+
+      if (!existing) {
+        importFail(`${row.line}行目: student_id ${row.student_id} が見つかりません。`);
+      }
+
+      const { error } = await supabase
+        .from("students")
+        .update(payload)
+        .eq("id", row.student_id);
+
+      if (error) importFail(`${row.line}行目: ${error.message}`);
+
+      const sync = await syncEnrollmentLessons(supabase, {
+        studentId: row.student_id,
+        teacherId: authUser.id,
+        classroom: row.classroom,
+        subjects: row.subjects,
+        robotCapacityId: slots.robotCapacityId,
+        progCapacityId: slots.progCapacityId,
+      });
+      if (sync.error) {
+        importFail(`${row.line}行目: 出席予定の同期に失敗: ${sync.error}`);
+      }
+      updated++;
+    } else {
+      const { data, error } = await supabase
+        .from("students")
+        .insert({ ...payload, created_by: authUser.id })
+        .select("id")
+        .single();
+
+      if (error) importFail(`${row.line}行目: ${error.message}`);
+
+      const sync = await syncEnrollmentLessons(supabase, {
+        studentId: data!.id,
+        teacherId: authUser.id,
+        classroom: row.classroom,
+        subjects: row.subjects,
+        robotCapacityId: slots.robotCapacityId,
+        progCapacityId: slots.progCapacityId,
+      });
+      if (sync.error) {
+        importFail(`${row.line}行目: 出席予定の同期に失敗: ${sync.error}`);
+      }
+      created++;
+    }
+  }
+
+  revalidatePath(STUDENTS_BASE);
+  revalidatePath("/");
+
+  const params = new URLSearchParams();
+  if (created > 0) params.set("imported", String(created));
+  if (updated > 0) params.set("csv_updated", String(updated));
+  const qs = params.toString();
+  redirect(qs ? `${STUDENTS_BASE}?${qs}` : STUDENTS_BASE);
 }

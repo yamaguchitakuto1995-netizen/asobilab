@@ -10,12 +10,12 @@ import {
 } from "@/lib/periodTimes";
 import {
   ATTENDANCE_OPTIONS,
-  CLASSROOM_NAMES,
   COURSE_SUBJECTS,
   PERIOD_OPTIONS,
   SCHEDULED_ATTENDANCE_OPTIONS,
   type AttendanceStatus,
   type ClassroomPeriodTime,
+  type ClassroomRecord,
   type LessonStatus,
 } from "@/lib/types";
 import { todayIso } from "@/lib/date";
@@ -41,6 +41,7 @@ type Props = {
    */
   studentSubjects?: string[];
   studentClassroom?: string | null;
+  classrooms: ClassroomRecord[];
   classroomPeriodTimes?: ClassroomPeriodTime[];
   submitLabel?: string;
   error?: string;
@@ -54,6 +55,7 @@ export function LessonForm({
   defaultValues,
   studentSubjects,
   studentClassroom,
+  classrooms,
   classroomPeriodTimes = [],
   submitLabel = "記録する",
   error,
@@ -204,9 +206,9 @@ export function LessonForm({
           className={inputClass}
         >
           <option value="">所属教室と同じ</option>
-          {CLASSROOM_NAMES.map((name) => (
-            <option key={name} value={name}>
-              {name}
+          {classrooms.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
             </option>
           ))}
         </select>

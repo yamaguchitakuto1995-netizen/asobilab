@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ConfirmDeleteForm } from "@/components/ConfirmDeleteForm";
 import { PageHeader } from "@/components/PageHeader";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms } from "@/lib/classrooms";
 import {
   fetchClassroomPeriodTimes,
   formatTimeRange,
@@ -12,12 +13,17 @@ import { createClient } from "@/lib/supabase/server";
 import {
   deletePeriodTime,
   importPeriodTimesCsv,
+  resyncScheduledLessonsFromPeriodTimes,
 } from "./actions";
 
 type SearchParams = Promise<{
   error?: string;
   imported?: string;
   updated?: string;
+  scheduled?: string;
+  capacities?: string;
+  resynced?: string;
+  classroom_created?: string;
   csv_dupes?: string;
   overwrites?: string;
 }>;
@@ -34,7 +40,10 @@ export default async function PeriodTimesPage({
 
   const sp = await searchParams;
   const supabase = await createClient();
-  const rows = await fetchClassroomPeriodTimes(supabase);
+  const [rows, classrooms] = await Promise.all([
+    fetchClassroomPeriodTimes(supabase),
+    fetchClassrooms(supabase),
+  ]);
 
   const sorted = [...rows].sort((a, b) => {
     if (a.lesson_date !== b.lesson_date)
@@ -57,7 +66,7 @@ export default async function PeriodTimesPage({
 
       <PageHeader
         title="コマの時刻設定"
-        description="教室・開催日（暦日）・コマ番号ごとに、画面に表示する時間帯（例: 9:00〜10:30）を登録します。「第◯週」ではなく実際の日付で指定するため、祝日のずれやイレギュラーな開催にも合わせやすくなっています。同じ定例でも曜日ごとに日付が違えば、日付ごとに行を追加してください。"
+        description="教室・開催日（暦日）・コマ番号ごとに時間帯を登録します。登録すると、同じ教室・曜日・コマの「レギュラー出席コマ」を持つ生徒に、その日の出席予定が自動で追加されます。"
       />
 
       {sp.error ? (
@@ -65,13 +74,36 @@ export default async function PeriodTimesPage({
           {decodeURIComponent(sp.error)}
         </p>
       ) : null}
-      {sp.imported || sp.updated ? (
+      {sp.imported || sp.updated || sp.scheduled || sp.capacities || sp.resynced || sp.classroom_created ? (
         <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
+          {sp.classroom_created ? (
+            <p>
+              教室「{decodeURIComponent(sp.classroom_created)}」を登録しました。
+            </p>
+          ) : null}
           {sp.imported ? (
             <p>新規 {decodeURIComponent(sp.imported)} 件を登録しました。</p>
           ) : null}
           {sp.updated ? (
             <p>既存 {decodeURIComponent(sp.updated)} 件を上書きしました。</p>
+          ) : null}
+          {sp.scheduled ? (
+            <p>
+              レギュラー出席コマの生徒に出席予定を{" "}
+              {decodeURIComponent(sp.scheduled)} 件追加しました。
+            </p>
+          ) : null}
+          {sp.capacities ? (
+            <p>
+              未登録のレギュラー振替枠を{" "}
+              {decodeURIComponent(sp.capacities)} 件自動作成しました。
+            </p>
+          ) : null}
+          {sp.resynced ? (
+            <p>
+              出席予定を一括再同期しました（{decodeURIComponent(sp.resynced)}{" "}
+              件）。
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -103,6 +135,24 @@ export default async function PeriodTimesPage({
         >
           新規追加
         </Link>
+        {user.isAdmin ? (
+          <Link
+            href="/capacities/period-times/classrooms/new"
+            className="rounded-lg text-sm font-medium px-3 py-2 border border-brand-300 bg-brand-50 hover:bg-brand-100 text-brand-800"
+          >
+            新規教室の登録
+          </Link>
+        ) : null}
+        {user.isAdmin ? (
+          <form action={resyncScheduledLessonsFromPeriodTimes}>
+            <button
+              type="submit"
+              className="rounded-lg text-sm font-medium px-3 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+            >
+              出席予定を一括再同期
+            </button>
+          </form>
+        ) : null}
       </div>
 
       {!user.isAdmin ? (
@@ -110,6 +160,31 @@ export default async function PeriodTimesPage({
           時刻の追加・編集・削除・CSV取り込みは管理者のみ実行できます。
         </p>
       ) : null}
+
+      <section>
+        <h2 className="text-base font-semibold mb-3">登録済みの教室</h2>
+        {classrooms.length === 0 ? (
+          <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-6 text-center text-sm text-slate-500">
+            教室が未登録です。管理者が「新規教室の登録」から追加してください。
+          </div>
+        ) : (
+          <ul className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
+            {classrooms.map((c) => (
+              <li key={c.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <p className="font-medium text-slate-900 text-sm">{c.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    開講: {c.subjects.join(" / ")}
+                  </p>
+                  {c.note ? (
+                    <p className="text-xs text-slate-400 mt-1">{c.note}</p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section>
         <h2 className="text-base font-semibold mb-3">登録済みの時刻</h2>
@@ -198,6 +273,20 @@ export default async function PeriodTimesPage({
               </li>
               <li>
                 <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
+                  regular_week_group
+                </code>{" "}
+                レギュラー出席コマの週グループ（
+                <span className="font-medium">1-3</span> または{" "}
+                <span className="font-medium">2-4</span>。第1・3週 / 第2・4週 も可）
+              </li>
+              <li>
+                <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
+                  regular_day_of_week
+                </code>{" "}
+                レギュラー出席コマの曜日（0=日 … 6=土、または「月曜」など）
+              </li>
+              <li>
+                <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
                   subject
                 </code>{" "}
                 任意。「プログラミング」「ロボット」または{" "}
@@ -221,6 +310,10 @@ export default async function PeriodTimesPage({
                 任意・メモ
               </li>
             </ul>
+            <p className="text-sky-900 bg-sky-50 border border-sky-100 rounded-lg px-2 py-2">
+              <span className="font-semibold">出席予定の連動:</span>{" "}
+              取り込み後、各生徒の「レギュラー出席コマ」と一致する行について、該当生徒の出席予定が自動追加されます。未登録の振替枠は保存時に自動作成されます。
+            </p>
             <p className="text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-2">
               <span className="font-semibold">重複時:</span>{" "}
               同じ「教室・開催日・コマ・教科」の行が CSV 内に複数ある場合は
@@ -236,7 +329,7 @@ export default async function PeriodTimesPage({
             <p>
               ヘッダー例:{" "}
               <code className="text-[11px] bg-white px-1 rounded border border-slate-200 break-all">
-                classroom,lesson_date,period,subject,start_time,end_time,note
+                classroom,lesson_date,period,regular_week_group,regular_day_of_week,subject,start_time,end_time,note
               </code>
             </p>
             <p>

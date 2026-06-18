@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LessonForm } from "@/components/LessonForm";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentTextInfoSection } from "@/components/StudentTextInfo";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { createClient } from "@/lib/supabase/server";
 import type { Student } from "@/lib/types";
@@ -22,7 +23,7 @@ export default async function NewLessonPage({
   const { error } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: student }, periodTimes] = await Promise.all([
+  const [{ data: student }, periodTimes, classrooms] = await Promise.all([
     supabase
       .from("students")
       .select(
@@ -46,6 +47,7 @@ export default async function NewLessonPage({
         >
       >(),
     fetchClassroomPeriodTimes(supabase),
+    fetchClassrooms(supabase),
   ]);
 
   if (!student) notFound();
@@ -87,6 +89,7 @@ export default async function NewLessonPage({
         action={createLesson}
         studentSubjects={student.subjects ?? []}
         studentClassroom={student.classroom}
+        classrooms={classrooms}
         classroomPeriodTimes={periodTimes}
         submitLabel="保存する"
         error={error}

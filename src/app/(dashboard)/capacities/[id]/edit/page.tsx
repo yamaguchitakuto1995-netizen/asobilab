@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { CapacityForm } from "@/components/CapacityForm";
 import { PageHeader } from "@/components/PageHeader";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import type { LessonCapacity } from "@/lib/types";
 import { updateCapacity } from "../../actions";
@@ -23,6 +24,7 @@ export default async function EditCapacityPage({
   if (!user?.isAdmin) redirect("/capacities");
 
   const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
   const { data: capacity } = await supabase
     .from("lesson_capacities")
     .select("*")
@@ -60,6 +62,7 @@ export default async function EditCapacityPage({
       ) : null}
 
       <CapacityForm
+        classrooms={classrooms}
         defaultValue={capacity}
         action={updateCapacity}
         takenKeys={taken}

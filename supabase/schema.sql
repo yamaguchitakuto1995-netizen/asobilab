@@ -716,7 +716,7 @@ exception when duplicate_object then null; end $$;
 create index if not exists lesson_capacities_lookup_idx
   on public.lesson_capacities (classroom, day_of_week, period, subject);
 
--- 生徒の定例コマ（lesson_capacities）。保存時に出席予定を自動生成する際の参照先。
+-- 生徒のレギュラー出席コマ（lesson_capacities）。コマ時刻設定と連動して出席予定を自動生成する。
 alter table public.students add column if not exists enrollment_robot_capacity_id uuid;
 alter table public.students add column if not exists enrollment_prog_capacity_id uuid;
 

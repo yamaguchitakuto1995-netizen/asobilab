@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { todayIso } from "@/lib/date";
 import { toCsvRow } from "@/lib/csv";
 import { createClient } from "@/lib/supabase/server";
-import { CLASSROOM_NAMES, type Student } from "@/lib/types";
+import { type Student } from "@/lib/types";
 
 /**
  * ログイン済み講師のみ。生徒の個人情報を含むため URL は共有しないでください。
@@ -25,13 +26,14 @@ export async function GET(request: NextRequest) {
   const q = (searchParams.get("q") ?? "").trim();
   const classroomParam = searchParams.get("classroom") ?? "";
   const isUnassigned = classroomParam === "__none__";
+
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
   const validClassroom =
-    classroomParam &&
-    (CLASSROOM_NAMES as readonly string[]).includes(classroomParam)
+    classroomParam && isKnownClassroom(classroomParam, classrooms)
       ? classroomParam
       : "";
 
-  const supabase = await createClient();
   let query = supabase
     .from("students")
     .select(

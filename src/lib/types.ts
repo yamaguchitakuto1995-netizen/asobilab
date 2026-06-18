@@ -61,39 +61,51 @@ export const ATTENDANCE_BADGE: Record<AttendanceStatus, string> = {
 export const COURSE_SUBJECTS = ["プログラミング", "ロボット"] as const;
 export type CourseSubject = (typeof COURSE_SUBJECTS)[number];
 
-/**
- * 教室一覧と各教室の開講教科。
- * 教室を追加したらここに足すだけで全画面に反映される。
- * (DB 側の CHECK 制約 students_classroom_check も schema.sql で追従させる)
- */
-export const CLASSROOMS = [
-  { name: "長浜八幡中山教室",                       subjects: ["ロボット"] },
-  { name: "長浜駅前通り教室",                       subjects: ["ロボット", "プログラミング"] },
-  { name: "米原駅前教室",                           subjects: ["ロボット", "プログラミング"] },
-  { name: "米原長岡教室",                           subjects: ["ロボット", "プログラミング"] },
-  { name: "西宮鳴尾町教室",                         subjects: ["ロボット", "プログラミング"] },
-  { name: "出屋敷教室",                             subjects: ["ロボット", "プログラミング"] },
-  { name: "長浜神照教室",                           subjects: ["プログラミング"] },
-  { name: "学校法人芦屋学園芦屋大学附属幼稚園教室", subjects: ["ロボット"] },
+/** DB の classrooms 行 */
+export type ClassroomRecord = {
+  id: string;
+  name: string;
+  subjects: CourseSubject[];
+  note: string | null;
+  sort_order: number;
+};
+
+/** @deprecated 教室一覧は DB の classrooms テーブルから fetchClassrooms で取得 */
+export const LEGACY_SEED_CLASSROOMS = [
+  { name: "長浜八幡中山教室", subjects: ["ロボット"] as const },
+  { name: "長浜駅前通り教室", subjects: ["ロボット", "プログラミング"] as const },
+  { name: "米原駅前教室", subjects: ["ロボット", "プログラミング"] as const },
+  { name: "米原長岡教室", subjects: ["ロボット", "プログラミング"] as const },
+  { name: "西宮鳴尾町教室", subjects: ["ロボット", "プログラミング"] as const },
+  { name: "出屋敷教室", subjects: ["ロボット", "プログラミング"] as const },
+  { name: "長浜神照教室", subjects: ["プログラミング"] as const },
+  {
+    name: "学校法人芦屋学園芦屋大学附属幼稚園教室",
+    subjects: ["ロボット"] as const,
+  },
 ] as const satisfies ReadonlyArray<{
   name: string;
   subjects: ReadonlyArray<CourseSubject>;
 }>;
 
-export type ClassroomName = (typeof CLASSROOMS)[number]["name"];
+export type ClassroomName = string;
 
-export const CLASSROOM_NAMES: readonly ClassroomName[] = CLASSROOMS.map(
-  (c) => c.name
-);
-
-/** 教室名からその教室で開講している教科の一覧を返す。未指定/未知の教室なら全教科。 */
+/** 教室名から開講教科（classrooms 一覧を渡す） */
 export function classroomSubjects(
-  name: string | null | undefined
+  name: string | null | undefined,
+  classrooms: readonly Pick<ClassroomRecord, "name" | "subjects">[]
 ): readonly CourseSubject[] {
   if (!name) return COURSE_SUBJECTS;
-  const found = CLASSROOMS.find((c) => c.name === name);
+  const found = classrooms.find((c) => c.name === name);
   return found ? (found.subjects as readonly CourseSubject[]) : COURSE_SUBJECTS;
 }
+
+/** @deprecated fetchClassrooms の結果を使ってください */
+export const CLASSROOMS = LEGACY_SEED_CLASSROOMS;
+/** @deprecated classroomNames(classrooms) を使ってください */
+export const CLASSROOM_NAMES: readonly string[] = LEGACY_SEED_CLASSROOMS.map(
+  (c) => c.name
+);
 
 /** 教室の表示色 (一覧やバッジで使用) */
 export function classroomBadgeClass(name: string | null | undefined): string {
@@ -168,9 +180,9 @@ export type Student = {
   next_text_programming: string | null;
   next_text_programming_course?: string | null;
   next_text_programming_text?: string | null;
-  /** ロボットの定例コマ（lesson_capacities.id）。保存時に出席予定を自動生成 */
+  /** ロボットのレギュラー出席コマ（lesson_capacities.id）。コマ時刻と連動して出席予定を自動生成 */
   enrollment_robot_capacity_id?: string | null;
-  /** プログラミングの定例コマ（lesson_capacities.id） */
+  /** プログラミングのレギュラー出席コマ（lesson_capacities.id） */
   enrollment_prog_capacity_id?: string | null;
   note: string | null;
   created_at: string;

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchClassrooms } from "@/lib/classrooms";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { MakeupApplyFlow } from "./MakeupApplyFlow";
 
@@ -9,7 +10,10 @@ export const metadata = {
 
 export default async function ApplyPage() {
   const supabase = await createClient();
-  const periodTimes = await fetchClassroomPeriodTimes(supabase);
+  const [periodTimes, classrooms] = await Promise.all([
+    fetchClassroomPeriodTimes(supabase),
+    fetchClassrooms(supabase),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -21,7 +25,7 @@ export default async function ApplyPage() {
           お子様の振替予定を、空き枠に合わせてオンラインで登録いただけます。
         </p>
       </div>
-      <MakeupApplyFlow periodTimes={periodTimes} />
+      <MakeupApplyFlow periodTimes={periodTimes} classrooms={classrooms} />
     </div>
   );
 }
