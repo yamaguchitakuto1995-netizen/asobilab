@@ -8,7 +8,12 @@ export const metadata = {
   description: "保護者向け 振替申請フォーム",
 };
 
-export default async function ApplyPage() {
+export default async function ApplyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ name?: string; classroom?: string; grade?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const [periodTimes, classrooms] = await Promise.all([
     fetchClassroomPeriodTimes(supabase),
@@ -25,7 +30,13 @@ export default async function ApplyPage() {
           お子様の振替予定を、空き枠に合わせてオンラインで登録いただけます。
         </p>
       </div>
-      <MakeupApplyFlow periodTimes={periodTimes} classrooms={classrooms} />
+      <MakeupApplyFlow
+        periodTimes={periodTimes}
+        classrooms={classrooms}
+        initialName={sp.name ? decodeURIComponent(sp.name) : ""}
+        initialClassroom={sp.classroom ? decodeURIComponent(sp.classroom) : ""}
+        initialGrade={sp.grade ? decodeURIComponent(sp.grade) : ""}
+      />
     </div>
   );
 }

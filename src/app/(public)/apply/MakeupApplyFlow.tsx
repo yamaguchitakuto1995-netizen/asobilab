@@ -4,23 +4,35 @@ import { useState, useTransition } from "react";
 import { Field, inputClass } from "@/components/Field";
 import { GRADE_LEVELS, type ClassroomPeriodTime, type ClassroomRecord } from "@/lib/types";
 import { AvailabilityPicker } from "./AvailabilityPicker";
+import { SiblingParticipantPicker } from "./SiblingParticipantPicker";
 import { lookupStudent, type FoundStudent } from "./actions";
 
 type Props = {
   periodTimes?: ClassroomPeriodTime[];
   classrooms?: ClassroomRecord[];
+  initialName?: string;
+  initialClassroom?: string;
+  initialGrade?: string;
 };
 
 /** 保護者の振替申請フロー全体を管理する Client Component */
-export function MakeupApplyFlow({ periodTimes = [], classrooms = [] }: Props) {
+export function MakeupApplyFlow({
+  periodTimes = [],
+  classrooms = [],
+  initialName = "",
+  initialClassroom = "",
+  initialGrade = "",
+}: Props) {
   const [student, setStudent] = useState<FoundStudent | null>(null);
+  const [siblings, setSiblings] = useState<FoundStudent[]>([]);
+  const [participants, setParticipants] = useState<FoundStudent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // 入力保持 (再表示時の利便性)
-  const [name, setName] = useState("");
-  const [classroom, setClassroom] = useState("");
-  const [grade, setGrade] = useState("");
+  const [name, setName] = useState(initialName);
+  const [classroom, setClassroom] = useState(initialClassroom);
+  const [grade, setGrade] = useState(initialGrade);
 
   function handleLookup(formData: FormData) {
     const input = {
@@ -39,16 +51,58 @@ export function MakeupApplyFlow({ periodTimes = [], classrooms = [] }: Props) {
         return;
       }
       setStudent(result.student);
+      setSiblings(result.siblings);
+      setParticipants(null);
     });
+  }
+
+  if (participants) {
+    return (
+      <AvailabilityPicker
+        students={participants}
+        periodTimes={periodTimes}
+        onBack={() => {
+          setParticipants(null);
+          setError(null);
+        }}
+        onReset={() => {
+          setStudent(null);
+          setSiblings([]);
+          setParticipants(null);
+          setError(null);
+        }}
+      />
+    );
+  }
+
+  if (student && siblings.length > 0) {
+    return (
+      <SiblingParticipantPicker
+        primary={student}
+        siblings={siblings}
+        onConfirm={setParticipants}
+        onBack={() => {
+          setStudent(null);
+          setSiblings([]);
+          setError(null);
+        }}
+      />
+    );
   }
 
   if (student) {
     return (
       <AvailabilityPicker
-        student={student}
+        students={[student]}
         periodTimes={periodTimes}
         onBack={() => {
           setStudent(null);
+          setSiblings([]);
+          setError(null);
+        }}
+        onReset={() => {
+          setStudent(null);
+          setSiblings([]);
           setError(null);
         }}
       />

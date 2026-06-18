@@ -184,6 +184,8 @@ export type Student = {
   enrollment_robot_capacity_id?: string | null;
   /** プログラミングのレギュラー出席コマ（lesson_capacities.id） */
   enrollment_prog_capacity_id?: string | null;
+  /** 兄弟姉妹グループ（同一 UUID の生徒が兄弟として扱われる） */
+  sibling_group_id?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;

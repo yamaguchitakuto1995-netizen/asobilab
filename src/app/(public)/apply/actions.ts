@@ -21,11 +21,15 @@ export type FoundStudent = {
 };
 
 export type LookupResult =
-  | { ok: true; student: FoundStudent }
+  | { ok: true; student: FoundStudent; siblings: FoundStudent[] }
   | { ok: false; error: string };
 
 export type BookResult =
   | { ok: true; lessonId: string }
+  | { ok: false; error: string };
+
+export type BatchBookResult =
+  | { ok: true; lessonIds: string[] }
   | { ok: false; error: string };
 
 export type ScheduledLessonOption = {
@@ -86,7 +90,33 @@ export async function lookupStudent(input: {
     };
   }
 
-  return { ok: true, student: list[0] };
+  const student = list[0]!;
+  const { data: selfRow } = await supabase
+    .from("students")
+    .select("sibling_group_id")
+    .eq("id", student.id)
+    .maybeSingle<{ sibling_group_id: string | null }>();
+
+  let siblings: FoundStudent[] = [];
+  if (selfRow?.sibling_group_id) {
+    const { data: sibRows } = await supabase
+      .from("students")
+      .select("id, name, classroom, grade, subjects")
+      .eq("sibling_group_id", selfRow.sibling_group_id)
+      .neq("id", student.id);
+
+    siblings = (sibRows ?? [])
+      .filter((s) => s.classroom && s.grade)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        classroom: s.classroom!,
+        grade: s.grade as string,
+        subjects: s.subjects ?? [],
+      }));
+  }
+
+  return { ok: true, student, siblings };
 }
 
 /** 振替元に選べる「出席予定」(RPC: list_scheduled_lessons_for_makeup) */
@@ -244,4 +274,147 @@ export async function bookMakeupLesson(input: {
   revalidatePath("/apply");
 
   return { ok: true, lessonId: String(data) };
+}
+
+export type MakeupBookingInput = {
+  studentId: string;
+  lessonDate: string;
+  period: number;
+  subject: string;
+  sourceLessonDate: string;
+  sourcePeriod: number;
+  sourceSubject: string;
+  textMemo?: string;
+  lessonClassroom?: string | null;
+};
+
+async function validateMakeupBooking(
+  input: MakeupBookingInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!input.studentId) return { ok: false, error: "生徒情報が不正です。" };
+  if (!isValidDate(input.lessonDate)) {
+    return { ok: false, error: "振替先の日付が不正です。" };
+  }
+  if (!isValidDate(input.sourceLessonDate)) {
+    return { ok: false, error: "欠席する授業の日付が不正です。" };
+  }
+  if (
+    !Number.isInteger(input.period) ||
+    input.period < 1 ||
+    input.period > MAX_PERIOD
+  ) {
+    return { ok: false, error: "コマが不正です。" };
+  }
+  if (
+    !Number.isInteger(input.sourcePeriod) ||
+    input.sourcePeriod < 1 ||
+    input.sourcePeriod > MAX_PERIOD
+  ) {
+    return { ok: false, error: "欠席コマの指定が不正です。" };
+  }
+  if (!(COURSE_SUBJECTS as readonly string[]).includes(input.subject)) {
+    return { ok: false, error: "教科が不正です。" };
+  }
+  if (!(COURSE_SUBJECTS as readonly string[]).includes(input.sourceSubject)) {
+    return { ok: false, error: "欠席の教科の指定が不正です。" };
+  }
+
+  const today = todayIso();
+  const maxLesson = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
+  if (input.lessonDate < today || input.lessonDate > maxLesson) {
+    return {
+      ok: false,
+      error: `振替先の日付は今日から ${MAKEUP_TARGET_MAX_DAYS_AHEAD} 日以内で選んでください。`,
+    };
+  }
+
+  const lessonVenue = (input.lessonClassroom ?? "").trim();
+  const supabase = await createClient();
+  const classrooms = await fetchClassrooms(supabase);
+
+  if (lessonVenue && !isKnownClassroom(lessonVenue, classrooms)) {
+    return { ok: false, error: "実施会場の指定が不正です。" };
+  }
+
+  const { data: studentRow } = await supabase
+    .from("students")
+    .select("name, classroom, grade")
+    .eq("id", input.studentId)
+    .maybeSingle<{ name: string; classroom: string | null; grade: string }>();
+
+  if (!studentRow?.classroom) {
+    return {
+      ok: false,
+      error: "生徒情報を確認できませんでした。教室にお問い合わせください。",
+    };
+  }
+
+  const scheduled = await listScheduledLessonsForMakeup({
+    studentId: input.studentId,
+    name: studentRow.name,
+    classroom: studentRow.classroom,
+    grade: studentRow.grade,
+  });
+
+  if (!scheduled.ok) {
+    return { ok: false, error: scheduled.error };
+  }
+
+  const sourceAllowed = scheduled.lessons.some(
+    (l) =>
+      l.lesson_date === input.sourceLessonDate &&
+      l.period === input.sourcePeriod &&
+      l.subject === input.sourceSubject
+  );
+
+  if (!sourceAllowed) {
+    return {
+      ok: false,
+      error:
+        "欠席に指定できるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
+    };
+  }
+
+  return { ok: true };
+}
+
+/** 複数生徒の振替を一括登録（兄弟など） */
+export async function bookMakeupLessonsBatch(
+  bookings: MakeupBookingInput[]
+): Promise<BatchBookResult> {
+  if (bookings.length === 0) {
+    return { ok: false, error: "振替内容がありません。" };
+  }
+
+  for (const b of bookings) {
+    const v = await validateMakeupBooking(b);
+    if (!v.ok) return v;
+  }
+
+  const payload = bookings.map((b) => ({
+    student_id: b.studentId,
+    lesson_date: b.lessonDate,
+    period: b.period,
+    subject: b.subject,
+    source_lesson_date: b.sourceLessonDate,
+    source_period: b.sourcePeriod,
+    source_subject: b.sourceSubject,
+    text_memo: b.textMemo?.trim() || null,
+    lesson_classroom: (b.lessonClassroom ?? "").trim() || null,
+  }));
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("book_makeup_lessons_batch", {
+    p_bookings: payload,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/apply");
+  revalidatePath("/parent");
+
+  return { ok: true, lessonIds: (data ?? []) as string[] };
 }

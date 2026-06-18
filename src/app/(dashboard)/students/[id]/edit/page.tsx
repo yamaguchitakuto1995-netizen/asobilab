@@ -4,7 +4,9 @@ import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
+import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
+import { fetchSiblingSummaries, fetchStudentsForSiblingPicker } from "@/lib/siblings";
 import { createClient } from "@/lib/supabase/server";
 import { GRADE_LEVELS, type LessonCapacity, type Student } from "@/lib/types";
 import { updateStudent } from "../../actions";
@@ -35,6 +37,11 @@ export default async function EditStudentPage({
     .maybeSingle<Student>();
 
   if (!student) notFound();
+
+  const [siblingCandidates, currentSiblings] = await Promise.all([
+    fetchStudentsForSiblingPicker(supabase, id),
+    fetchSiblingSummaries(supabase, id, student.sibling_group_id),
+  ]);
 
   const { data: capacityRows } = await supabase
     .from("lesson_capacities")
@@ -153,6 +160,14 @@ export default async function EditStudentPage({
           defaultEnrollmentProgCapacityId={
             student.enrollment_prog_capacity_id ?? null
           }
+        />
+
+        <StudentSiblingField
+          candidates={siblingCandidates}
+          defaultHasSiblings={
+            Boolean(student.sibling_group_id) || currentSiblings.length > 0
+          }
+          defaultSiblingIds={currentSiblings.map((s) => s.id)}
         />
 
         <Field label="メモ" htmlFor="note" hint="連絡先や担当科目など、任意のメモ">

@@ -11,7 +11,6 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
-  COURSE_SUBJECTS,
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   periodLabel,
   type ClassroomPeriodTime,
@@ -20,21 +19,19 @@ import {
 } from "@/lib/types";
 import {
   bookMakeupLesson,
+  bookMakeupLessonsBatch,
   listScheduledLessonsForMakeup,
   type FoundStudent,
   type ScheduledLessonOption,
 } from "./actions";
 
 type Props = {
-  student: FoundStudent;
-  /** 教室・コマの時刻（振替フォーム表示用） */
+  students: FoundStudent[];
   periodTimes?: ClassroomPeriodTime[];
-  /** 振替先を選べる日数（今日から +N 日まで）。省略時は {@link MAKEUP_TARGET_MAX_DAYS_AHEAD} */
   daysAhead?: number;
-  /** ポーリング間隔 (ms) */
   pollIntervalMs?: number;
-  /** 戻るリンクの操作 (生徒情報をクリアして再入力) */
   onBack: () => void;
+  onReset: () => void;
 };
 
 type SourceSelection = {
@@ -43,15 +40,24 @@ type SourceSelection = {
   subject: string;
 };
 
+type BookedSummary = {
+  student: FoundStudent;
+  lessonId: string;
+  source: SourceSelection;
+  dest: SlotAvailability;
+};
+
 type Cache = Record<string, SlotAvailability[]>;
 
 export function AvailabilityPicker({
-  student,
+  students,
   periodTimes = [],
   daysAhead = MAKEUP_TARGET_MAX_DAYS_AHEAD,
   pollIntervalMs = 30_000,
   onBack,
+  onReset,
 }: Props) {
+  const isMulti = students.length > 1;
   const today = todayIso();
   const maxDate = useMemo(() => shiftDate(today, daysAhead), [today, daysAhead]);
   const [selectedDate, setSelectedDate] = useState<string>(today);
@@ -60,27 +66,32 @@ export function AvailabilityPicker({
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const [source, setSource] = useState<SourceSelection | null>(null);
-  const [suggestions, setSuggestions] = useState<ScheduledLessonOption[] | null>(
-    null
+  const [sources, setSources] = useState<Record<string, SourceSelection | null>>(
+    {}
   );
-  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [suggestionsByStudent, setSuggestionsByStudent] = useState<
+    Record<string, ScheduledLessonOption[] | null>
+  >({});
+  const [suggestErrors, setSuggestErrors] = useState<Record<string, string>>({});
 
+  const [destByStudent, setDestByStudent] = useState<
+    Record<string, SlotAvailability | null>
+  >({});
   const [submitting, setSubmitting] = useState(false);
-  const [bookedLessonId, setBookedLessonId] = useState<string | null>(null);
-  const [bookedDest, setBookedDest] = useState<{
-    period: number;
-    subject: string;
-    classroom: string;
-  } | null>(null);
+  const [booked, setBooked] = useState<BookedSummary[] | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [confirmSlot, setConfirmSlot] = useState<SlotAvailability | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // 生徒の所属教室・受講教科のみを表示候補にする
-  const studentSubjects = useMemo(
-    () => new Set<string>(student.subjects ?? []),
-    [student]
+  const subjectsByStudent = useMemo(
+    () =>
+      Object.fromEntries(
+        students.map((s) => [s.id, new Set<string>(s.subjects ?? [])])
+      ),
+    [students]
   );
+
+  const allSourcesSelected = students.every((s) => sources[s.id]);
+  const allDestSelected = students.every((s) => destByStudent[s.id]);
 
   function timeSuffix(
     date: string,
@@ -100,25 +111,35 @@ export function AvailabilityPicker({
 
   useEffect(() => {
     let cancelled = false;
-    setSuggestError(null);
+    setSuggestErrors({});
     (async () => {
-      const r = await listScheduledLessonsForMakeup({
-        studentId: student.id,
-        name: student.name,
-        classroom: student.classroom,
-        grade: student.grade,
-      });
-      if (cancelled) return;
-      if (r.ok) setSuggestions(r.lessons);
-      else {
-        setSuggestions([]);
-        setSuggestError(r.error);
+      const nextSuggestions: Record<string, ScheduledLessonOption[] | null> = {};
+      const nextErrors: Record<string, string> = {};
+      await Promise.all(
+        students.map(async (s) => {
+          const r = await listScheduledLessonsForMakeup({
+            studentId: s.id,
+            name: s.name,
+            classroom: s.classroom,
+            grade: s.grade,
+          });
+          if (cancelled) return;
+          if (r.ok) nextSuggestions[s.id] = r.lessons;
+          else {
+            nextSuggestions[s.id] = [];
+            nextErrors[s.id] = r.error;
+          }
+        })
+      );
+      if (!cancelled) {
+        setSuggestionsByStudent(nextSuggestions);
+        setSuggestErrors(nextErrors);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [student]);
+  }, [students]);
 
   const dates = useMemo(() => {
     const arr: string[] = [];
@@ -126,62 +147,51 @@ export function AvailabilityPicker({
     return arr;
   }, [today, daysAhead]);
 
-  const fetchAvailability = useCallback(
-    async (date: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(
-          `/api/availability?date=${encodeURIComponent(date)}`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(body.error ?? `空き状況の取得に失敗 (${res.status})`);
-        }
-        const body = (await res.json()) as {
-          date: string;
-          slots: SlotAvailability[];
-        };
-        setCache((prev) => ({ ...prev, [body.date]: body.slots }));
-        setLastUpdated(new Date());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setLoading(false);
+  const fetchAvailability = useCallback(async (date: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/availability?date=${encodeURIComponent(date)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `空き状況の取得に失敗 (${res.status})`);
       }
-    },
-    []
-  );
+      const body = (await res.json()) as {
+        date: string;
+        slots: SlotAvailability[];
+      };
+      setCache((prev) => ({ ...prev, [body.date]: body.slots }));
+      setLastUpdated(new Date());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // 日付を切り替えたら即フェッチ
   useEffect(() => {
     fetchAvailability(selectedDate);
   }, [selectedDate, fetchAvailability]);
 
-  // ポーリング (フォールバック)
   useEffect(() => {
-    const id = setInterval(() => {
-      fetchAvailability(selectedDate);
-    }, pollIntervalMs);
+    const id = setInterval(() => fetchAvailability(selectedDate), pollIntervalMs);
     return () => clearInterval(id);
   }, [selectedDate, fetchAvailability, pollIntervalMs]);
 
-  // Supabase Realtime: lessons の INSERT/UPDATE/DELETE を購読 → 該当日付なら refetch
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createBrowserClient>["channel"]
   > | null>(null);
   useEffect(() => {
     const supabase = createBrowserClient();
     const channel = supabase
-      .channel(`apply-availability-${student.id}`)
+      .channel(`apply-availability-${students.map((s) => s.id).join("-")}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "lessons" },
         (payload) => {
-          // payload.new / payload.old から lesson_date を抜き出して該当日のみ更新
           const dates = new Set<string>();
           for (const row of [payload.new, payload.old]) {
             const d = (row as { lesson_date?: string } | null)?.lesson_date;
@@ -195,93 +205,148 @@ export function AvailabilityPicker({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedDate, student.id, fetchAvailability]);
+  }, [selectedDate, students, fetchAvailability]);
 
   useEffect(() => {
-    if (!confirmSlot) return;
+    if (!confirmOpen) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConfirmSlot(null);
+      if (e.key === "Escape") setConfirmOpen(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirmSlot]);
+  }, [confirmOpen]);
 
   const slots = cache[selectedDate] ?? null;
 
-  function openMakeupConfirm(slot: SlotAvailability) {
-    if (submitting || confirmSlot) return;
-    if (!source) {
+  function pickSource(studentId: string, row: ScheduledLessonOption) {
+    setSources((prev) => ({
+      ...prev,
+      [studentId]: {
+        lessonDate: row.lesson_date,
+        period: row.period,
+        subject: row.subject,
+      },
+    }));
+    setDestByStudent((prev) => ({ ...prev, [studentId]: null }));
+    setSubmitError(null);
+  }
+
+  function pickDest(studentId: string, slot: SlotAvailability) {
+    if (submitting || confirmOpen) return;
+    if (!sources[studentId]) {
       setSubmitError("先に「欠席する授業」を選んでください。");
       return;
     }
+    setDestByStudent((prev) => ({ ...prev, [studentId]: slot }));
     setSubmitError(null);
-    setConfirmSlot(slot);
+    if (isMulti && allSourcesSelected) {
+      const next = { ...destByStudent, [studentId]: slot };
+      if (students.every((s) => next[s.id])) setConfirmOpen(true);
+    } else if (!isMulti) {
+      setConfirmOpen(true);
+    }
   }
 
-  async function submitMakeupFromModal() {
-    if (submitting || !source || !confirmSlot) return;
-    const slot = confirmSlot;
+  async function submitBatch() {
+    if (submitting || !allSourcesSelected || !allDestSelected) return;
     setSubmitting(true);
     setSubmitError(null);
-    const result = await bookMakeupLesson({
-      studentId: student.id,
-      lessonDate: selectedDate,
-      period: slot.period,
-      subject: slot.subject,
-      sourceLessonDate: source.lessonDate,
-      sourcePeriod: source.period,
-      sourceSubject: source.subject,
-      lessonClassroom: slot.classroom,
+
+    const bookings = students.map((s) => {
+      const source = sources[s.id]!;
+      const dest = destByStudent[s.id]!;
+      return {
+        studentId: s.id,
+        lessonDate: selectedDate,
+        period: dest.period,
+        subject: dest.subject,
+        sourceLessonDate: source.lessonDate,
+        sourcePeriod: source.period,
+        sourceSubject: source.subject,
+        lessonClassroom: dest.classroom,
+      };
     });
+
+    const result =
+      bookings.length === 1
+        ? await (async () => {
+            const b = bookings[0]!;
+            const r = await bookMakeupLesson(b);
+            return r.ok
+              ? { ok: true as const, lessonIds: [r.lessonId] }
+              : r;
+          })()
+        : await bookMakeupLessonsBatch(bookings);
+
     setSubmitting(false);
-    setConfirmSlot(null);
+    setConfirmOpen(false);
+
     if (!result.ok) {
       setSubmitError(result.error);
       fetchAvailability(selectedDate);
       return;
     }
-    setBookedDest({
-      period: slot.period,
-      subject: slot.subject,
-      classroom: slot.classroom,
-    });
-    setBookedLessonId(result.lessonId);
+
+    setBooked(
+      students.map((s, i) => ({
+        student: s,
+        lessonId: result.lessonIds[i]!,
+        source: sources[s.id]!,
+        dest: destByStudent[s.id]!,
+      }))
+    );
   }
 
-  if (bookedLessonId) {
+  if (booked) {
     return (
-      <div className="bg-white border border-emerald-200 rounded-2xl p-6 text-center space-y-3">
-        <div className="text-emerald-700 text-3xl">✓</div>
-        <h2 className="text-lg font-semibold">振替の登録が完了しました</h2>
-        <p className="text-sm text-slate-600">
-          <span className="block">
-            欠席:{" "}
-            {source
-              ? `${formatDateLong(source.lessonDate)} ${periodLabel(source.period)}${timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)} ${source.subject}`
-              : "—"}
-          </span>
-          <span className="block mt-1">
-            振替先: {formatDateLong(selectedDate)}
-            {bookedDest
-              ? ` ${periodLabel(bookedDest.period)}${timeSuffix(selectedDate, bookedDest.period, bookedDest.subject, bookedDest.classroom)} ${bookedDest.subject}（${bookedDest.classroom}）`
-              : ""}
-          </span>
-          <span className="block mt-3">
-            {student.name}
-            さんの予定は、この内容ですぐに反映されています。承認などの手続きをお待ちいただく必要はありません。当日は振替先の日時でお越しください。変更やキャンセルが必要な場合は教室へご連絡ください。
-          </span>
-        </p>
-        <p className="text-xs text-slate-400">
-          控え（お問い合わせ時に使えます）: {bookedLessonId.slice(0, 8)}
-        </p>
+      <div className="bg-white border border-emerald-200 rounded-2xl p-6 space-y-4">
+        <div className="text-center">
+          <div className="text-emerald-700 text-3xl">✓</div>
+          <h2 className="text-lg font-semibold mt-2">振替の登録が完了しました</h2>
+        </div>
+        <ul className="space-y-3 text-sm text-slate-700">
+          {booked.map((b) => (
+            <li
+              key={b.lessonId}
+              className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5"
+            >
+              <p className="font-semibold text-slate-900">{b.student.name} さん</p>
+              <p className="mt-1">
+                欠席: {formatDateLong(b.source.lessonDate)}{" "}
+                {periodLabel(b.source.period)}
+                {timeSuffix(
+                  b.source.lessonDate,
+                  b.source.period,
+                  b.source.subject,
+                  b.student.classroom
+                )}{" "}
+                {b.source.subject}
+              </p>
+              <p>
+                振替先: {formatDateLong(selectedDate)}{" "}
+                {periodLabel(b.dest.period)}
+                {timeSuffix(
+                  selectedDate,
+                  b.dest.period,
+                  b.dest.subject,
+                  b.dest.classroom
+                )}{" "}
+                {b.dest.subject}（{b.dest.classroom}）
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                控え: {b.lessonId.slice(0, 8)}
+              </p>
+            </li>
+          ))}
+        </ul>
         <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
           <button
             type="button"
             onClick={() => {
-              setBookedLessonId(null);
-              setBookedDest(null);
+              setBooked(null);
+              setSources({});
+              setDestByStudent({});
               setSubmitError(null);
-              setSource(null);
               fetchAvailability(selectedDate);
             }}
             className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2"
@@ -290,7 +355,7 @@ export function AvailabilityPicker({
           </button>
           <button
             type="button"
-            onClick={onBack}
+            onClick={onReset}
             className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2"
           >
             最初の画面に戻る
@@ -306,10 +371,12 @@ export function AvailabilityPicker({
         <div className="min-w-0">
           <p className="text-xs text-slate-500">申請する生徒</p>
           <p className="font-semibold">
-            {student.name}{" "}
-            <span className="text-xs text-slate-500 font-normal">
-              ({student.grade} / {student.classroom})
-            </span>
+            {students.map((s) => s.name).join("、")}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {isMulti
+              ? `${students.length}名分を1回で申請します`
+              : `${students[0]!.grade} / ${students[0]!.classroom}`}
           </p>
         </div>
         <button
@@ -317,317 +384,315 @@ export function AvailabilityPicker({
           onClick={onBack}
           className="text-xs text-brand-600 hover:underline shrink-0"
         >
-          別の生徒で申請
+          戻る
         </button>
       </div>
 
-      {/* 欠席する授業（振替の元） */}
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-1">
           1. 欠席する授業（振替の元）を選ぶ
         </p>
         <p className="text-xs text-slate-500 mb-3">
-          教室で登録されている「出席予定」のカードだけが表示されます。欠席にしたいコマをタップして選んでください（日付の自由入力はできません）。
+          {isMulti
+            ? "お子様ごとに、欠席にしたい出席予定を選んでください。"
+            : "教室で登録されている「出席予定」のカードだけが表示されます。"}
         </p>
-        {suggestError ? (
-          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-            {suggestError}
-          </p>
-        ) : null}
-        {suggestions === null ? (
-          <div className="h-16 rounded-xl border border-slate-200 bg-slate-50 animate-pulse mb-2" />
-        ) : suggestions.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            {suggestions.map((row) => {
-              const dow = dowOf(row.lesson_date);
-              const picked =
-                source?.lessonDate === row.lesson_date &&
-                source?.period === row.period &&
-                source?.subject === row.subject;
-              return (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => {
-                    setSource({
-                      lessonDate: row.lesson_date,
-                      period: row.period,
-                      subject: row.subject,
-                    });
-                    setSubmitError(null);
-                  }}
-                  className={`text-left rounded-2xl border bg-white p-4 shadow-sm transition ${
-                    picked
-                      ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
-                      : "border-slate-200 hover:border-brand-400 hover:shadow"
-                  }`}
-                >
-                  <div className={`text-[11px] font-semibold ${dayColor(dow)}`}>
-                    {dayLabel(dow, "long")}
-                  </div>
-                  <div className="text-base font-bold text-slate-900 mt-0.5 leading-snug">
-                    {formatDateLong(row.lesson_date)}
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-800">
-                      {periodLabel(row.period)}
-                      {timeSuffix(row.lesson_date, row.period, row.subject, student.classroom)}
-                    </span>
-                    <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 ring-1 ring-slate-200/80">
-                      {row.subject}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 leading-relaxed">
-            <p className="font-semibold mb-1">表示できる出席予定がありません</p>
-            <p>
-              振替の欠席元は、ここに表示される出席予定のカードからのみ選べます。一覧にない日程を欠席にしたい場合は、所属教室までお問い合わせください。
-            </p>
-          </div>
-        )}
 
-        {source ? (
-          <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mt-2">
-            選択中の欠席: {formatDateLong(source.lessonDate)}{" "}
-            {periodLabel(source.period)}
-            {timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)}{" "}
-            {source.subject}
-          </p>
-        ) : suggestions !== null && suggestions.length > 0 ? (
-          <p className="text-xs text-slate-500 mt-2">
-            上の出席予定カードを選ぶと、振替先の日付・コマを選べます。
-          </p>
-        ) : null}
-      </div>
-
-      <div
-        className={
-          !source ? "opacity-50 pointer-events-none select-none" : ""
-        }
-        aria-hidden={!source}
-      >
-      {/* 日付選択 */}
-      <div>
-        <p className="text-sm font-semibold text-slate-700 mb-2">
-          2. 振替先の日付を選ぶ
-        </p>
-        <p className="text-xs text-slate-500 mb-2">
-          今日〜{formatDateLong(maxDate)} まで選べます。カレンダーで直接指定するか、下の日付帯から選んでください。
-        </p>
-        <label className="block mb-3">
-          <span className="sr-only">振替先の日付</span>
-          <input
-            type="date"
-            min={today}
-            max={maxDate}
-            value={selectedDate}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (isValidDate(v)) setSelectedDate(v);
-            }}
-            className={inputClass}
-          />
-        </label>
-        <div
-          className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory"
-          role="tablist"
-        >
-          {dates.map((d) => {
-            const dow = new Date(d).getDay();
-            const isSelected = d === selectedDate;
-            const day = new Date(`${d}T00:00:00`).getDate();
+        <div className="space-y-5">
+          {students.map((s) => {
+            const suggestions = suggestionsByStudent[s.id];
+            const source = sources[s.id];
+            const suggestError = suggestErrors[s.id];
             return (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setSelectedDate(d)}
-                className={`snap-start shrink-0 w-16 rounded-xl border px-1 py-2 text-center transition ${
-                  isSelected
-                    ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <div className={`text-[10px] ${dayColor(dow)}`}>
-                  {dayLabel(dow)}
-                </div>
-                <div className="text-xl font-bold leading-tight">{day}</div>
-                <div className="text-[10px] text-slate-500">{d.slice(5, 7)}/月</div>
-              </button>
+              <div key={s.id} className="space-y-2">
+                {isMulti ? (
+                  <p className="text-sm font-medium text-slate-800">{s.name} さん</p>
+                ) : null}
+                {suggestError ? (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {suggestError}
+                  </p>
+                ) : null}
+                {suggestions === null ? (
+                  <div className="h-16 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
+                ) : suggestions.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {suggestions.map((row) => {
+                      const dow = dowOf(row.lesson_date);
+                      const picked =
+                        source?.lessonDate === row.lesson_date &&
+                        source?.period === row.period &&
+                        source?.subject === row.subject;
+                      return (
+                        <button
+                          key={row.id}
+                          type="button"
+                          onClick={() => pickSource(s.id, row)}
+                          className={`text-left rounded-2xl border bg-white p-4 shadow-sm transition ${
+                            picked
+                              ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                              : "border-slate-200 hover:border-brand-400 hover:shadow"
+                          }`}
+                        >
+                          <div className={`text-[11px] font-semibold ${dayColor(dow)}`}>
+                            {dayLabel(dow, "long")}
+                          </div>
+                          <div className="text-base font-bold text-slate-900 mt-0.5">
+                            {formatDateLong(row.lesson_date)}
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-800">
+                              {periodLabel(row.period)}
+                              {timeSuffix(
+                                row.lesson_date,
+                                row.period,
+                                row.subject,
+                                s.classroom
+                              )}
+                            </span>
+                            <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 ring-1 ring-slate-200/80">
+                              {row.subject}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                    表示できる出席予定がありません。
+                  </div>
+                )}
+                {source ? (
+                  <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    選択中: {formatDateLong(source.lessonDate)}{" "}
+                    {periodLabel(source.period)} {source.subject}
+                  </p>
+                ) : null}
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* 空き状況 */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold text-slate-700">
-            3. 空いているコマを選ぶ
+      <div
+        className={!allSourcesSelected ? "opacity-50 pointer-events-none select-none" : ""}
+        aria-hidden={!allSourcesSelected}
+      >
+        <div>
+          <p className="text-sm font-semibold text-slate-700 mb-2">
+            2. 振替先の日付を選ぶ
           </p>
-          <p className="text-[10px] text-slate-400">
-            {loading
-              ? "更新中…"
-              : lastUpdated
-                ? `${lastUpdated.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} 更新`
-                : ""}
-          </p>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">
-          各教室の空き枠が一覧されます。所属教室以外の会場で振替を受けたい場合も、ここから選べます。
-        </p>
-
-        {error ? (
-          <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
-            {error}
-          </p>
-        ) : null}
-        {submitError ? (
-          <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
-            {submitError}
-          </p>
-        ) : null}
-
-        {slots === null ? (
-          <SkeletonGrid />
-        ) : slots.length === 0 ? (
-          <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-6 text-center text-sm text-slate-500">
-            この日に空きのある振替枠はありません。別の日付をお選びください。
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {slots.map((slot) => {
-              const isFull = slot.available <= 0;
-              const isStudentSubject = studentSubjects.has(slot.subject);
-              const disabled =
-                isFull || submitting || !isStudentSubject || confirmSlot !== null;
+          <label className="block mb-3">
+            <span className="sr-only">振替先の日付</span>
+            <input
+              type="date"
+              min={today}
+              max={maxDate}
+              value={selectedDate}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (isValidDate(v)) {
+                  setSelectedDate(v);
+                  setDestByStudent({});
+                }
+              }}
+              className={inputClass}
+            />
+          </label>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+            {dates.map((d) => {
+              const dow = new Date(d).getDay();
+              const isSelected = d === selectedDate;
+              const day = new Date(`${d}T00:00:00`).getDate();
               return (
-                <li key={`${slot.classroom}-${slot.period}-${slot.subject}`}>
-                  <button
-                    type="button"
-                    onClick={() => openMakeupConfirm(slot)}
-                    disabled={disabled}
-                    className={`w-full text-left rounded-xl border p-4 flex items-center justify-between gap-3 transition ${
-                      disabled
-                        ? "border-slate-200 bg-slate-50 cursor-not-allowed opacity-60"
-                        : "border-brand-200 bg-white hover:border-brand-500 hover:bg-brand-50"
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-semibold">
-                          {slot.period}コマ目
-                          {timeSuffix(
-                            selectedDate,
-                            slot.period,
-                            slot.subject,
-                            slot.classroom
-                          )}
-                        </span>
-                        <ClassroomBadge classroom={slot.classroom} />
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                          {slot.subject}
-                        </span>
-                        {!isStudentSubject ? (
-                          <span className="text-[10px] text-slate-500">
-                            (受講していない教科)
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">
-                        振替申込 {slot.occupied} / {slot.max_students} 名
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 text-sm font-bold rounded-lg px-3 py-1.5 ${
-                        isFull
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-emerald-100 text-emerald-700"
-                      }`}
-                    >
-                      {isFull ? "満員" : `空き${slot.available}`}
-                    </span>
-                  </button>
-                </li>
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate(d);
+                    setDestByStudent({});
+                  }}
+                  className={`snap-start shrink-0 w-16 rounded-xl border px-1 py-2 text-center ${
+                    isSelected
+                      ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className={`text-[10px] ${dayColor(dow)}`}>{dayLabel(dow)}</div>
+                  <div className="text-xl font-bold">{day}</div>
+                </button>
               );
             })}
-          </ul>
-        )}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-slate-700">
+              3. 空いているコマを選ぶ
+            </p>
+            <p className="text-[10px] text-slate-400">
+              {loading ? "更新中…" : lastUpdated ? `${lastUpdated.toLocaleTimeString("ja-JP")} 更新` : ""}
+            </p>
+          </div>
+
+          {error ? (
+            <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
+              {error}
+            </p>
+          ) : null}
+          {submitError ? (
+            <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
+              {submitError}
+            </p>
+          ) : null}
+
+          {slots === null ? (
+            <SkeletonGrid />
+          ) : (
+            <div className="space-y-6">
+              {students.map((s) => {
+                const studentSubjects = subjectsByStudent[s.id] ?? new Set();
+                const pickedDest = destByStudent[s.id];
+                return (
+                  <div key={`dest-${s.id}`} className="space-y-2">
+                    {isMulti ? (
+                      <p className="text-sm font-medium text-slate-800">
+                        {s.name} さんの振替先
+                        {pickedDest
+                          ? ` — ${pickedDest.period}コマ目 ${pickedDest.subject}`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {slots.length === 0 ? (
+                      <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-4 text-center text-sm text-slate-500">
+                        この日に空きのある振替枠はありません。
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {slots.map((slot) => {
+                          const isFull = slot.available <= 0;
+                          const isStudentSubject = studentSubjects.has(slot.subject);
+                          const isPicked =
+                            pickedDest?.classroom === slot.classroom &&
+                            pickedDest?.period === slot.period &&
+                            pickedDest?.subject === slot.subject;
+                          const disabled =
+                            isFull || submitting || !isStudentSubject || confirmOpen;
+                          return (
+                            <li key={`${s.id}-${slot.classroom}-${slot.period}-${slot.subject}`}>
+                              <button
+                                type="button"
+                                onClick={() => pickDest(s.id, slot)}
+                                disabled={disabled}
+                                className={`w-full text-left rounded-xl border p-4 flex items-center justify-between gap-3 transition ${
+                                  isPicked
+                                    ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                                    : disabled
+                                      ? "border-slate-200 bg-slate-50 cursor-not-allowed opacity-60"
+                                      : "border-brand-200 bg-white hover:border-brand-500 hover:bg-brand-50"
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-base font-semibold">
+                                      {slot.period}コマ目
+                                      {timeSuffix(
+                                        selectedDate,
+                                        slot.period,
+                                        slot.subject,
+                                        slot.classroom
+                                      )}
+                                    </span>
+                                    <ClassroomBadge classroom={slot.classroom} />
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                      {slot.subject}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`shrink-0 text-sm font-bold rounded-lg px-3 py-1.5 ${
+                                    isFull
+                                      ? "bg-rose-100 text-rose-700"
+                                      : "bg-emerald-100 text-emerald-700"
+                                  }`}
+                                >
+                                  {isFull ? "満員" : `空き${slot.available}`}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {isMulti && allSourcesSelected && allDestSelected ? (
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(true)}
+              className="mt-4 w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5"
+            >
+              内容を確認して登録する
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      </div>
-
-      <p className="text-[11px] text-slate-400 text-center">
-        空き状況は他の方の申請に応じて自動的に更新されます。
-      </p>
-
-      {confirmSlot && source ? (
+      {confirmOpen && allSourcesSelected && allDestSelected ? (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/40"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="makeup-confirm-title"
-          onClick={() => !submitting && setConfirmSlot(null)}
+          onClick={() => !submitting && setConfirmOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6 space-y-4"
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2
-              id="makeup-confirm-title"
-              className="text-lg font-semibold text-slate-900 leading-snug"
-            >
-              この日程で振替を登録しても良いですか？
+            <h2 className="text-lg font-semibold text-slate-900">
+              この内容で振替を登録しても良いですか？
             </h2>
-            <div className="text-sm text-slate-700 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-1">
-                  欠席する授業
-                </p>
-                <p>
-                  {formatDateLong(source.lessonDate)}{" "}
-                  {periodLabel(source.period)}
-                  {timeSuffix(source.lessonDate, source.period, source.subject, student.classroom)}{" "}
-                  {source.subject}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-1">振替先</p>
-                <p>
-                  {formatDateLong(selectedDate)}{" "}
-                  {periodLabel(confirmSlot.period)}
-                  {timeSuffix(
-                    selectedDate,
-                    confirmSlot.period,
-                    confirmSlot.subject,
-                    confirmSlot.classroom
-                  )}{" "}
-                  {confirmSlot.subject}
-                </p>
-                <p className="text-xs text-slate-600 mt-1">
-                  実施会場: {confirmSlot.classroom}
-                </p>
-              </div>
-              <p className="text-xs text-slate-500 pt-1 border-t border-slate-200">
-                {student.name} さんの予定として登録されます。
-              </p>
-            </div>
+            <ul className="text-sm text-slate-700 space-y-3">
+              {students.map((s) => {
+                const source = sources[s.id]!;
+                const dest = destByStudent[s.id]!;
+                return (
+                  <li
+                    key={s.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2"
+                  >
+                    <p className="font-semibold">{s.name} さん</p>
+                    <p className="text-xs">
+                      欠席: {formatDateLong(source.lessonDate)}{" "}
+                      {periodLabel(source.period)} {source.subject}
+                    </p>
+                    <p className="text-xs">
+                      振替先: {formatDateLong(selectedDate)}{" "}
+                      {periodLabel(dest.period)} {dest.subject}（{dest.classroom}）
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
             <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => setConfirmSlot(null)}
-                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2.5 disabled:opacity-50"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2.5"
               >
                 キャンセル
               </button>
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => void submitMakeupFromModal()}
+                onClick={() => void submitBatch()}
                 className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 disabled:opacity-60"
               >
                 {submitting ? "登録中…" : "登録する"}
@@ -653,7 +718,6 @@ function SkeletonGrid() {
   );
 }
 
-/** 教科を CourseSubject 型にナローイング (使い回し用) */
 export function asCourseSubject(s: string): CourseSubject | null {
   return s === "プログラミング" || s === "ロボット" ? s : null;
 }

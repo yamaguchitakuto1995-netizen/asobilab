@@ -720,6 +720,12 @@ create index if not exists lesson_capacities_lookup_idx
 alter table public.students add column if not exists enrollment_robot_capacity_id uuid;
 alter table public.students add column if not exists enrollment_prog_capacity_id uuid;
 
+alter table public.students add column if not exists sibling_group_id uuid;
+
+create index if not exists students_sibling_group_id_idx
+  on public.students (sibling_group_id)
+  where sibling_group_id is not null;
+
 do $$ begin
   alter table public.students
     add constraint students_enrollment_robot_capacity_id_fkey

@@ -24,6 +24,10 @@ import {
   isRobotNextText,
 } from "@/lib/courseNextText";
 import {
+  applySiblingGroup,
+  readSiblingFormInput,
+} from "@/lib/siblings";
+import {
   parseRegularSlotCells,
   regularSlotLabel,
   resolveEnrollmentCapacityId,
@@ -332,6 +336,21 @@ export async function createStudent(formData: FormData) {
     redirect(`/students/new?error=${encodeURIComponent(error.message)}`);
   }
 
+  const siblingInput = readSiblingFormInput(formData);
+  const siblingResult = await applySiblingGroup(
+    supabase,
+    data!.id,
+    siblingInput.hasSiblings,
+    siblingInput.siblingIds
+  );
+  if (siblingResult.error) {
+    redirect(
+      `/students/${data!.id}?error=${encodeURIComponent(
+        `生徒は登録できましたが、兄弟姉妹の設定に失敗しました: ${siblingResult.error}`
+      )}`
+    );
+  }
+
   const sync = await syncEnrollmentLessons(supabase, {
     studentId: data!.id,
     teacherId: user.id,
@@ -465,6 +484,17 @@ export async function updateStudent(formData: FormData) {
 
   if (error) {
     redirect(`${editPath}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  const siblingInput = readSiblingFormInput(formData);
+  const siblingResult = await applySiblingGroup(
+    supabase,
+    id,
+    siblingInput.hasSiblings,
+    siblingInput.siblingIds
+  );
+  if (siblingResult.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(siblingResult.error)}`);
   }
 
   const sync = await syncEnrollmentLessons(supabase, {
