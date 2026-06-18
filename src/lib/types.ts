@@ -167,6 +167,7 @@ export function formatWeekOrdinals(ords: number[] | null | undefined): string {
 export type Student = {
   id: string;
   name: string;
+  name_kana?: string | null;
   grade: GradeLevel;
   classroom: string | null;
   subjects: string[];

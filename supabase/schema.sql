@@ -722,6 +722,8 @@ alter table public.students add column if not exists enrollment_prog_capacity_id
 
 alter table public.students add column if not exists sibling_group_id uuid;
 
+alter table public.students add column if not exists name_kana text;
+
 create index if not exists students_sibling_group_id_idx
   on public.students (sibling_group_id)
   where sibling_group_id is not null;

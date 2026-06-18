@@ -35,7 +35,10 @@ export function StudentSiblingField({
   }, [candidates, query]);
 
   return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 sm:p-4 space-y-3">
+    <div
+      id="student-siblings"
+      className="rounded-xl border-2 border-violet-300 bg-violet-50 p-3 sm:p-4 space-y-3 scroll-mt-4"
+    >
       <div>
         <p className="text-sm font-semibold text-violet-950">兄弟・姉妹</p>
         <p className="text-xs text-violet-900/80 mt-0.5 leading-relaxed">

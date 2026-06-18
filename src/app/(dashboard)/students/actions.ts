@@ -221,6 +221,7 @@ function readNextTextProgramming(
 
 export async function createStudent(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
+  const nameKana = String(formData.get("name_kana") ?? "").trim();
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
@@ -315,6 +316,7 @@ export async function createStudent(formData: FormData) {
     .from("students")
     .insert({
       name,
+      name_kana: nameKana || null,
       grade: gradeRaw,
       classroom: classroomResult.value,
       subjects,
@@ -375,6 +377,7 @@ export async function createStudent(formData: FormData) {
 export async function updateStudent(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
+  const nameKana = String(formData.get("name_kana") ?? "").trim();
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
@@ -467,6 +470,7 @@ export async function updateStudent(formData: FormData) {
     .from("students")
     .update({
       name,
+      name_kana: nameKana || null,
       grade: gradeRaw,
       classroom: classroomResult.value,
       subjects,

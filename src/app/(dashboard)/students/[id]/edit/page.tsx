@@ -96,16 +96,23 @@ export default async function EditStudentPage({
 
         <p className="text-xs text-slate-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 leading-relaxed">
           <span className="font-semibold text-amber-950">プルダウンが見えないとき</span>
-          ：誤解が多いので場所を固定しました。名前・学年の<strong>すぐ下</strong>（
+          ：名前・学年の下に
+          <a
+            href="#student-siblings"
+            className="text-violet-800 font-semibold underline underline-offset-2 mx-0.5"
+          >
+            兄弟・姉妹（紫の枠）
+          </a>
+          、その下に
           <a
             href="#student-next-text-curriculum"
             className="text-emerald-800 font-semibold underline underline-offset-2"
           >
-            次回テキストの緑の枠へジャンプ
+            次回テキスト（緑の枠）
           </a>
-          ）に、ロボット／プログラミング別の<strong>コース→テキスト名</strong>のプルダウンがあります。表示されない場合は
+          があります。表示されない場合は
           <strong>⌘+Shift+R</strong>
-          で再読み込みするか、動いている環境がこのコードの最新版か確認してください。
+          で再読み込みするか、Vercel の本番 URL（最新デプロイ）を開いてください。
         </p>
 
         <Field label="名前" htmlFor="name" required>
@@ -117,6 +124,18 @@ export default async function EditStudentPage({
             maxLength={80}
             defaultValue={student.name}
             className={inputClass}
+          />
+        </Field>
+
+        <Field label="ふりがな" htmlFor="name_kana" hint="コマ表などに表示します（任意）">
+          <input
+            id="name_kana"
+            name="name_kana"
+            type="text"
+            maxLength={80}
+            defaultValue={student.name_kana ?? ""}
+            className={inputClass}
+            placeholder="例: やまだ たろう"
           />
         </Field>
 
@@ -135,6 +154,14 @@ export default async function EditStudentPage({
             ))}
           </select>
         </Field>
+
+        <StudentSiblingField
+          candidates={siblingCandidates}
+          defaultHasSiblings={
+            Boolean(student.sibling_group_id) || currentSiblings.length > 0
+          }
+          defaultSiblingIds={currentSiblings.map((s) => s.id)}
+        />
 
         <StudentNextTextFormSection
           defaultNextTextRobot={student.next_text_robot}
@@ -160,14 +187,6 @@ export default async function EditStudentPage({
           defaultEnrollmentProgCapacityId={
             student.enrollment_prog_capacity_id ?? null
           }
-        />
-
-        <StudentSiblingField
-          candidates={siblingCandidates}
-          defaultHasSiblings={
-            Boolean(student.sibling_group_id) || currentSiblings.length > 0
-          }
-          defaultSiblingIds={currentSiblings.map((s) => s.id)}
         />
 
         <Field label="メモ" htmlFor="note" hint="連絡先や担当科目など、任意のメモ">

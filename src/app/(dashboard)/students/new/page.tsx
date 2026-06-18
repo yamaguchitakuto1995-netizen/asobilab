@@ -49,6 +49,17 @@ export default async function NewStudentPage({
           />
         </Field>
 
+        <Field label="ふりがな" htmlFor="name_kana" hint="コマ表などに表示します（任意）">
+          <input
+            id="name_kana"
+            name="name_kana"
+            type="text"
+            maxLength={80}
+            className={inputClass}
+            placeholder="例: やまだ たろう"
+          />
+        </Field>
+
         <Field label="学年" htmlFor="grade" required>
           <select id="grade" name="grade" required className={inputClass} defaultValue="">
             <option value="" disabled>
@@ -62,17 +73,19 @@ export default async function NewStudentPage({
           </select>
         </Field>
 
+        <StudentSiblingField candidates={siblingCandidates} />
+
         <p className="text-xs text-slate-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 leading-relaxed">
-          <span className="font-semibold text-amber-950">プルダウン</span>
-          は学年の下・
-          <a
-            href="#student-next-text-curriculum"
-            className="text-emerald-800 font-semibold underline underline-offset-2"
-          >
-            緑の「次回テキスト」枠
+          <span className="font-semibold text-amber-950">入力欄の場所</span>
+          ：学年の下に
+          <a href="#student-siblings" className="text-violet-800 font-semibold underline underline-offset-2 mx-0.5">
+            兄弟・姉妹（紫）
           </a>
-          にあります（所属教室より<strong>上</strong>）。見えないときは
-          <strong>⌘+Shift+R</strong>。
+          、その下に
+          <a href="#student-next-text-curriculum" className="text-emerald-800 font-semibold underline underline-offset-2">
+            次回テキスト（緑）
+          </a>
+          、さらに下に所属教室があります。
         </p>
 
         <StudentNextTextFormSection />
@@ -81,8 +94,6 @@ export default async function NewStudentPage({
           classrooms={classrooms}
           capacityRows={capRows ?? []}
         />
-
-        <StudentSiblingField candidates={siblingCandidates} />
 
         <Field
           label="メモ"

@@ -19,6 +19,7 @@ import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
+import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
 import { createClient } from "@/lib/supabase/server";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
@@ -68,7 +69,7 @@ export default async function DashboardHomePage({
     supabase
       .from("lessons")
       .select(
-        "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
+        "*, students ( id, name, name_kana, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
       )
       .eq("lesson_date", selectedDate)
       .order("period", { ascending: true, nullsFirst: false })
@@ -104,6 +105,18 @@ export default async function DashboardHomePage({
     dayLessons?.filter((l) => l.status === "recorded" && l.attendance === "absent").length ?? 0;
   const dayScheduled =
     dayLessons?.filter((l) => l.status === "scheduled").length ?? 0;
+
+  const previousMemos = await fetchPreviousLessonMemos(
+    supabase,
+    (dayLessons ?? []).map((l) => ({
+      id: l.id,
+      student_id: l.student_id,
+      subject: l.subject,
+      lesson_date: l.lesson_date,
+      period: l.period,
+    })),
+    selectedDate
+  );
 
   return (
     <div className="space-y-8">
@@ -158,6 +171,7 @@ export default async function DashboardHomePage({
           date={selectedDate}
           lessons={(dayLessons ?? []) as DailyLessonItem[]}
           classroomPeriodTimes={periodTimes}
+          previousMemos={previousMemos}
         />
       </section>
 
