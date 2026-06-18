@@ -28,6 +28,27 @@ export function lessonAttendanceDisplayLabel(
   return ATTENDANCE_LABEL[lesson.attendance];
 }
 
+/**
+ * もともと出席予定だった授業が欠席になっている（コマ表で強調表示）。
+ * - レギュラー自動作成の欠席・欠席予定
+ * - 記録済みの欠席（当日確認後）
+ */
+export function isDailyExpectedPresentAbsent(
+  lesson: Pick<Lesson, "status" | "attendance" | "created_from_enrollment">
+): boolean {
+  if (lesson.attendance !== "absent") return false;
+  if (lesson.created_from_enrollment) return true;
+  return lesson.status === "recorded";
+}
+
+/** コマ表の出欠ラベル（強調対象は「欠席」に統一） */
+export function dailyAttendanceStatusLabel(
+  lesson: Pick<Lesson, "status" | "attendance" | "created_from_enrollment">
+): string {
+  if (isDailyExpectedPresentAbsent(lesson)) return "欠席";
+  return lessonAttendanceDisplayLabel(lesson);
+}
+
 /** 本日のテキスト（記録済みは textbook、予定は次回テキストから推定） */
 export function lessonTodayTextLabel(
   lesson: Pick<Lesson, "textbook" | "subject" | "status">,

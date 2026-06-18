@@ -5,7 +5,8 @@ import { AttendanceConfirmDialog } from "@/components/AttendanceConfirmDialog";
 import { SubjectChip } from "@/components/SubjectChip";
 import { formatTimeRange, resolveClassroomPeriodTime } from "@/lib/periodTimes";
 import {
-  lessonAttendanceDisplayLabel,
+  dailyAttendanceStatusLabel,
+  isDailyExpectedPresentAbsent,
   lessonTodayTextLabel,
 } from "@/lib/todayLessonDisplay";
 import {
@@ -33,7 +34,8 @@ export function DailyLessonStudentRow({
   const st = lesson.students;
   const regularClassroom = st?.classroom ?? null;
   const todayText = lessonTodayTextLabel(lesson, st);
-  const attendanceLabel = lessonAttendanceDisplayLabel(lesson);
+  const attendanceLabel = dailyAttendanceStatusLabel(lesson);
+  const emphasizeAbsent = isDailyExpectedPresentAbsent(lesson);
 
   const slotRow =
     period && classroomPeriodTimes.length
@@ -71,9 +73,17 @@ export function DailyLessonStudentRow({
                   <SubjectChip subject={lesson.subject} />
                 </dd>
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 items-center">
                 <dt className="text-slate-400 shrink-0">出欠</dt>
-                <dd className="font-medium text-slate-800">{attendanceLabel}</dd>
+                <dd
+                  className={
+                    emphasizeAbsent
+                      ? "text-xs font-bold text-rose-600"
+                      : "font-medium text-slate-800"
+                  }
+                >
+                  {attendanceLabel}
+                </dd>
               </div>
               <div className="flex gap-1">
                 <dt className="text-slate-400 shrink-0">本日のテキスト</dt>
