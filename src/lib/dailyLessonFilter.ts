@@ -84,3 +84,59 @@ export function toggleSetValue<T extends string>(
   else next.add(value);
   return next;
 }
+
+export type DailyLessonSegment = {
+  classroom: string | null;
+  subject: string | null;
+  lessons: DailyLessonItem[];
+};
+
+function segmentKey(classroom: string | null, subject: string | null): string {
+  return `${classroom ?? "\0"}\x01${subject ?? "\0"}`;
+}
+
+/** 教室×教科ごとに分割（同日に複数会場・教科があるとき縦に並べる） */
+export function groupLessonsByClassroomSubject(
+  lessons: DailyLessonItem[],
+  classroomOrder: ReadonlyMap<string, number>
+): DailyLessonSegment[] {
+  const map = new Map<string, DailyLessonSegment>();
+  for (const l of lessons) {
+    const classroom = lessonClassroomForFilter(l);
+    const subject = l.subject ?? null;
+    const key = segmentKey(classroom, subject);
+    const seg = map.get(key);
+    if (seg) seg.lessons.push(l);
+    else map.set(key, { classroom, subject, lessons: [l] });
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const orderA = a.classroom ? (classroomOrder.get(a.classroom) ?? 9999) : 9999;
+    const orderB = b.classroom ? (classroomOrder.get(b.classroom) ?? 9999) : 9999;
+    if (orderA !== orderB) return orderA - orderB;
+
+    const ca = a.classroom ?? "";
+    const cb = b.classroom ?? "";
+    if (ca !== cb) return ca.localeCompare(cb, "ja");
+
+    return subjectSortIndex(a.subject) - subjectSortIndex(b.subject);
+  });
+}
+
+/** コマ（period）ごとにまとめる */
+export function groupLessonsByPeriod(
+  lessons: DailyLessonItem[]
+): [number | null, DailyLessonItem[]][] {
+  const map = new Map<number | null, DailyLessonItem[]>();
+  for (const l of lessons) {
+    const key = l.period ?? null;
+    const arr = map.get(key) ?? [];
+    arr.push(l);
+    map.set(key, arr);
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => {
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a - b;
+  });
+}

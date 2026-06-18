@@ -71,6 +71,7 @@ export function DailyLessonBoard({
         lessons={[]}
         classroomPeriodTimes={classroomPeriodTimes}
         previousMemos={previousMemos}
+        classroomOrderNames={classroomOrderNames}
       />
     );
   }
@@ -105,6 +106,7 @@ export function DailyLessonBoard({
           lessons={filteredLessons}
           classroomPeriodTimes={classroomPeriodTimes}
           previousMemos={previousMemos}
+          classroomOrderNames={classroomOrderNames}
         />
       )}
     </div>

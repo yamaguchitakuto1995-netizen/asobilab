@@ -3,12 +3,17 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import { formatDateLong } from "@/lib/date";
+import {
+  groupLessonsByClassroomSubject,
+  groupLessonsByPeriod,
+} from "@/lib/dailyLessonFilter";
 import { aggregateLessonTextbookCounts } from "@/lib/lessonTextbookInventory";
 import {
-  effectiveLessonClassroom,
   periodLabel,
   type ClassroomPeriodTime,
 } from "@/lib/types";
+import { ClassroomBadge } from "@/components/ClassroomBadge";
+import { SubjectChip } from "@/components/SubjectChip";
 import { DailyLessonStudentRow } from "@/components/DailyLessonStudentRow";
 import type { Lesson } from "@/lib/types";
 
@@ -33,16 +38,19 @@ type Props = {
   lessons: DailyLessonItem[];
   classroomPeriodTimes?: ClassroomPeriodTime[];
   previousMemos?: Record<string, string | null>;
+  /** 教室行の並び順（DB sort_order） */
+  classroomOrderNames?: string[];
 };
 
 /**
- * 1コマ = 1カードの横スクロールカルーセル。
+ * 教室×教科ごとに縦に並べ、各ブロック内で 1コマ = 1カードの横スクロール。
  */
 export function DailyLessonCarousel({
   date,
   lessons,
   classroomPeriodTimes = [],
   previousMemos = {},
+  classroomOrderNames = [],
 }: Props) {
   if (lessons.length === 0) {
     return (
@@ -52,55 +60,73 @@ export function DailyLessonCarousel({
     );
   }
 
-  const map = new Map<number | null, DailyLessonItem[]>();
-  for (const l of lessons) {
-    const key = l.period ?? null;
-    const arr = map.get(key) ?? [];
-    arr.push(l);
-    map.set(key, arr);
-  }
-  const groups = Array.from(map.entries()).sort(([a], [b]) => {
-    if (a === null) return 1;
-    if (b === null) return -1;
-    return a - b;
-  });
+  const classroomOrder = new Map<string, number>();
+  classroomOrderNames.forEach((name, i) => classroomOrder.set(name, i));
 
-  const totalSlots = groups.length;
+  const segments = groupLessonsByClassroomSubject(lessons, classroomOrder);
   const dayTextbookCounts = aggregateLessonTextbookCounts(lessons);
+  const multiSegment = segments.length > 1;
 
   return (
-    <div className="-mx-4 sm:mx-0">
-      <p className="text-xs text-slate-500 mb-2 px-4 sm:px-0">
-        ← 横にスワイプして {totalSlots} 件のコマを切り替え
-      </p>
-
+    <div className="-mx-4 sm:mx-0 space-y-6">
       <PeriodMaterialSummary
         title={`${formatDateLong(date)}：この日の教材（全コマ合計）`}
         items={dayTextbookCounts}
-        className="mb-3 mx-4 sm:mx-0"
+        className="mx-4 sm:mx-0"
       />
 
-      <div
-        className="
-          flex gap-3 overflow-x-auto pb-4 px-4 sm:px-0
-          snap-x snap-mandatory scroll-pl-4 sm:scroll-pl-0
-          [-webkit-overflow-scrolling:touch]
-          [scrollbar-width:thin]
-        "
-        role="list"
-        aria-label="本日のコマ表"
-      >
-        {groups.map(([period, items]) => (
-          <PeriodCard
-            key={period ?? "none"}
-            date={date}
-            period={period}
-            lessons={items}
-            classroomPeriodTimes={classroomPeriodTimes}
-            previousMemos={previousMemos}
-          />
-        ))}
-      </div>
+      {segments.map((segment) => {
+        const periodGroups = groupLessonsByPeriod(segment.lessons);
+        const segmentLabel = [
+          segment.classroom ?? "教室未設定",
+          segment.subject ?? "科目未設定",
+        ].join(" · ");
+
+        return (
+          <section
+            key={`${segment.classroom ?? ""}:${segment.subject ?? ""}`}
+            aria-label={`${segmentLabel} のコマ表`}
+          >
+            {multiSegment ? (
+              <div className="flex flex-wrap items-center gap-2 mb-2 px-4 sm:px-0">
+                <ClassroomBadge classroom={segment.classroom} size="md" />
+                <SubjectChip subject={segment.subject} size="md" />
+                <span className="text-xs text-slate-500">
+                  {segment.lessons.length}名 · {periodGroups.length}コマ
+                </span>
+              </div>
+            ) : null}
+
+            <p className="text-xs text-slate-500 mb-2 px-4 sm:px-0">
+              ← 横にスワイプして {periodGroups.length} 件のコマを切り替え
+              {multiSegment ? `（${segment.classroom ?? "教室未設定"}）` : ""}
+            </p>
+
+            <div
+              className="
+                flex gap-3 overflow-x-auto pb-4 px-4 sm:px-0
+                snap-x snap-mandatory scroll-pl-4 sm:scroll-pl-0
+                [-webkit-overflow-scrolling:touch]
+                [scrollbar-width:thin]
+              "
+              role="list"
+            >
+              {periodGroups.map(([period, items]) => (
+                <PeriodCard
+                  key={period ?? "none"}
+                  date={date}
+                  period={period}
+                  lessons={items}
+                  classroom={segment.classroom}
+                  subject={segment.subject}
+                  classroomPeriodTimes={classroomPeriodTimes}
+                  previousMemos={previousMemos}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -109,12 +135,16 @@ function PeriodCard({
   date,
   period,
   lessons,
+  classroom,
+  subject,
   classroomPeriodTimes,
   previousMemos,
 }: {
   date: string;
   period: number | null;
   lessons: DailyLessonItem[];
+  classroom: string | null;
+  subject: string | null;
   classroomPeriodTimes: ClassroomPeriodTime[];
   previousMemos: Record<string, string | null>;
 }) {
@@ -123,17 +153,13 @@ function PeriodCard({
   const periodMaterials = aggregateLessonTextbookCounts(lessons);
 
   const timeHint =
-    period && lessons[0] && classroomPeriodTimes.length
+    period && classroomPeriodTimes.length
       ? (() => {
-          const l = lessons[0]!;
           const row = resolveClassroomPeriodTime(classroomPeriodTimes, {
-            classroom: effectiveLessonClassroom(
-              l,
-              l.students?.classroom ?? null
-            ),
+            classroom,
             lessonDate: date,
             period,
-            subject: l.subject,
+            subject,
           });
           return row ? formatTimeRange(row.start_time, row.end_time) : null;
         })()
