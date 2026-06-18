@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { AttendanceBadge } from "@/components/AttendanceBadge";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
-import {
-  DailyLessonCarousel,
-  type DailyLessonItem,
-} from "@/components/DailyLessonCarousel";
+import { DailyLessonBoard } from "@/components/DailyLessonBoard";
+import type { DailyLessonItem } from "@/components/DailyLessonCarousel";
+import { classroomNames, fetchClassrooms } from "@/lib/classrooms";
 import { DailyDateNav } from "@/components/DailyDateNav";
 import { PageHeader } from "@/components/PageHeader";
 import { SubjectChip } from "@/components/SubjectChip";
@@ -64,6 +63,7 @@ export default async function DashboardHomePage({
     { data: recent },
     { data: upcoming },
     periodTimes,
+    classrooms,
   ] = await Promise.all([
     supabase.from("students").select("*", { count: "exact", head: true }),
     supabase
@@ -97,6 +97,7 @@ export default async function DashboardHomePage({
       .limit(5)
       .returns<LessonWithStudent[]>(),
     fetchClassroomPeriodTimes(supabase),
+    fetchClassrooms(supabase),
   ]);
 
   const dayPresent =
@@ -167,11 +168,12 @@ export default async function DashboardHomePage({
           </h2>
           <DailyDateNav date={selectedDate} />
         </div>
-        <DailyLessonCarousel
+        <DailyLessonBoard
           date={selectedDate}
           lessons={(dayLessons ?? []) as DailyLessonItem[]}
           classroomPeriodTimes={periodTimes}
           previousMemos={previousMemos}
+          classroomOrderNames={classroomNames(classrooms)}
         />
       </section>
 
