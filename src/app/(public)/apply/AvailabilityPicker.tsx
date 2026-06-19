@@ -112,6 +112,9 @@ export function AvailabilityPicker({
   useEffect(() => {
     let cancelled = false;
     setSuggestErrors({});
+    setSuggestionsByStudent(
+      Object.fromEntries(students.map((s) => [s.id, null]))
+    );
     (async () => {
       try {
         const nextSuggestions: Record<string, ScheduledLessonOption[] | null> =
@@ -446,7 +449,7 @@ export function AvailabilityPicker({
 
         <div className="space-y-5">
           {students.map((s) => {
-            const suggestions = suggestionsByStudent[s.id];
+            const suggestions = suggestionsByStudent[s.id] ?? null;
             const source = sources[s.id];
             const suggestError = suggestErrors[s.id];
             return (

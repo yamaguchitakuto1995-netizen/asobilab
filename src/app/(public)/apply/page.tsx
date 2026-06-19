@@ -3,6 +3,15 @@ import { fetchClassrooms } from "@/lib/classrooms";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { MakeupApplyFlow } from "./MakeupApplyFlow";
 
+function safeDecode(value: string | undefined): string {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export const metadata = {
   title: "振替申請 | ASOBI Lab.",
   description: "保護者向け 振替申請フォーム",
@@ -33,9 +42,9 @@ export default async function ApplyPage({
       <MakeupApplyFlow
         periodTimes={periodTimes}
         classrooms={classrooms}
-        initialName={sp.name ? decodeURIComponent(sp.name) : ""}
-        initialClassroom={sp.classroom ? decodeURIComponent(sp.classroom) : ""}
-        initialGrade={sp.grade ? decodeURIComponent(sp.grade) : ""}
+        initialName={safeDecode(sp.name)}
+        initialClassroom={safeDecode(sp.classroom)}
+        initialGrade={safeDecode(sp.grade)}
       />
     </div>
   );
