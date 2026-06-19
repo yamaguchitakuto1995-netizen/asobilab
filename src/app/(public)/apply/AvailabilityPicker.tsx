@@ -453,6 +453,18 @@ export function AvailabilityPicker({
             const suggestions = suggestionsByStudent[s.id] ?? null;
             const source = sources[s.id];
             const suggestError = suggestErrors[s.id];
+            const selectedSourceRow = source
+              ? suggestions?.find(
+                  (r) =>
+                    r.lesson_date === source.lessonDate &&
+                    r.period === source.period &&
+                    r.subject === source.subject
+                )
+              : undefined;
+            const selectedSourceVenue =
+              selectedSourceRow?.lesson_classroom?.trim() || s.classroom;
+            const selectedIsMakeupSource =
+              selectedSourceRow?.attendance === "makeup";
             return (
               <div key={s.id} className="space-y-2">
                 {isMulti ? (
@@ -471,10 +483,10 @@ export function AvailabilityPicker({
                       const dow = dowOf(row.lesson_date);
                       const venue =
                         row.lesson_classroom?.trim() || s.classroom;
-                      const attendanceLabel =
-                        row.attendance === "makeup"
-                          ? SCHEDULED_ATTENDANCE_LABEL.makeup
-                          : SCHEDULED_ATTENDANCE_LABEL.present;
+                      const isMakeupSource = row.attendance === "makeup";
+                      const attendanceLabel = isMakeupSource
+                        ? SCHEDULED_ATTENDANCE_LABEL.makeup
+                        : SCHEDULED_ATTENDANCE_LABEL.present;
                       const picked =
                         source?.lessonDate === row.lesson_date &&
                         source?.period === row.period &&
@@ -494,7 +506,22 @@ export function AvailabilityPicker({
                             {dayLabel(dow, "long")}
                           </div>
                           <div className="text-base font-bold text-slate-900 mt-0.5">
-                            {formatDateLong(row.lesson_date)}
+                            {isMakeupSource ? (
+                              <>
+                                <span className="text-xs font-semibold text-violet-700 mr-1.5">
+                                  振替日
+                                </span>
+                                {formatDateLong(row.lesson_date)}
+                              </>
+                            ) : (
+                              formatDateLong(row.lesson_date)
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-600">
+                            <span className="font-medium text-slate-500 shrink-0">
+                              実施教室
+                            </span>
+                            <ClassroomBadge classroom={venue} size="md" />
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <span className="text-sm font-semibold text-slate-800">
@@ -506,7 +533,6 @@ export function AvailabilityPicker({
                                 venue
                               )}
                             </span>
-                            <ClassroomBadge classroom={venue} />
                             <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 ring-1 ring-slate-200/80">
                               {row.subject}
                             </span>
@@ -525,8 +551,19 @@ export function AvailabilityPicker({
                 )}
                 {source ? (
                   <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                    選択中: {formatDateLong(source.lessonDate)}{" "}
+                    選択中:{" "}
+                    {selectedIsMakeupSource ? (
+                      <span className="font-semibold text-violet-800">振替日 </span>
+                    ) : null}
+                    {formatDateLong(source.lessonDate)}{" "}
                     {periodLabel(source.period)} {source.subject}
+                    {selectedSourceVenue ? (
+                      <>
+                        {" "}
+                        · 実施教室{" "}
+                        <span className="font-semibold">{selectedSourceVenue}</span>
+                      </>
+                    ) : null}
                   </p>
                 ) : null}
               </div>

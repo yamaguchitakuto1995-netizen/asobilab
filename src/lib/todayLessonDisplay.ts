@@ -29,6 +29,15 @@ export function lessonAttendanceDisplayLabel(
 }
 
 /**
+ * コマ表で欠席・欠席予定として薄灰色カードにする。
+ */
+export function isDailyAbsentLesson(
+  lesson: Pick<Lesson, "attendance">
+): boolean {
+  return lesson.attendance === "absent";
+}
+
+/**
  * もともと出席予定だった授業が欠席になっている（コマ表で強調表示）。
  * - レギュラー自動作成の欠席・欠席予定
  * - 記録済みの欠席（当日確認後）
