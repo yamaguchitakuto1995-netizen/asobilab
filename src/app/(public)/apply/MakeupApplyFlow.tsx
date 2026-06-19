@@ -45,14 +45,22 @@ export function MakeupApplyFlow({
     setGrade(input.grade);
     setError(null);
     startTransition(async () => {
-      const result = await lookupStudent(input);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      try {
+        const result = await lookupStudent(input);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setStudent(result.student);
+        setSiblings(result.siblings);
+        setParticipants(null);
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "確認中にエラーが発生しました。しばらくしてから再度お試しください。"
+        );
       }
-      setStudent(result.student);
-      setSiblings(result.siblings);
-      setParticipants(null);
     });
   }
 
@@ -119,7 +127,13 @@ export function MakeupApplyFlow({
           </p>
         </div>
 
-        <form action={handleLookup} className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleLookup(new FormData(e.currentTarget));
+          }}
+          className="space-y-4"
+        >
           <Field label="お子様のお名前" htmlFor="name" required hint="登録時のお名前 (姓名のあいだの空白も含めて)">
             <input
               id="name"

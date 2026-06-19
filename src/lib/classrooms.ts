@@ -1,11 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   classroomSubjects,
+  LEGACY_SEED_CLASSROOMS,
   type ClassroomRecord,
   type CourseSubject,
 } from "@/lib/types";
 
 export type { ClassroomRecord };
+
+/** DB 未移行・一時障害時のフォールバック */
+export function legacyClassroomRecords(): ClassroomRecord[] {
+  return LEGACY_SEED_CLASSROOMS.map((c, i) => ({
+    id: `legacy-${i}`,
+    name: c.name,
+    subjects: [...c.subjects],
+    note: null,
+    sort_order: i,
+  }));
+}
 
 export async function fetchClassrooms(
   supabase: SupabaseClient
@@ -17,10 +29,15 @@ export async function fetchClassrooms(
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(error.message);
+    console.error("[fetchClassrooms]", error.message);
+    return legacyClassroomRecords();
   }
 
-  return (data ?? []) as ClassroomRecord[];
+  if (!data?.length) {
+    return legacyClassroomRecords();
+  }
+
+  return data as ClassroomRecord[];
 }
 
 export function classroomNames(

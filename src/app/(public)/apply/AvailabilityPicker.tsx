@@ -113,27 +113,47 @@ export function AvailabilityPicker({
     let cancelled = false;
     setSuggestErrors({});
     (async () => {
-      const nextSuggestions: Record<string, ScheduledLessonOption[] | null> = {};
-      const nextErrors: Record<string, string> = {};
-      await Promise.all(
-        students.map(async (s) => {
-          const r = await listScheduledLessonsForMakeup({
-            studentId: s.id,
-            name: s.name,
-            classroom: s.classroom,
-            grade: s.grade,
-          });
-          if (cancelled) return;
-          if (r.ok) nextSuggestions[s.id] = r.lessons;
-          else {
-            nextSuggestions[s.id] = [];
-            nextErrors[s.id] = r.error;
-          }
-        })
-      );
-      if (!cancelled) {
-        setSuggestionsByStudent(nextSuggestions);
-        setSuggestErrors(nextErrors);
+      try {
+        const nextSuggestions: Record<string, ScheduledLessonOption[] | null> =
+          {};
+        const nextErrors: Record<string, string> = {};
+        await Promise.all(
+          students.map(async (s) => {
+            try {
+              const r = await listScheduledLessonsForMakeup({
+                studentId: s.id,
+                name: s.name,
+                classroom: s.classroom,
+                grade: s.grade,
+              });
+              if (cancelled) return;
+              if (r.ok) nextSuggestions[s.id] = r.lessons;
+              else {
+                nextSuggestions[s.id] = [];
+                nextErrors[s.id] = r.error;
+              }
+            } catch (e) {
+              if (cancelled) return;
+              nextSuggestions[s.id] = [];
+              nextErrors[s.id] =
+                e instanceof Error
+                  ? e.message
+                  : "出席予定の取得に失敗しました。";
+            }
+          })
+        );
+        if (!cancelled) {
+          setSuggestionsByStudent(nextSuggestions);
+          setSuggestErrors(nextErrors);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(
+            e instanceof Error
+              ? e.message
+              : "出席予定の取得に失敗しました。"
+          );
+        }
       }
     })();
     return () => {
@@ -185,26 +205,31 @@ export function AvailabilityPicker({
     ReturnType<typeof createBrowserClient>["channel"]
   > | null>(null);
   useEffect(() => {
-    const supabase = createBrowserClient();
-    const channel = supabase
-      .channel(`apply-availability-${students.map((s) => s.id).join("-")}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "lessons" },
-        (payload) => {
-          const dates = new Set<string>();
-          for (const row of [payload.new, payload.old]) {
-            const d = (row as { lesson_date?: string } | null)?.lesson_date;
-            if (d) dates.add(d);
+    try {
+      const supabase = createBrowserClient();
+      const channel = supabase
+        .channel(`apply-availability-${students.map((s) => s.id).join("-")}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "lessons" },
+          (payload) => {
+            const dates = new Set<string>();
+            for (const row of [payload.new, payload.old]) {
+              const d = (row as { lesson_date?: string } | null)?.lesson_date;
+              if (d) dates.add(String(d).slice(0, 10));
+            }
+            if (dates.has(selectedDate)) fetchAvailability(selectedDate);
           }
-          if (dates.has(selectedDate)) fetchAvailability(selectedDate);
-        }
-      )
-      .subscribe();
-    channelRef.current = channel;
-    return () => {
-      supabase.removeChannel(channel);
-    };
+        )
+        .subscribe();
+      channelRef.current = channel;
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (e) {
+      console.error("[AvailabilityPicker] realtime:", e);
+      return undefined;
+    }
   }, [selectedDate, students, fetchAvailability]);
 
   useEffect(() => {
@@ -252,49 +277,70 @@ export function AvailabilityPicker({
     setSubmitting(true);
     setSubmitError(null);
 
-    const bookings = students.map((s) => {
-      const source = sources[s.id]!;
-      const dest = destByStudent[s.id]!;
-      return {
-        studentId: s.id,
-        lessonDate: selectedDate,
-        period: dest.period,
-        subject: dest.subject,
-        sourceLessonDate: source.lessonDate,
-        sourcePeriod: source.period,
-        sourceSubject: source.subject,
-        lessonClassroom: dest.classroom,
-      };
-    });
+    try {
+      const bookings = students.map((s) => {
+        const source = sources[s.id]!;
+        const dest = destByStudent[s.id]!;
+        return {
+          studentId: s.id,
+          lessonDate: selectedDate,
+          period: dest.period,
+          subject: dest.subject,
+          sourceLessonDate: source.lessonDate,
+          sourcePeriod: source.period,
+          sourceSubject: source.subject,
+          lessonClassroom: dest.classroom,
+        };
+      });
 
-    const result =
-      bookings.length === 1
-        ? await (async () => {
-            const b = bookings[0]!;
-            const r = await bookMakeupLesson(b);
-            return r.ok
-              ? { ok: true as const, lessonIds: [r.lessonId] }
-              : r;
-          })()
-        : await bookMakeupLessonsBatch(bookings);
+      const result =
+        bookings.length === 1
+          ? await (async () => {
+              const b = bookings[0]!;
+              const r = await bookMakeupLesson(b);
+              return r.ok
+                ? { ok: true as const, lessonIds: [r.lessonId] }
+                : r;
+            })()
+          : await bookMakeupLessonsBatch(bookings);
 
-    setSubmitting(false);
-    setConfirmOpen(false);
+      if (!result.ok) {
+        setSubmitError(result.error);
+        fetchAvailability(selectedDate);
+        return;
+      }
 
-    if (!result.ok) {
-      setSubmitError(result.error);
+      const summaries = students.flatMap((s, i) => {
+        const lessonId = result.lessonIds[i];
+        if (!lessonId) return [];
+        return [
+          {
+            student: s,
+            lessonId,
+            source: sources[s.id]!,
+            dest: destByStudent[s.id]!,
+          },
+        ];
+      });
+
+      if (summaries.length === 0) {
+        setSubmitError("登録結果の取得に失敗しました。教室までお問い合わせください。");
+        fetchAvailability(selectedDate);
+        return;
+      }
+
+      setBooked(summaries);
+    } catch (e) {
+      setSubmitError(
+        e instanceof Error
+          ? e.message
+          : "登録中にエラーが発生しました。しばらくしてから再度お試しください。"
+      );
       fetchAvailability(selectedDate);
-      return;
+    } finally {
+      setSubmitting(false);
+      setConfirmOpen(false);
     }
-
-    setBooked(
-      students.map((s, i) => ({
-        student: s,
-        lessonId: result.lessonIds[i]!,
-        source: sources[s.id]!,
-        dest: destByStudent[s.id]!,
-      }))
-    );
   }
 
   if (booked) {

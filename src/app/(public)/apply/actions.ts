@@ -90,33 +90,69 @@ export async function lookupStudent(input: {
     };
   }
 
-  const student = list[0]!;
-  const { data: selfRow } = await supabase
+  const student = normalizeFoundStudent(list[0]!);
+
+  let siblings: FoundStudent[] = [];
+  const { data: selfRow, error: selfRowError } = await supabase
     .from("students")
     .select("sibling_group_id")
     .eq("id", student.id)
     .maybeSingle<{ sibling_group_id: string | null }>();
 
-  let siblings: FoundStudent[] = [];
-  if (selfRow?.sibling_group_id) {
-    const { data: sibRows } = await supabase
+  if (selfRowError) {
+    console.error("[lookupStudent] sibling_group_id:", selfRowError.message);
+  } else if (selfRow?.sibling_group_id) {
+    const { data: sibRows, error: sibError } = await supabase
       .from("students")
       .select("id, name, classroom, grade, subjects")
       .eq("sibling_group_id", selfRow.sibling_group_id)
       .neq("id", student.id);
 
-    siblings = (sibRows ?? [])
-      .filter((s) => s.classroom && s.grade)
-      .map((s) => ({
-        id: s.id,
-        name: s.name,
-        classroom: s.classroom!,
-        grade: s.grade as string,
-        subjects: s.subjects ?? [],
-      }));
+    if (sibError) {
+      console.error("[lookupStudent] siblings:", sibError.message);
+    } else {
+      siblings = (sibRows ?? [])
+        .filter((s) => s.classroom && s.grade)
+        .map((s) =>
+          normalizeFoundStudent({
+            id: s.id,
+            name: s.name,
+            classroom: s.classroom!,
+            grade: s.grade as string,
+            subjects: s.subjects,
+          })
+        );
+    }
   }
 
   return { ok: true, student, siblings };
+}
+
+function normalizeFoundStudent(row: {
+  id: string;
+  name: string;
+  classroom: string;
+  grade: string;
+  subjects?: string[] | null;
+}): FoundStudent {
+  return {
+    id: row.id,
+    name: row.name,
+    classroom: row.classroom,
+    grade: row.grade,
+    subjects: Array.isArray(row.subjects) ? row.subjects : [],
+  };
+}
+
+function normalizeScheduledLessons(
+  rows: ScheduledLessonOption[]
+): ScheduledLessonOption[] {
+  return rows.map((row) => ({
+    id: row.id,
+    lesson_date: String(row.lesson_date).slice(0, 10),
+    period: Number(row.period),
+    subject: row.subject,
+  }));
 }
 
 /** 振替元に選べる「出席予定」(RPC: list_scheduled_lessons_for_makeup) */
@@ -149,7 +185,9 @@ export async function listScheduledLessonsForMakeup(input: {
 
   if (error) return { ok: false, error: error.message };
 
-  const lessons = (data ?? []) as ScheduledLessonOption[];
+  const lessons = normalizeScheduledLessons(
+    (data ?? []) as ScheduledLessonOption[]
+  );
   return { ok: true, lessons };
 }
 
