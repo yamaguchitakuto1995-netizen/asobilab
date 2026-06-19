@@ -1,3 +1,5 @@
+"use client";
+
 import {
   formatTimeRange,
   resolveClassroomPeriodTime,
@@ -8,7 +10,6 @@ import {
   groupLessonsByPeriod,
 } from "@/lib/dailyLessonFilter";
 import { aggregateLessonTextbookCounts } from "@/lib/lessonTextbookInventory";
-import { isDailyAbsentLesson } from "@/lib/todayLessonDisplay";
 import {
   periodLabel,
   type ClassroomPeriodTime,
@@ -223,27 +224,17 @@ function PeriodCard({
       />
 
       <ul className="max-h-[65vh] overflow-y-auto p-2 space-y-2">
-        {lessons.map((l) => {
-          const isAbsent = isDailyAbsentLesson(l);
-          return (
-            <li
-              key={l.id}
-              className={
-                isAbsent
-                  ? "overflow-hidden rounded-xl border border-slate-300 bg-slate-100 shadow-inner"
-                  : "overflow-hidden rounded-xl border border-slate-100 bg-white"
-              }
-            >
-              <DailyLessonStudentRow
-                lesson={l}
-                date={date}
-                period={period}
-                previousMemo={previousMemos[l.id] ?? null}
-                classroomPeriodTimes={classroomPeriodTimes}
-              />
-            </li>
-          );
-        })}
+        {lessons.map((l) => (
+          <li key={l.id}>
+            <DailyLessonStudentRow
+              lesson={l}
+              date={date}
+              period={period}
+              previousMemo={previousMemos[l.id] ?? null}
+              classroomPeriodTimes={classroomPeriodTimes}
+            />
+          </li>
+        ))}
       </ul>
     </article>
   );
