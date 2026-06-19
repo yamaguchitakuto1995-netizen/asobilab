@@ -1,172 +1,8 @@
--- ============================================================
--- 振替申請用 RPC だけを再適用する用 (Supabase SQL Editor へそのまま貼付可)
---
--- 【必須の前提】
---   下の「前提: 列の追加」ブロックがこのファイル内に含まれています。
---   古い DB でも、まずこのファイルを全文 Run すれば列 → RPC の順で適用されます。
---
--- 使いどき:
---   - 全文 schema.sql の途中でエラーになり、RPC だけを分けて適用したいとき
---
--- 注意: このブロックは「1 回まとめて」Run してください。
---
--- ▼ エラー 「Could not find the function public.book_makeup_lesson(...) in the schema cache」
---   1) このファイル先頭〜末尾を SQL Editor で再実行
---   2) それでも直らない場合は数分待つか、Supabase Dashboard で PostgREST のスキーマ再読み込みを試す
---
--- ▼ エラー 「column c.week_ordinals does not exist」
---   → このファイル冒頭の lesson_capacities への ALTER が未実行です。全文を最初から Run してください。
--- ============================================================
+-- 別教室振替・振替授業の再振替を許可
+-- Supabase SQL Editor で実行してください。
 
--- ------------------------------------------------------------
--- 前提: テーブル列（既存 DB 向け・何度実行しても安全）
--- ------------------------------------------------------------
-alter table public.lesson_capacities
-  add column if not exists week_ordinals smallint[] not null default array[1,2,3,4,5]::smallint[];
-
-do $c$ begin
-  alter table public.lesson_capacities add constraint lesson_capacities_week_ordinals_check
-    check (
-      cardinality(week_ordinals) >= 1
-      and week_ordinals <@ array[1,2,3,4,5]::smallint[]
-    );
-exception when duplicate_object then null; end $c$;
-
-alter table public.lessons add column if not exists source_lesson_date date;
-alter table public.lessons add column if not exists source_period   smallint;
-alter table public.lessons add column if not exists source_subject  text;
-alter table public.lessons add column if not exists lesson_classroom text;
-
-do $c$ begin
-  alter table public.lessons add constraint lessons_lesson_classroom_check
-    check (lesson_classroom is null or lesson_classroom in (
-      '長浜八幡中山教室',
-      '長浜駅前通り教室',
-      '米原駅前教室',
-      '米原長岡教室',
-      '西宮鳴尾町教室',
-      '出屋敷教室',
-      '長浜神照教室',
-      '学校法人芦屋学園芦屋大学附属幼稚園教室'
-    ));
-exception when duplicate_object then null; end $c$;
-
-do $c$ begin
-  alter table public.lessons add constraint lessons_source_triple_check
-    check (
-      (source_lesson_date is null and source_period is null and source_subject is null)
-      or (
-        source_lesson_date is not null
-        and source_period between 1 and 10
-        and source_subject in ('プログラミング', 'ロボット')
-      )
-    );
-exception when duplicate_object then null; end $c$;
-
--- （以下 RPC）
-
-create or replace function public.weekday_occurrence_in_month(d date)
-returns smallint
-language sql
-immutable
-strict
-set search_path = public
-as $occ$
-  select count(*)::smallint
-  from generate_series(
-    date_trunc('month', d)::date,
-    d,
-    '1 day'::interval
-  ) as g(day)
-  where extract(dow from g.day::date) = extract(dow from d);
-$occ$;
-
--- (a) 指定日の各枠の空き状況を返す
-create or replace function public.get_makeup_availability(target_date date)
-returns table (
-  classroom    text,
-  period       smallint,
-  subject      text,
-  max_students smallint,
-  occupied     int,
-  available    int
-)
-language sql
-stable
-security definer
-set search_path = public
-as $get_makeup$
-  with capacity as (
-    select c.classroom, c.period, c.subject, c.max_students
-    from public.lesson_capacities c
-    where c.day_of_week = extract(dow from target_date)::smallint
-      and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
-  ),
-  occupied as (
-    select
-      coalesce(l.lesson_classroom, s.classroom) as classroom,
-      l.period,
-      l.subject,
-      count(*)::int as occ
-    from public.lessons l
-    join public.students s on s.id = l.student_id
-    where l.lesson_date = target_date
-      and l.status     = 'scheduled'
-      and l.attendance = 'makeup'
-      and l.period is not null
-      and l.subject is not null
-    group by 1, l.period, l.subject
-  )
-  select
-    c.classroom,
-    c.period,
-    c.subject,
-    c.max_students,
-    coalesce(o.occ, 0)                                    as occupied,
-    greatest(0, c.max_students::int - coalesce(o.occ, 0)) as available
-  from capacity c
-  left join occupied o
-    on o.classroom = c.classroom
-   and o.period    = c.period
-   and o.subject   = c.subject
-  order by c.classroom, c.period, c.subject
-$get_makeup$;
-
-revoke all on function public.get_makeup_availability(date) from public;
-grant execute on function public.get_makeup_availability(date) to anon, authenticated;
-
-create or replace function public.find_student_for_makeup(
-  p_name      text,
-  p_classroom text,
-  p_grade     text
-)
-returns table (
-  id         uuid,
-  name       text,
-  classroom  text,
-  grade      text,
-  subjects   text[]
-)
-language sql
-stable
-security definer
-set search_path = public
-as $find_student$
-  select
-    s.id,
-    s.name,
-    s.classroom,
-    s.grade::text,
-    s.subjects
-  from public.students s
-  where lower(trim(s.name)) = lower(trim(p_name))
-    and s.classroom         = p_classroom
-    and s.grade::text       = p_grade
-  limit 5
-$find_student$;
-
-revoke all on function public.find_student_for_makeup(text, text, text) from public;
-grant execute on function public.find_student_for_makeup(text, text, text) to anon, authenticated;
+-- 振替元候補: 出席予定 + 振替予定（別教室の振替授業も再振替可能）
+drop function if exists public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date);
 
 create or replace function public.list_scheduled_lessons_for_makeup(
   p_student_id uuid,
@@ -212,8 +48,6 @@ $list_sched$;
 revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) from public;
 grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) to anon, authenticated;
 
-drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
-drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text);
 
 create or replace function public.book_makeup_lesson(
@@ -278,6 +112,7 @@ begin
     raise exception '所属教室が未設定の生徒のため申請できません。教室にお問い合わせください。';
   end if;
 
+  -- 振替先は指定教室。未指定時のみ所属教室（後方互換）
   v_venue := coalesce(nullif(trim(p_lesson_classroom), ''), v_student.classroom);
   if v_venue is null then
     raise exception '実施会場を特定できません。';
@@ -379,5 +214,4 @@ $book_makeup$;
 revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) from public;
 grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) to anon, authenticated;
 
--- PostgREST が関数を再認識しやすくする（無視されても害はありません）
 notify pgrst, 'reload schema';

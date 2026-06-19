@@ -14,10 +14,18 @@ type StudentTextFields = {
 
 export type LessonLikeForInventory = {
   status: string;
+  attendance?: string | null;
   subject: string | null;
   textbook: string | null;
   students: (StudentTextFields & { id?: string }) | null;
 };
+
+/** コマ表の教材集計から除外する行（欠席予定など） */
+export function countsTowardTextbookInventory(
+  lesson: Pick<LessonLikeForInventory, "status" | "attendance">
+): boolean {
+  return !(lesson.status === "scheduled" && lesson.attendance === "absent");
+}
 
 /**
  * コマ表の「教材が何種類・何冊必要か」集計用の表示ラベル。
@@ -66,6 +74,7 @@ export function aggregateLessonTextbookCounts(
 ): { label: string; count: number }[] {
   const map = new Map<string, number>();
   for (const l of lessons) {
+    if (!countsTowardTextbookInventory(l)) continue;
     const key = lessonTextbookInventoryLabel(l);
     map.set(key, (map.get(key) ?? 0) + 1);
   }

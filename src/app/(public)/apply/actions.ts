@@ -37,6 +37,8 @@ export type ScheduledLessonOption = {
   lesson_date: string;
   period: number;
   subject: string;
+  attendance?: string;
+  lesson_classroom?: string | null;
 };
 
 export type ListScheduledResult =
@@ -152,10 +154,12 @@ function normalizeScheduledLessons(
     lesson_date: String(row.lesson_date).slice(0, 10),
     period: Number(row.period),
     subject: row.subject,
+    attendance: row.attendance,
+    lesson_classroom: row.lesson_classroom ?? null,
   }));
 }
 
-/** 振替元に選べる「出席予定」(RPC: list_scheduled_lessons_for_makeup) */
+/** 振替元に選べる「出席予定・振替予定」(RPC: list_scheduled_lessons_for_makeup) */
 export async function listScheduledLessonsForMakeup(input: {
   studentId: string;
   name: string;
@@ -287,7 +291,7 @@ export async function bookMakeupLesson(input: {
     return {
       ok: false,
       error:
-        "欠席に指定できるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
+        "欠席に指定できるのは、振替フォームに表示されている「出席予定」または「振替予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
     };
   }
 
@@ -409,7 +413,7 @@ async function validateMakeupBooking(
     return {
       ok: false,
       error:
-        "欠席に指定できるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
+        "欠席に指定できるのは、振替フォームに表示されている「出席予定」または「振替予定」のコマのみです。一覧にない場合は教室までお問い合わせください。",
     };
   }
 

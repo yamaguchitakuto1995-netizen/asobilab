@@ -923,18 +923,25 @@ create or replace function public.list_scheduled_lessons_for_makeup(
   p_from_date  date default current_date
 )
 returns table (
-  id           uuid,
-  lesson_date  date,
-  period       smallint,
-  subject      text,
-  attendance   attendance_status
+  id               uuid,
+  lesson_date      date,
+  period           smallint,
+  subject          text,
+  attendance       attendance_status,
+  lesson_classroom text
 )
 language sql
 stable
 security definer
 set search_path = public
 as $list_sched$
-  select l.id, l.lesson_date, l.period, l.subject, l.attendance
+  select
+    l.id,
+    l.lesson_date,
+    l.period,
+    l.subject,
+    l.attendance,
+    l.lesson_classroom
   from public.lessons l
   join public.students s on s.id = l.student_id
   where l.student_id = p_student_id
@@ -945,7 +952,7 @@ as $list_sched$
     and l.lesson_date >= p_from_date
     and l.period is not null
     and l.subject is not null
-    and l.attendance = 'present'
+    and l.attendance in ('present', 'makeup')
   order by l.lesson_date, l.period;
 $list_sched$;
 
@@ -974,12 +981,15 @@ security definer
 set search_path = public
 as $book_makeup$
 declare
-  v_student    record;
-  v_venue      text;
-  v_max        smallint;
-  v_current    bigint;
-  v_lesson_id  uuid;
-  v_src_exists boolean;
+  v_student         record;
+  v_venue           text;
+  v_max             smallint;
+  v_current         bigint;
+  v_lesson_id       uuid;
+  v_src_attendance  attendance_status;
+  v_chain_date      date;
+  v_chain_period    smallint;
+  v_chain_subject   text;
 begin
   if p_source_lesson_date is null or p_source_period is null or p_source_subject is null then
     raise exception '欠席する授業（日付・コマ・教科）を指定してください。';
@@ -1065,18 +1075,26 @@ begin
     raise exception 'この枠は満員です。別の日時をお選びください。';
   end if;
 
-  select exists (
-    select 1 from public.lessons
-     where student_id  = p_student_id
-       and lesson_date = p_source_lesson_date
-       and period      = p_source_period
-       and subject     = p_source_subject
-       and status      = 'scheduled'
-       and attendance  = 'present'
-  ) into v_src_exists;
+  select
+    l.attendance,
+    coalesce(l.source_lesson_date, l.lesson_date),
+    coalesce(l.source_period, l.period),
+    coalesce(l.source_subject, l.subject)
+  into
+    v_src_attendance,
+    v_chain_date,
+    v_chain_period,
+    v_chain_subject
+  from public.lessons l
+  where l.student_id  = p_student_id
+    and l.lesson_date = p_source_lesson_date
+    and l.period      = p_source_period
+    and l.subject     = p_source_subject
+    and l.status      = 'scheduled'
+    and l.attendance  in ('present', 'makeup');
 
-  if not v_src_exists then
-    raise exception '欠席にできるのは、振替フォームに表示されている「出席予定」のコマのみです。一覧にない場合は教室までお問い合わせください。';
+  if not found then
+    raise exception '欠席にできるのは、振替フォームに表示されている「出席予定」または「振替予定」のコマのみです。一覧にない場合は教室までお問い合わせください。';
   end if;
 
   update public.lessons
@@ -1087,7 +1105,7 @@ begin
      and period      = p_source_period
      and subject     = p_source_subject
      and status      = 'scheduled'
-     and attendance  = 'present';
+     and attendance  in ('present', 'makeup');
 
   insert into public.lessons (
     student_id, teacher_id, lesson_date, period,
@@ -1097,7 +1115,7 @@ begin
   ) values (
     p_student_id, v_student.created_by, p_lesson_date, p_period,
     'makeup', p_subject, 'scheduled', p_text_memo,
-    p_source_lesson_date, p_source_period, p_source_subject,
+    v_chain_date, v_chain_period, v_chain_subject,
     v_venue
   )
   returning id into v_lesson_id;

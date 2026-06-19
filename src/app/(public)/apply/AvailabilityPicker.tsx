@@ -12,6 +12,7 @@ import {
 } from "@/lib/periodTimes";
 import {
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
+  SCHEDULED_ATTENDANCE_LABEL,
   periodLabel,
   type ClassroomPeriodTime,
   type CourseSubject,
@@ -141,7 +142,7 @@ export function AvailabilityPicker({
               nextErrors[s.id] =
                 e instanceof Error
                   ? e.message
-                  : "出席予定の取得に失敗しました。";
+                  : "予定の取得に失敗しました。";
             }
           })
         );
@@ -154,7 +155,7 @@ export function AvailabilityPicker({
           setError(
             e instanceof Error
               ? e.message
-              : "出席予定の取得に失敗しました。"
+              : "予定の取得に失敗しました。"
           );
         }
       }
@@ -443,8 +444,8 @@ export function AvailabilityPicker({
         </p>
         <p className="text-xs text-slate-500 mb-3">
           {isMulti
-            ? "お子様ごとに、欠席にしたい出席予定を選んでください。"
-            : "教室で登録されている「出席予定」のカードだけが表示されます。"}
+            ? "お子様ごとに、欠席にしたい授業（出席予定・振替予定）を選んでください。別教室のコマも選べます。"
+            : "出席予定・振替予定のコマから欠席にする授業を選んでください。所属教室以外のコマも表示されます。"}
         </p>
 
         <div className="space-y-5">
@@ -468,6 +469,12 @@ export function AvailabilityPicker({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {suggestions.map((row) => {
                       const dow = dowOf(row.lesson_date);
+                      const venue =
+                        row.lesson_classroom?.trim() || s.classroom;
+                      const attendanceLabel =
+                        row.attendance === "makeup"
+                          ? SCHEDULED_ATTENDANCE_LABEL.makeup
+                          : SCHEDULED_ATTENDANCE_LABEL.present;
                       const picked =
                         source?.lessonDate === row.lesson_date &&
                         source?.period === row.period &&
@@ -496,11 +503,15 @@ export function AvailabilityPicker({
                                 row.lesson_date,
                                 row.period,
                                 row.subject,
-                                s.classroom
+                                venue
                               )}
                             </span>
+                            <ClassroomBadge classroom={venue} />
                             <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 ring-1 ring-slate-200/80">
                               {row.subject}
+                            </span>
+                            <span className="text-[10px] font-medium text-slate-500">
+                              {attendanceLabel}
                             </span>
                           </div>
                         </button>
@@ -509,7 +520,7 @@ export function AvailabilityPicker({
                   </div>
                 ) : (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                    表示できる出席予定がありません。
+                    振替の元にできる予定がありません。
                   </div>
                 )}
                 {source ? (
