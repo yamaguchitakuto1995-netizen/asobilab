@@ -67,12 +67,19 @@ export function normalizePasteCell(s: string): string {
 }
 
 export function splitTableRow(line: string): string[] {
+  const normalized = line
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\u3000/g, " ");
+  // 行末のタブ・スペースだけではタブ区切りとみなさない（Excel 貼り付けで note 列後に付くことが多い）
+  const withoutTrailingPad = normalized.replace(/[\t\s]+$/g, "");
+
   const parts = (() => {
-    if (line.includes("\t")) return line.split(/\t/);
-    const commas = (line.match(/,/g) ?? []).length;
-    const semis = (line.match(/;/g) ?? []).length;
-    if (semis > commas) return line.split(";");
-    return line.split(",");
+    if (withoutTrailingPad.includes("\t")) return withoutTrailingPad.split(/\t/);
+    const commas = (withoutTrailingPad.match(/,/g) ?? []).length;
+    const semis = (withoutTrailingPad.match(/;/g) ?? []).length;
+    if (semis > commas) return withoutTrailingPad.split(";");
+    return withoutTrailingPad.split(",");
   })();
   return parts.map(normalizePasteCell);
 }
