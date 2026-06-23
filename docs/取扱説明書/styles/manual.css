@@ -1,0 +1,264 @@
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 10.5pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo",
+    "Noto Sans JP", sans-serif;
+  line-height: 1.65;
+  color: #1e293b;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 表紙・メタ情報 */
+.doc-meta {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.2em;
+  font-size: 9.5pt;
+}
+
+.doc-meta th {
+  width: 28%;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.45em 0.65em;
+  border: 1px solid #cbd5e1;
+}
+
+.doc-meta td {
+  padding: 0.45em 0.65em;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+}
+
+.doc-subtitle {
+  color: #64748b;
+  font-size: 11pt;
+  margin: -0.4em 0 1em;
+  font-weight: 400;
+}
+
+h1 {
+  font-size: 22pt;
+  color: #0f172a;
+  border-bottom: 3px solid #2563eb;
+  padding-bottom: 0.35em;
+  margin: 0 0 0.5em;
+  page-break-after: avoid;
+}
+
+h2 {
+  font-size: 14pt;
+  color: #1e40af;
+  border-left: 4px solid #2563eb;
+  padding-left: 0.55em;
+  margin: 1.6em 0 0.75em;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 11.5pt;
+  color: #334155;
+  margin: 1.2em 0 0.5em;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 10.5pt;
+  color: #475569;
+  margin: 1em 0 0.4em;
+}
+
+p {
+  margin: 0.5em 0;
+}
+
+ul,
+ol {
+  margin: 0.4em 0 0.8em;
+  padding-left: 1.4em;
+}
+
+li {
+  margin: 0.25em 0;
+}
+
+li > ul,
+li > ol {
+  margin-top: 0.2em;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.4em 0;
+}
+
+/* 一般テーブル */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0 1.1em;
+  font-size: 9.5pt;
+  page-break-inside: avoid;
+}
+
+thead th {
+  background: #1e40af;
+  color: #fff;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.65em;
+  border: 1px solid #1e3a8a;
+}
+
+tbody th {
+  background: #f8fafc;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.45em 0.65em;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+td {
+  padding: 0.45em 0.65em;
+  border: 1px solid #cbd5e1;
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+/* 権限表など3列 */
+table.col-perm td:nth-child(2),
+table.col-perm td:nth-child(3),
+table.col-perm th:nth-child(2),
+table.col-perm th:nth-child(3) {
+  text-align: center;
+  width: 12%;
+}
+
+code {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.88em;
+  background: #f1f5f9;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  color: #0f172a;
+}
+
+pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  font-size: 9pt;
+  line-height: 1.5;
+  overflow-x: auto;
+  page-break-inside: avoid;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+/* 引用・コールアウト */
+blockquote {
+  margin: 0.8em 0;
+  padding: 0.65em 0.9em;
+  border-left: 4px solid #94a3b8;
+  background: #f8fafc;
+  color: #334155;
+  page-break-inside: avoid;
+}
+
+blockquote p {
+  margin: 0.35em 0;
+}
+
+blockquote.callout-tip {
+  border-left-color: #2563eb;
+  background: #eff6ff;
+}
+
+blockquote.callout-warn {
+  border-left-color: #f59e0b;
+  background: #fffbeb;
+}
+
+blockquote.callout-script {
+  border-left-color: #7c3aed;
+  background: #f5f3ff;
+}
+
+blockquote.callout-script strong:first-child {
+  color: #5b21b6;
+}
+
+/* 台本セクション見出し */
+h3.section-script {
+  color: #5b21b6;
+  background: #f5f3ff;
+  padding: 0.35em 0.6em;
+  border-radius: 4px;
+  border-left: none;
+}
+
+.demo-steps {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 0.6em 0.9em;
+  margin: 0.6em 0 1em;
+  font-size: 9.5pt;
+}
+
+.demo-steps strong {
+  color: #047857;
+}
+
+a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+/* チェックリスト */
+input[type="checkbox"] {
+  margin-right: 0.35em;
+}
+
+.footer-note {
+  margin-top: 2em;
+  padding-top: 0.75em;
+  border-top: 1px solid #e2e8f0;
+  font-size: 8.5pt;
+  color: #64748b;
+  text-align: center;
+}
+
+.page-break {
+  page-break-before: always;
+}
+
+strong {
+  color: #0f172a;
+}
