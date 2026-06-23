@@ -28,11 +28,26 @@ export function weekOrdinalsEqual(
   return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
 }
 
+/** 振替枠が週グループ（第1・3 / 第2・4）に属するか。week_ordinals に第5週などが追加されていても一致 */
+export function capacityMatchesWeekGroup(
+  cap: Pick<LessonCapacity, "week_ordinals">,
+  weekGroupId: RegularWeekGroupId
+): boolean {
+  const group = REGULAR_WEEK_GROUPS.find((g) => g.id === weekGroupId);
+  if (!group) return false;
+  return group.ordinals.every((o) => cap.week_ordinals.includes(o));
+}
+
 export function weekGroupFromCapacity(
   cap: Pick<LessonCapacity, "week_ordinals">
 ): RegularWeekGroupId | null {
   for (const g of REGULAR_WEEK_GROUPS) {
     if (weekOrdinalsEqual(cap.week_ordinals, g.ordinals)) {
+      return g.id;
+    }
+  }
+  for (const g of REGULAR_WEEK_GROUPS) {
+    if (capacityMatchesWeekGroup(cap, g.id)) {
       return g.id;
     }
   }
@@ -77,7 +92,7 @@ export function resolveEnrollmentCapacityId(
       c.subject === params.subject &&
       c.day_of_week === params.dayOfWeek &&
       c.period === params.period &&
-      weekOrdinalsEqual(c.week_ordinals, group.ordinals)
+      capacityMatchesWeekGroup(c, params.weekGroupId)
   );
   return found?.id ?? null;
 }

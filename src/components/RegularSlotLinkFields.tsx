@@ -5,6 +5,10 @@ import { Field, inputClass } from "@/components/Field";
 import { dowOf, DAYS_OF_WEEK, dayLabel } from "@/lib/days";
 import { weekdayOccurrenceInMonth } from "@/lib/enrollmentSchedule";
 import {
+  getWeekGroupOccurrenceMismatchWarning,
+  inferRegularSlotFromLessonDate,
+} from "@/lib/ensureRegularSlotCapacities";
+import {
   REGULAR_WEEK_GROUPS,
   regularSlotLabel,
   type RegularSlotParts,
@@ -55,19 +59,19 @@ export function RegularSlotLinkFields({
     return `${dayLabel(dow)}曜・第${occ}週`;
   }, [lessonDate]);
 
-  const mismatch = useMemo(() => {
-    if (!lessonDate || weekGroupId === "" || dayOfWeek === "") return null;
+  const dayMismatch = useMemo(() => {
+    if (!lessonDate || dayOfWeek === "") return null;
     const dow = dowOf(lessonDate);
     if (dow !== dayOfWeek) {
       return `開催日は${dayLabel(dow)}曜ですが、選択中は${dayLabel(dayOfWeek)}曜です。`;
     }
-    const occ = weekdayOccurrenceInMonth(lessonDate);
-    const group = REGULAR_WEEK_GROUPS.find((g) => g.id === weekGroupId);
-    if (group && !(group.ordinals as readonly number[]).includes(occ)) {
-      return `開催日は第${occ}週のため、週グループ「${group.label}」と一致しません。`;
-    }
     return null;
-  }, [lessonDate, weekGroupId, dayOfWeek]);
+  }, [lessonDate, dayOfWeek]);
+
+  const weekMismatchWarning = useMemo(() => {
+    if (!lessonDate || weekGroupId === "") return null;
+    return getWeekGroupOccurrenceMismatchWarning(lessonDate, weekGroupId);
+  }, [lessonDate, weekGroupId]);
 
   const preview =
     weekGroupId !== "" && dayOfWeek !== "" && period !== ""
@@ -85,7 +89,7 @@ export function RegularSlotLinkFields({
           レギュラー出席コマ
         </p>
         <p className="text-xs text-emerald-900/80 mt-0.5 leading-relaxed">
-          生徒のレギュラー設定と出席予定の連動に使います。週グループ・曜日は上の「コマ」と同じ枠を指します。未登録の振替枠は保存時に自動作成されます。
+          生徒のレギュラー設定と出席予定の連動に使います。第1・3 / 第2・4 は枠の名称です（開催日が第5週などでも設定できます）。未登録の振替枠は保存時に自動作成されます。
         </p>
       </div>
 
@@ -149,9 +153,15 @@ export function RegularSlotLinkFields({
         </p>
       ) : null}
 
-      {mismatch ? (
+      {dayMismatch ? (
         <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">
-          {mismatch}
+          {dayMismatch}
+        </p>
+      ) : null}
+
+      {weekMismatchWarning ? (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+          {weekMismatchWarning.replace(/このまま保存しますか？$/, "保存時に確認します。")}
         </p>
       ) : null}
     </div>

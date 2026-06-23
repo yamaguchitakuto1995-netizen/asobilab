@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
 import { RegularSlotLinkFields } from "@/components/RegularSlotLinkFields";
-import { inferRegularSlotFromLessonDate } from "@/lib/ensureRegularSlotCapacities";
+import {
+  getWeekGroupOccurrenceMismatchWarning,
+  inferRegularSlotFromLessonDate,
+} from "@/lib/ensureRegularSlotCapacities";
+import type { RegularWeekGroupId } from "@/lib/regularSlot";
 import {
   classroomSubjects,
   PERIOD_OPTIONS,
@@ -53,7 +57,23 @@ export function PeriodTimeForm({
 
   return (
     <form
-      action={action}
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const fd = new FormData(form);
+        const lessonDate = String(fd.get("lesson_date") ?? "").trim();
+        const weekGroup = String(fd.get("regular_week_group") ?? "").trim();
+        if (lessonDate && weekGroup) {
+          const warning = getWeekGroupOccurrenceMismatchWarning(
+            lessonDate,
+            weekGroup as RegularWeekGroupId
+          );
+          if (warning && !window.confirm(warning)) {
+            return;
+          }
+        }
+        await action(fd);
+      }}
       className="space-y-3 bg-white border border-slate-200 rounded-2xl p-4 sm:p-5"
     >
       {defaultValue ? (

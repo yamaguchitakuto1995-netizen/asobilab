@@ -3,7 +3,7 @@ import { dowOf } from "@/lib/days";
 import { weekdayOccurrenceInMonth } from "@/lib/enrollmentSchedule";
 import {
   REGULAR_WEEK_GROUPS,
-  weekOrdinalsEqual,
+  capacityMatchesWeekGroup,
   type RegularSlotParts,
   type RegularWeekGroupId,
 } from "@/lib/regularSlot";
@@ -24,7 +24,7 @@ export function inferRegularSlotFromLessonDate(
   return { weekGroupId, dayOfWeek, period };
 }
 
-/** レギュラーコマと開催日（暦日）が整合するか */
+/** 開催日とレギュラーコマの曜日が一致するか（曜日のみ。週グループ名と第何週の一致は不要） */
 export function validateLessonDateMatchesRegularSlot(
   lessonDate: string,
   parts: RegularSlotParts
@@ -33,12 +33,31 @@ export function validateLessonDateMatchesRegularSlot(
   if (dow !== parts.dayOfWeek) {
     return `開催日は${dayLabel(dow)}曜ですが、レギュラーコマは${dayLabel(parts.dayOfWeek)}曜に設定されています。`;
   }
-  const occ = weekdayOccurrenceInMonth(lessonDate);
-  const group = REGULAR_WEEK_GROUPS.find((g) => g.id === parts.weekGroupId);
-  if (!(group?.ordinals as readonly number[] | undefined)?.includes(occ)) {
-    return `開催日は第${occ}週ですが、週グループ「${group?.label ?? parts.weekGroupId}」の対象外です。`;
-  }
   return null;
+}
+
+/** 週グループ名と開催日の第何週が異なる場合の確認メッセージ（保存は可能） */
+export function getWeekGroupOccurrenceMismatchWarning(
+  lessonDate: string,
+  weekGroupId: RegularWeekGroupId
+): string | null {
+  const occ = weekdayOccurrenceInMonth(lessonDate);
+  const group = REGULAR_WEEK_GROUPS.find((g) => g.id === weekGroupId);
+  if (!group || (group.ordinals as readonly number[]).includes(occ)) {
+    return null;
+  }
+  return `開催日は第${occ}週ですが、週グループは「${group.label}」です。第1・3 / 第2・4 は名称であり、第${occ}週の開催日でも問題ありません。このまま保存しますか？`;
+}
+
+function mergeWeekOrdinals(
+  base: readonly number[],
+  lessonDate?: string
+): number[] {
+  const set = new Set(base);
+  if (lessonDate) {
+    set.add(weekdayOccurrenceInMonth(lessonDate));
+  }
+  return [...set].sort((a, b) => a - b);
 }
 
 export function readRegularSlotFromForm(
@@ -80,6 +99,8 @@ export async function ensureLessonCapacityForRegularSlot(
     weekGroupId: RegularWeekGroupId;
     dayOfWeek: number;
     period: number;
+    /** 指定時、その日の第何週を week_ordinals に追加（出席連動用） */
+    lessonDate?: string;
   }
 ): Promise<{ id: string; created: boolean; error?: string }> {
   const group = REGULAR_WEEK_GROUPS.find((g) => g.id === params.weekGroupId);
@@ -100,18 +121,38 @@ export async function ensureLessonCapacityForRegularSlot(
   }
 
   const existing = (rows ?? []).find((r) =>
-    weekOrdinalsEqual((r as Pick<LessonCapacity, "week_ordinals">).week_ordinals, group.ordinals)
+    capacityMatchesWeekGroup(
+      r as Pick<LessonCapacity, "week_ordinals">,
+      params.weekGroupId
+    )
   );
   if (existing) {
+    if (params.lessonDate) {
+      const merged = mergeWeekOrdinals(existing.week_ordinals, params.lessonDate);
+      const changed =
+        merged.length !== existing.week_ordinals.length ||
+        merged.some((o, i) => o !== existing.week_ordinals[i]);
+      if (changed) {
+        const { error: updErr } = await supabase
+          .from("lesson_capacities")
+          .update({ week_ordinals: merged })
+          .eq("id", existing.id);
+        if (updErr) {
+          return { id: "", created: false, error: updErr.message };
+        }
+      }
+    }
     return { id: existing.id, created: false };
   }
+
+  const week_ordinals = mergeWeekOrdinals(group.ordinals, params.lessonDate);
 
   const { data, error: insErr } = await supabase
     .from("lesson_capacities")
     .insert({
       classroom: params.classroom,
       day_of_week: params.dayOfWeek,
-      week_ordinals: group.ordinals,
+      week_ordinals,
       period: params.period,
       subject: params.subject,
       max_students: 4,
@@ -130,9 +171,9 @@ export async function ensureLessonCapacityForRegularSlot(
         .eq("period", params.period)
         .eq("subject", params.subject);
       const found = (retry ?? []).find((r) =>
-        weekOrdinalsEqual(
-          (r as Pick<LessonCapacity, "week_ordinals">).week_ordinals,
-          group.ordinals
+        capacityMatchesWeekGroup(
+          r as Pick<LessonCapacity, "week_ordinals">,
+          params.weekGroupId
         )
       );
       if (found) return { id: found.id, created: false };
@@ -149,6 +190,7 @@ export async function ensureRegularSlotCapacitiesForPeriodTime(
     classroom: string;
     subjects: string[];
     regularSlot: RegularSlotParts;
+    lessonDate?: string;
   }
 ): Promise<{ created: number; error?: string }> {
   let created = 0;
@@ -157,6 +199,7 @@ export async function ensureRegularSlotCapacitiesForPeriodTime(
       classroom: params.classroom,
       subject,
       ...params.regularSlot,
+      lessonDate: params.lessonDate,
     });
     if (result.error) {
       return { created, error: result.error };

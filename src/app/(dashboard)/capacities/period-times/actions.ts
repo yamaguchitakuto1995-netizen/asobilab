@@ -141,6 +141,7 @@ async function applyRegularSlotForPeriodTime(
     classroom: parsed.classroom,
     subjects,
     regularSlot: slot.parts,
+    lessonDate: parsed.lesson_date,
   });
   if (ensured.error) {
     return { capacityCreated: 0, error: ensured.error };
@@ -152,6 +153,7 @@ async function ensureRegularSlotFromParsedRow(
   supabase: Awaited<ReturnType<typeof createClient>>,
   parsed: {
     classroom: string;
+    lesson_date: string;
     period: number;
     subject: string | null;
     regular_week_group: RegularWeekGroupId;
@@ -171,6 +173,7 @@ async function ensureRegularSlotFromParsedRow(
       dayOfWeek: parsed.regular_day_of_week,
       period: parsed.period,
     },
+    lessonDate: parsed.lesson_date,
   });
   if (ensured.error) {
     return { capacityCreated: 0, error: ensured.error };
