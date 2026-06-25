@@ -14,6 +14,8 @@ import {
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   SCHEDULED_ATTENDANCE_LABEL,
   periodLabel,
+  studentEnrolledSubjects,
+  studentEnrollsInSubject,
   type ClassroomPeriodTime,
   type CourseSubject,
   type SlotAvailability,
@@ -86,7 +88,7 @@ export function AvailabilityPicker({
   const subjectsByStudent = useMemo(
     () =>
       Object.fromEntries(
-        students.map((s) => [s.id, new Set<string>(s.subjects ?? [])])
+        students.map((s) => [s.id, studentEnrolledSubjects(s.subjects)])
       ),
     [students]
   );
@@ -453,6 +455,10 @@ export function AvailabilityPicker({
             const suggestions = suggestionsByStudent[s.id] ?? null;
             const source = sources[s.id];
             const suggestError = suggestErrors[s.id];
+            const sourceOptions =
+              suggestions?.filter((row) =>
+                studentEnrollsInSubject(s.subjects, row.subject)
+              ) ?? null;
             const selectedSourceRow = source
               ? suggestions?.find(
                   (r) =>
@@ -477,9 +483,9 @@ export function AvailabilityPicker({
                 ) : null}
                 {suggestions === null ? (
                   <div className="h-16 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
-                ) : suggestions.length > 0 ? (
+                ) : sourceOptions && sourceOptions.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {suggestions.map((row) => {
+                    {sourceOptions.map((row) => {
                       const dow = dowOf(row.lesson_date);
                       const venue =
                         row.lesson_classroom?.trim() || s.classroom;
@@ -543,6 +549,10 @@ export function AvailabilityPicker({
                         </button>
                       );
                     })}
+                  </div>
+                ) : (subjectsByStudent[s.id]?.length ?? 0) === 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                    受講教科が未設定のため、振替の元にできる予定がありません。教室までお問い合わせください。
                   </div>
                 ) : (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
@@ -650,7 +660,11 @@ export function AvailabilityPicker({
           ) : (
             <div className="space-y-6">
               {students.map((s) => {
-                const studentSubjects = subjectsByStudent[s.id] ?? new Set();
+                const enrolledSubjects = subjectsByStudent[s.id] ?? [];
+                const enrolledSet = new Set(enrolledSubjects);
+                const visibleSlots = (slots ?? []).filter((slot) =>
+                  enrolledSet.has(slot.subject as CourseSubject)
+                );
                 const pickedDest = destByStudent[s.id];
                 return (
                   <div key={`dest-${s.id}`} className="space-y-2">
@@ -662,21 +676,23 @@ export function AvailabilityPicker({
                           : ""}
                       </p>
                     ) : null}
-                    {slots.length === 0 ? (
+                    {enrolledSubjects.length === 0 ? (
+                      <div className="bg-white border border-dashed border-amber-300 rounded-2xl p-4 text-center text-sm text-amber-900">
+                        受講教科が未設定のため、振替先を選べません。教室までお問い合わせください。
+                      </div>
+                    ) : visibleSlots.length === 0 ? (
                       <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-4 text-center text-sm text-slate-500">
                         この日に空きのある振替枠はありません。
                       </div>
                     ) : (
                       <ul className="space-y-2">
-                        {slots.map((slot) => {
+                        {visibleSlots.map((slot) => {
                           const isFull = slot.available <= 0;
-                          const isStudentSubject = studentSubjects.has(slot.subject);
                           const isPicked =
                             pickedDest?.classroom === slot.classroom &&
                             pickedDest?.period === slot.period &&
                             pickedDest?.subject === slot.subject;
-                          const disabled =
-                            isFull || submitting || !isStudentSubject || confirmOpen;
+                          const disabled = isFull || submitting || confirmOpen;
                           return (
                             <li key={`${s.id}-${slot.classroom}-${slot.period}-${slot.subject}`}>
                               <button

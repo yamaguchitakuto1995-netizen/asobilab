@@ -9,6 +9,7 @@ import {
   GRADE_LEVELS,
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   MAX_PERIOD,
+  studentEnrollsInSubject,
   type GradeLevel,
 } from "@/lib/types";
 
@@ -189,9 +190,15 @@ export async function listScheduledLessonsForMakeup(input: {
 
   if (error) return { ok: false, error: error.message };
 
+  const { data: studentRow } = await supabase
+    .from("students")
+    .select("subjects")
+    .eq("id", input.studentId)
+    .maybeSingle<{ subjects: string[] | null }>();
+
   const lessons = normalizeScheduledLessons(
     (data ?? []) as ScheduledLessonOption[]
-  );
+  ).filter((l) => studentEnrollsInSubject(studentRow?.subjects, l.subject));
   return { ok: true, lessons };
 }
 
@@ -258,14 +265,29 @@ export async function bookMakeupLesson(input: {
 
   const { data: studentRow } = await supabase
     .from("students")
-    .select("name, classroom, grade")
+    .select("name, classroom, grade, subjects")
     .eq("id", input.studentId)
-    .maybeSingle<{ name: string; classroom: string | null; grade: string }>();
+    .maybeSingle<{
+      name: string;
+      classroom: string | null;
+      grade: string;
+      subjects: string[] | null;
+    }>();
 
   if (!studentRow?.classroom) {
     return {
       ok: false,
       error: "生徒情報を確認できませんでした。教室にお問い合わせください。",
+    };
+  }
+
+  if (
+    !studentEnrollsInSubject(studentRow.subjects, input.subject) ||
+    !studentEnrollsInSubject(studentRow.subjects, input.sourceSubject)
+  ) {
+    return {
+      ok: false,
+      error: "お子様の受講教科以外のコマは振替先に選べません。",
     };
   }
 
@@ -380,14 +402,29 @@ async function validateMakeupBooking(
 
   const { data: studentRow } = await supabase
     .from("students")
-    .select("name, classroom, grade")
+    .select("name, classroom, grade, subjects")
     .eq("id", input.studentId)
-    .maybeSingle<{ name: string; classroom: string | null; grade: string }>();
+    .maybeSingle<{
+      name: string;
+      classroom: string | null;
+      grade: string;
+      subjects: string[] | null;
+    }>();
 
   if (!studentRow?.classroom) {
     return {
       ok: false,
       error: "生徒情報を確認できませんでした。教室にお問い合わせください。",
+    };
+  }
+
+  if (
+    !studentEnrollsInSubject(studentRow.subjects, input.subject) ||
+    !studentEnrollsInSubject(studentRow.subjects, input.sourceSubject)
+  ) {
+    return {
+      ok: false,
+      error: "お子様の受講教科以外のコマは振替先に選べません。",
     };
   }
 

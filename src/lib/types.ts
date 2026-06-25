@@ -61,6 +61,22 @@ export const ATTENDANCE_BADGE: Record<AttendanceStatus, string> = {
 export const COURSE_SUBJECTS = ["プログラミング", "ロボット"] as const;
 export type CourseSubject = (typeof COURSE_SUBJECTS)[number];
 
+/** 生徒レコードの subjects から有効な受講教科だけを返す */
+export function studentEnrolledSubjects(
+  subjects: readonly string[] | null | undefined
+): CourseSubject[] {
+  return (subjects ?? []).filter((s): s is CourseSubject =>
+    (COURSE_SUBJECTS as readonly string[]).includes(s)
+  );
+}
+
+export function studentEnrollsInSubject(
+  subjects: readonly string[] | null | undefined,
+  subject: string
+): boolean {
+  return studentEnrolledSubjects(subjects).includes(subject as CourseSubject);
+}
+
 /** DB の classrooms 行 */
 export type ClassroomRecord = {
   id: string;
