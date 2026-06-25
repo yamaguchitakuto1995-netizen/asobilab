@@ -112,7 +112,7 @@ as $get_makeup$
     join public.students s on s.id = l.student_id
     where l.lesson_date = target_date
       and l.status     = 'scheduled'
-      and l.attendance = 'makeup'
+      and l.attendance in ('present', 'makeup')
       and l.period is not null
       and l.subject is not null
     group by 1, l.period, l.subject
@@ -319,7 +319,7 @@ begin
          and l.subject     = p_subject
          and coalesce(l.lesson_classroom, s.classroom) = v_venue
          and l.status      = 'scheduled'
-         and l.attendance  = 'makeup'
+         and l.attendance  in ('present', 'makeup')
        for update of l
     ) as locked;
 

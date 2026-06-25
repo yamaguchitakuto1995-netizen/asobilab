@@ -24,6 +24,7 @@ type SearchParams = Promise<{
   capacities?: string;
   resynced?: string;
   classroom_created?: string;
+  classroom_updated?: string;
   csv_dupes?: string;
   overwrites?: string;
 }>;
@@ -74,11 +75,16 @@ export default async function PeriodTimesPage({
           {decodeURIComponent(sp.error)}
         </p>
       ) : null}
-      {sp.imported || sp.updated || sp.scheduled || sp.capacities || sp.resynced || sp.classroom_created ? (
+      {sp.imported || sp.updated || sp.scheduled || sp.capacities || sp.resynced || sp.classroom_created || sp.classroom_updated ? (
         <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
           {sp.classroom_created ? (
             <p>
               教室「{decodeURIComponent(sp.classroom_created)}」を登録しました。
+            </p>
+          ) : null}
+          {sp.classroom_updated ? (
+            <p>
+              教室「{decodeURIComponent(sp.classroom_updated)}」を更新しました。
             </p>
           ) : null}
           {sp.imported ? (
@@ -174,12 +180,21 @@ export default async function PeriodTimesPage({
                 <div>
                   <p className="font-medium text-slate-900 text-sm">{c.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    開講: {c.subjects.join(" / ")}
+                    開講: {c.subjects.join(" / ")} · コマ定員（初期）{" "}
+                    {c.default_max_students} 名
                   </p>
                   {c.note ? (
                     <p className="text-xs text-slate-400 mt-1">{c.note}</p>
                   ) : null}
                 </div>
+                {user.isAdmin ? (
+                  <Link
+                    href={`/capacities/period-times/classrooms/${c.id}/edit`}
+                    className="text-sm text-brand-600 hover:underline shrink-0"
+                  >
+                    編集
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ul>

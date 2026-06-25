@@ -181,10 +181,10 @@ export function CapacityForm({
       </Field>
 
       <Field
-        label="最大受け入れ人数"
+        label="コマ定員"
         htmlFor="max_students"
         required
-        hint="この枠で受け入れ可能な振替申込の上限（定例の出席予定は含みません）。0 にすると振替を受け付けません。新規は 4 名が初期値です。"
+        hint="このコマの合計上限（レギュラー出席＋振替）。欠席予定は枠を空けます。0 にすると振替を受け付けません。"
       >
         <input
           id="max_students"

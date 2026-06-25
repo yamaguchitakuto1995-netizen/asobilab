@@ -89,6 +89,20 @@ export function readRegularSlotFromForm(
   };
 }
 
+async function resolveDefaultMaxStudents(
+  supabase: SupabaseClient,
+  classroom: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("classrooms")
+    .select("default_max_students")
+    .eq("name", classroom)
+    .maybeSingle();
+  const n = data?.default_max_students;
+  if (typeof n === "number" && n >= 0 && n <= 99) return n;
+  return 4;
+}
+
 /** 振替枠マスタにレギュラーコマがなければ作成し、id を返す */
 export async function ensureLessonCapacityForRegularSlot(
   supabase: SupabaseClient,
@@ -107,6 +121,10 @@ export async function ensureLessonCapacityForRegularSlot(
     return { id: "", created: false, error: "週グループが不正です。" };
   }
 
+  const defaultMaxStudents = await resolveDefaultMaxStudents(
+    supabase,
+    params.classroom
+  );
   const { data: rows, error: selErr } = await supabase
     .from("lesson_capacities")
     .select("id, week_ordinals")
@@ -156,7 +174,7 @@ export async function ensureLessonCapacityForRegularSlot(
       week_ordinals,
       period: params.period,
       subject: params.subject,
-      max_students: 4,
+      max_students: defaultMaxStudents,
       note: null,
     })
     .select("id")
@@ -172,9 +190,35 @@ export async function ensureLessonCapacityForRegularSlot(
         .eq("period", params.period)
         .eq("subject", params.subject);
       const found = (retry ?? [])[0];
-      if (found) return { id: found.id, created: false };
+      if (found) {
+        const merged = mergeCapacityWeekOrdinals(
+          found.week_ordinals,
+          group.ordinals,
+          params.lessonDate
+        );
+        const changed =
+          merged.length !== found.week_ordinals.length ||
+          merged.some((o, i) => o !== found.week_ordinals[i]);
+        if (changed) {
+          const { error: updErr } = await supabase
+            .from("lesson_capacities")
+            .update({ week_ordinals: merged })
+            .eq("id", found.id);
+          if (updErr) {
+            return { id: "", created: false, error: updErr.message };
+          }
+        }
+        return { id: found.id, created: false };
+      }
     }
-    return { id: "", created: false, error: insErr.message };
+    return {
+      id: "",
+      created: false,
+      error:
+        insErr.code === "23505"
+          ? "同じ教室・曜日・コマ・教科の振替枠が既にあります。振替枠の設定で確認してください。"
+          : insErr.message,
+    };
   }
 
   return { id: data!.id, created: true };

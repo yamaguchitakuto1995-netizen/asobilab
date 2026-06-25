@@ -43,10 +43,9 @@ export function periodTimeMatchesCapacity(
   if (pt.classroom !== cap.classroom) return false;
   if (pt.period !== cap.period) return false;
   if (dowOf(pt.lesson_date) !== cap.day_of_week) return false;
-  if (!cap.week_ordinals.includes(weekdayOccurrenceInMonth(pt.lesson_date))) {
-    return false;
-  }
   if (pt.subject !== null && pt.subject !== cap.subject) return false;
+  // コマ時刻は暦日（lesson_date）で指定。出席連動は曜日・コマ・教科の一致で判定する。
+  // week_ordinals は振替枠の公開条件用（get_makeup_availability 等）で、ここでは見ない。
   return true;
 }
 
@@ -176,6 +175,71 @@ async function insertLessonRows(
   }
 }
 
+/** 登録済みコマ時刻の開催週を、該当振替枠の week_ordinals に反映（振替公開・再同期用） */
+async function mergePeriodTimeOccurrencesIntoCapacities(
+  supabase: SupabaseClient,
+  periodTimes: PeriodTimeSlot[],
+  capsById: Map<string, LessonCapacity>
+): Promise<void> {
+  const mergedById = new Map<string, number[]>();
+
+  for (const pt of periodTimes) {
+    const occ = weekdayOccurrenceInMonth(pt.lesson_date);
+    const dow = dowOf(pt.lesson_date);
+    for (const cap of capsById.values()) {
+      if (cap.classroom !== pt.classroom) continue;
+      if (cap.day_of_week !== dow) continue;
+      if (cap.period !== pt.period) continue;
+      if (pt.subject !== null && pt.subject !== cap.subject) continue;
+
+      const base = mergedById.get(cap.id) ?? cap.week_ordinals;
+      if (base.includes(occ)) {
+        mergedById.set(cap.id, base);
+        continue;
+      }
+      mergedById.set(
+        cap.id,
+        [...new Set([...base, occ])].sort((a, b) => a - b)
+      );
+    }
+  }
+
+  for (const [id, week_ordinals] of mergedById) {
+    const cap = capsById.get(id);
+    if (!cap) continue;
+    const unchanged =
+      week_ordinals.length === cap.week_ordinals.length &&
+      week_ordinals.every((o, i) => o === cap.week_ordinals[i]);
+    if (unchanged) continue;
+
+    const { error } = await supabase
+      .from("lesson_capacities")
+      .update({ week_ordinals })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    cap.week_ordinals = week_ordinals;
+  }
+}
+
+async function deleteEnrollmentScheduledLessons(
+  supabase: SupabaseClient,
+  studentIds: string[],
+  fromDate: string
+): Promise<void> {
+  const chunk = 80;
+  for (let i = 0; i < studentIds.length; i += chunk) {
+    const slice = studentIds.slice(i, i + chunk);
+    const { error } = await supabase
+      .from("lessons")
+      .delete()
+      .in("student_id", slice)
+      .eq("created_from_enrollment", true)
+      .eq("status", "scheduled")
+      .gte("lesson_date", fromDate);
+    if (error) throw new Error(error.message);
+  }
+}
+
 /**
  * コマ時刻が追加・更新されたとき、該当するレギュラー出席コマの生徒に出席予定を作成する。
  */
@@ -198,6 +262,11 @@ export async function createScheduledLessonsForPeriodTimes(
     }
 
     const capsById = await loadCapacitiesForStudents(supabase, students);
+    await mergePeriodTimeOccurrencesIntoCapacities(
+      supabase,
+      futureSlots,
+      capsById
+    );
     const studentIds = students.map((s) => s.id);
     const occupied = await loadOccupiedLessonKeys(supabase, studentIds, today);
 
@@ -448,16 +517,12 @@ export async function resyncAllRegularAttendance(
 
   const studentIds = (students ?? []).map((s) => s.id);
   if (studentIds.length > 0) {
-    const { error: delErr } = await supabase
-      .from("lessons")
-      .delete()
-      .in("student_id", studentIds)
-      .eq("created_from_enrollment", true)
-      .eq("status", "scheduled")
-      .gte("lesson_date", today);
-
-    if (delErr) {
-      return { created: 0, error: delErr.message };
+    try {
+      await deleteEnrollmentScheduledLessons(supabase, studentIds, today);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "出席予定の削除に失敗しました。";
+      return { created: 0, error: msg };
     }
   }
 

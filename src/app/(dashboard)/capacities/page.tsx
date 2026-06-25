@@ -50,7 +50,7 @@ export default async function CapacitiesPage({
     <div className="space-y-6">
       <PageHeader
         title="振替枠の設定"
-        description="保護者の振替申請で使われる枠です。**教室・曜日・第◯週・コマ・教科**ごとに最大受け入れ人数を1本設定します（第2・第4週の日曜など）。"
+        description="保護者の振替申請で使われる枠です。**1コマあたりの合計定員**（レギュラー出席＋振替）を、教室・曜日・第◯週・コマ・教科ごとに設定します。"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -128,7 +128,7 @@ export default async function CapacitiesPage({
                                     </span>
                                     <SubjectChip subject={cap.subject} />
                                     <span className="text-xs font-medium rounded-full bg-slate-100 text-slate-700 px-2 py-0.5">
-                                      最大 {cap.max_students} 名
+                                      定員 {cap.max_students} 名
                                     </span>
                                   </div>
                                   <p className="text-xs text-slate-500 mt-1">

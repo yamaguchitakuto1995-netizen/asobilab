@@ -16,6 +16,7 @@ export function legacyClassroomRecords(): ClassroomRecord[] {
     subjects: [...c.subjects],
     note: null,
     sort_order: i,
+    default_max_students: 4,
   }));
 }
 
@@ -24,7 +25,7 @@ export async function fetchClassrooms(
 ): Promise<ClassroomRecord[]> {
   const { data, error } = await supabase
     .from("classrooms")
-    .select("id, name, subjects, note, sort_order")
+    .select("id, name, subjects, note, sort_order, default_max_students")
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
@@ -37,7 +38,13 @@ export async function fetchClassrooms(
     return legacyClassroomRecords();
   }
 
-  return data as ClassroomRecord[];
+  return (data ?? []).map((row) => ({
+    ...(row as ClassroomRecord),
+    default_max_students:
+      typeof (row as ClassroomRecord).default_max_students === "number"
+        ? (row as ClassroomRecord).default_max_students
+        : 4,
+  }));
 }
 
 export function classroomNames(

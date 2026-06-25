@@ -7,6 +7,7 @@ create table if not exists public.classrooms (
   subjects    text[] not null default '{}',
   note        text,
   sort_order  smallint not null default 0,
+  default_max_students smallint not null default 4,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint classrooms_name_unique unique (name),
@@ -16,6 +17,14 @@ create table if not exists public.classrooms (
       and subjects <@ array['プログラミング', 'ロボット']::text[]
     )
 );
+
+alter table public.classrooms
+  add column if not exists default_max_students smallint not null default 4;
+
+do $$ begin
+  alter table public.classrooms add constraint classrooms_default_max_students_check
+    check (default_max_students >= 0 and default_max_students <= 99);
+exception when duplicate_object then null; end $$;
 
 create index if not exists classrooms_sort_idx on public.classrooms (sort_order, name);
 

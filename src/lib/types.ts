@@ -68,6 +68,8 @@ export type ClassroomRecord = {
   subjects: CourseSubject[];
   note: string | null;
   sort_order: number;
+  /** 新規振替枠の初期定員（1コマあたりの合計上限） */
+  default_max_students: number;
 };
 
 /** @deprecated 教室一覧は DB の classrooms テーブルから fetchClassrooms で取得 */

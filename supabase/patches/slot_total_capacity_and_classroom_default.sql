@@ -1,55 +1,66 @@
--- 別教室振替・振替授業の再振替を許可
--- Supabase SQL Editor で実行してください。
+-- 1コマの定員 = レギュラー出席 + 振替の合計上限
+-- classrooms.default_max_students = 新規振替枠の初期定員
 
--- 振替元候補: 出席予定 + 振替予定（別教室の振替授業も再振替可能）
-drop function if exists public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date);
+alter table public.classrooms
+  add column if not exists default_max_students smallint not null default 4;
 
-create or replace function public.list_scheduled_lessons_for_makeup(
-  p_student_id uuid,
-  p_name       text,
-  p_classroom  text,
-  p_grade      text,
-  p_from_date  date default current_date
-)
+do $$ begin
+  alter table public.classrooms add constraint classrooms_default_max_students_check
+    check (default_max_students >= 0 and default_max_students <= 99);
+exception when duplicate_object then null; end $$;
+
+-- (a) 空き状況: 出席予定(present) + 振替予定(makeup) を定員にカウント
+create or replace function public.get_makeup_availability(target_date date)
 returns table (
-  id               uuid,
-  lesson_date      date,
-  period           smallint,
-  subject          text,
-  attendance       attendance_status,
-  lesson_classroom text
+  classroom    text,
+  period       smallint,
+  subject      text,
+  max_students smallint,
+  occupied     int,
+  available    int
 )
 language sql
 stable
 security definer
 set search_path = public
-as $list_sched$
+as $get_makeup$
+  with capacity as (
+    select c.classroom, c.period, c.subject, c.max_students
+    from public.lesson_capacities c
+    where c.day_of_week = extract(dow from target_date)::smallint
+      and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
+  ),
+  occupied as (
+    select
+      coalesce(l.lesson_classroom, s.classroom) as classroom,
+      l.period,
+      l.subject,
+      count(*)::int as occ
+    from public.lessons l
+    join public.students s on s.id = l.student_id
+    where l.lesson_date = target_date
+      and l.status     = 'scheduled'
+      and l.attendance in ('present', 'makeup')
+      and l.period is not null
+      and l.subject is not null
+    group by 1, l.period, l.subject
+  )
   select
-    l.id,
-    l.lesson_date,
-    l.period,
-    l.subject,
-    l.attendance,
-    l.lesson_classroom
-  from public.lessons l
-  join public.students s on s.id = l.student_id
-  where l.student_id = p_student_id
-    and lower(trim(s.name)) = lower(trim(p_name))
-    and s.classroom = p_classroom
-    and s.grade::text = p_grade
-    and l.status = 'scheduled'
-    and l.lesson_date >= p_from_date
-    and l.period is not null
-    and l.subject is not null
-    and l.attendance in ('present', 'makeup')
-  order by l.lesson_date, l.period;
-$list_sched$;
+    c.classroom,
+    c.period,
+    c.subject,
+    c.max_students,
+    coalesce(o.occ, 0)                                                as occupied,
+    greatest(0, c.max_students::int - coalesce(o.occ, 0))             as available
+  from capacity c
+  left join occupied o
+    on o.classroom = c.classroom
+   and o.period    = c.period
+   and o.subject   = c.subject
+  order by c.classroom, c.period, c.subject
+$get_makeup$;
 
-revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) from public;
-grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) to anon, authenticated;
-
-drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text);
-
+-- book_makeup_lesson: 定員チェックも present + makeup でカウント
 create or replace function public.book_makeup_lesson(
   p_student_id         uuid,
   p_lesson_date        date,
@@ -65,20 +76,24 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $book_makeup$
+as $book$
 declare
-  v_student         record;
-  v_venue           text;
-  v_max             smallint;
-  v_current         bigint;
-  v_lesson_id       uuid;
-  v_src_attendance  attendance_status;
-  v_chain_date      date;
-  v_chain_period    smallint;
-  v_chain_subject   text;
+  v_student          public.students%rowtype;
+  v_max              smallint;
+  v_current          bigint;
+  v_venue            text;
+  v_src_attendance   attendance_status;
+  v_chain_date       date;
+  v_chain_period     smallint;
+  v_chain_subject    text;
+  v_new_id           uuid;
 begin
-  if p_source_lesson_date is null or p_source_period is null or p_source_subject is null then
-    raise exception '欠席する授業（日付・コマ・教科）を指定してください。';
+  if p_period < 1 or p_period > 10 then
+    raise exception 'コマの指定が不正です。';
+  end if;
+
+  if p_subject not in ('プログラミング', 'ロボット') then
+    raise exception '教科の指定が不正です。';
   end if;
 
   if p_source_period < 1 or p_source_period > 10 then
@@ -112,7 +127,6 @@ begin
     raise exception '所属教室が未設定の生徒のため申請できません。教室にお問い合わせください。';
   end if;
 
-  -- 振替先は指定教室。未指定時のみ所属教室（後方互換）
   v_venue := coalesce(nullif(trim(p_lesson_classroom), ''), v_student.classroom);
   if v_venue is null then
     raise exception '実施会場を特定できません。';
@@ -205,13 +219,8 @@ begin
     v_chain_date, v_chain_period, v_chain_subject,
     v_venue
   )
-  returning id into v_lesson_id;
+  returning id into v_new_id;
 
-  return v_lesson_id;
+  return v_new_id;
 end;
-$book_makeup$;
-
-revoke all on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) from public;
-grant execute on function public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text) to anon, authenticated;
-
-notify pgrst, 'reload schema';
+$book$;

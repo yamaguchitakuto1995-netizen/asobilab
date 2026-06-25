@@ -8,9 +8,56 @@ import { COURSE_SUBJECTS, type CourseSubject } from "@/lib/types";
 
 const BASE = "/capacities/period-times";
 const NEW_PATH = `${BASE}/classrooms/new`;
+const EDIT_BASE = `${BASE}/classrooms`;
 
-function fail(msg: string): never {
-  redirect(`${NEW_PATH}?error=${encodeURIComponent(msg)}`);
+function fail(msg: string, returnTo: string = NEW_PATH): never {
+  redirect(`${returnTo}?error=${encodeURIComponent(msg)}`);
+}
+
+function readDefaultMaxStudents(formData: FormData): number | null {
+  const raw = Number(formData.get("default_max_students"));
+  if (!Number.isInteger(raw) || raw < 0 || raw > 99) return null;
+  return raw;
+}
+
+function readClassroomPayload(formData: FormData): {
+  ok: true;
+  value: {
+    name: string;
+    note: string | null;
+    subjects: CourseSubject[];
+    default_max_students: number;
+  };
+} | { ok: false; error: string } {
+  const name = String(formData.get("name") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  const subjects = readSubjects(formData);
+  const default_max_students = readDefaultMaxStudents(formData);
+
+  if (!name) return { ok: false, error: "教室名を入力してください。" };
+  if (name.length > 80) {
+    return { ok: false, error: "教室名は 80 文字以内にしてください。" };
+  }
+  if (subjects.length === 0) {
+    return { ok: false, error: "開講教科を 1 つ以上選んでください。" };
+  }
+  if (default_max_students === null) {
+    return { ok: false, error: "コマ定員は 0〜99 の整数で入力してください。" };
+  }
+
+  return {
+    ok: true,
+    value: { name, note: note || null, subjects, default_max_students },
+  };
+}
+
+function revalidateClassroomPaths() {
+  revalidatePath(BASE);
+  revalidatePath(NEW_PATH);
+  revalidatePath("/capacities");
+  revalidatePath("/students");
+  revalidatePath("/students/new");
+  revalidatePath("/apply");
 }
 
 function readSubjects(formData: FormData): CourseSubject[] {
@@ -24,15 +71,8 @@ export async function createClassroom(formData: FormData) {
   const u = await getCurrentUser();
   if (!u?.isAdmin) redirect("/capacities");
 
-  const name = String(formData.get("name") ?? "").trim();
-  const note = String(formData.get("note") ?? "").trim();
-  const subjects = readSubjects(formData);
-
-  if (!name) fail("教室名を入力してください。");
-  if (name.length > 80) fail("教室名は 80 文字以内にしてください。");
-  if (subjects.length === 0) {
-    fail("開講教科を 1 つ以上選んでください。");
-  }
+  const parsed = readClassroomPayload(formData);
+  if (!parsed.ok) fail(parsed.error);
 
   const supabase = await createClient();
 
@@ -46,9 +86,7 @@ export async function createClassroom(formData: FormData) {
   const sort_order = (last?.sort_order ?? 0) + 1;
 
   const { error } = await supabase.from("classrooms").insert({
-    name,
-    subjects,
-    note: note || null,
+    ...parsed.value,
     sort_order,
   });
 
@@ -64,14 +102,39 @@ export async function createClassroom(formData: FormData) {
     fail(error.message);
   }
 
-  revalidatePath(BASE);
-  revalidatePath(NEW_PATH);
-  revalidatePath("/capacities");
-  revalidatePath("/students");
-  revalidatePath("/students/new");
-  revalidatePath("/apply");
+  revalidateClassroomPaths();
 
   redirect(
-    `${BASE}?classroom_created=${encodeURIComponent(name)}`
+    `${BASE}?classroom_created=${encodeURIComponent(parsed.value.name)}`
   );
+}
+
+export async function updateClassroom(formData: FormData) {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect("/capacities");
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) redirect(BASE);
+
+  const parsed = readClassroomPayload(formData);
+  const returnTo = `${EDIT_BASE}/${id}/edit`;
+  if (!parsed.ok) fail(parsed.error, returnTo);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("classrooms")
+    .update(parsed.value)
+    .eq("id", id);
+
+  if (error) {
+    if (error.code === "23505") {
+      fail("同じ名前の教室がすでに登録されています。", returnTo);
+    }
+    fail(error.message, returnTo);
+  }
+
+  revalidateClassroomPaths();
+  revalidatePath(returnTo);
+
+  redirect(`${BASE}?classroom_updated=${encodeURIComponent(parsed.value.name)}`);
 }
