@@ -161,6 +161,7 @@ export default async function EditStudentPage({
             Boolean(student.sibling_group_id) || currentSiblings.length > 0
           }
           defaultSiblingIds={currentSiblings.map((s) => s.id)}
+          linkedSiblings={currentSiblings}
         />
 
         <StudentNextTextFormSection

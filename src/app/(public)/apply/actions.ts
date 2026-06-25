@@ -181,36 +181,28 @@ export async function lookupStudent(input: {
   const student = normalizeFoundStudent(list[0]!);
 
   let siblings: FoundStudent[] = [];
-  const { data: selfRow, error: selfRowError } = await supabase
-    .from("students")
-    .select("sibling_group_id")
-    .eq("id", student.id)
-    .maybeSingle<{ sibling_group_id: string | null }>();
-
-  if (selfRowError) {
-    console.error("[lookupStudent] sibling_group_id:", selfRowError.message);
-  } else if (selfRow?.sibling_group_id) {
-    const { data: sibRows, error: sibError } = await supabase
-      .from("students")
-      .select("id, name, classroom, grade, subjects")
-      .eq("sibling_group_id", selfRow.sibling_group_id)
-      .neq("id", student.id);
-
-    if (sibError) {
-      console.error("[lookupStudent] siblings:", sibError.message);
-    } else {
-      siblings = (sibRows ?? [])
-        .filter((s) => s.classroom && s.grade)
-        .map((s) =>
-          normalizeFoundStudent({
-            id: s.id,
-            name: s.name,
-            classroom: s.classroom!,
-            grade: s.grade as string,
-            subjects: s.subjects,
-          })
-        );
+  const { data: sibRows, error: sibError } = await supabase.rpc(
+    "list_siblings_for_makeup",
+    {
+      p_student_id: student.id,
+      p_name: name,
+      p_classroom: classroom,
+      p_grade: grade,
     }
+  );
+
+  if (sibError) {
+    console.error("[lookupStudent] list_siblings_for_makeup:", sibError.message);
+  } else {
+    siblings = ((sibRows ?? []) as FoundStudent[]).map((s) =>
+      normalizeFoundStudent({
+        id: s.id,
+        name: s.name,
+        classroom: s.classroom,
+        grade: s.grade as string,
+        subjects: s.subjects,
+      })
+    );
   }
 
   return { ok: true, student, siblings };

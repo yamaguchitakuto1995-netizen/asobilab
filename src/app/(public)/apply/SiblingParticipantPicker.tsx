@@ -36,6 +36,10 @@ export function SiblingParticipantPicker({
     onConfirm([primary, ...extra]);
   }
 
+  function confirmAll() {
+    onConfirm([primary, ...siblings]);
+  }
+
   return (
     <div className="space-y-5">
       <div className="bg-white border border-brand-200 rounded-2xl p-5 space-y-4">
@@ -89,13 +93,20 @@ export function SiblingParticipantPicker({
           </button>
           <button
             type="button"
+            onClick={confirmAll}
+            className="flex-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5"
+          >
+            兄弟全員まとめて申請
+          </button>
+          <button
+            type="button"
             onClick={confirmWithSelected}
             disabled={selectedIds.size === 0}
-            className="flex-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 disabled:opacity-50"
+            className="flex-1 rounded-lg border border-brand-300 bg-brand-50 hover:bg-brand-100 text-brand-900 text-sm font-medium px-4 py-2.5 disabled:opacity-50"
           >
             {selectedIds.size === 0
-              ? "兄弟を選んで一括申請"
-              : `${primary.name} さん + ${selectedIds.size}名で申請`}
+              ? "選んだ兄弟のみ申請"
+              : `選んだ ${selectedIds.size}名と申請`}
           </button>
         </div>
       </div>

@@ -84,7 +84,29 @@ export async function applySiblingGroup(
     return { error: "兄弟・姉妹がいる場合は、該当する生徒を1名以上選んでください。" };
   }
 
-  const memberIds = [studentId, ...uniqueSelected];
+  // 選択された生徒が属するグループの全員を取り込む（双方向・既存グループとの統合）
+  const expandedIds = new Set(uniqueSelected);
+  for (const sid of uniqueSelected) {
+    const { data: row } = await supabase
+      .from("students")
+      .select("sibling_group_id")
+      .eq("id", sid)
+      .maybeSingle<{ sibling_group_id: string | null }>();
+
+    if (!row?.sibling_group_id) continue;
+
+    const { data: groupMembers, error: grpErr } = await supabase
+      .from("students")
+      .select("id")
+      .eq("sibling_group_id", row.sibling_group_id);
+
+    if (grpErr) return { error: grpErr.message };
+    for (const m of groupMembers ?? []) {
+      if (m.id !== studentId) expandedIds.add(m.id);
+    }
+  }
+
+  const memberIds = [studentId, ...expandedIds];
   const { data: memberRows, error: memErr } = await supabase
     .from("students")
     .select("id, sibling_group_id")

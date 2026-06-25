@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
 import type { SiblingSummary } from "@/lib/siblings";
 
@@ -8,20 +8,32 @@ type Props = {
   candidates: SiblingSummary[];
   defaultHasSiblings?: boolean;
   defaultSiblingIds?: string[];
+  /** 編集画面など: 紐付け済み兄弟の表示用 */
+  linkedSiblings?: SiblingSummary[];
 };
 
 export function StudentSiblingField({
   candidates,
   defaultHasSiblings = false,
   defaultSiblingIds = [],
+  linkedSiblings = [],
 }: Props) {
   const [hasSiblings, setHasSiblings] = useState(defaultHasSiblings);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    setHasSiblings(defaultHasSiblings);
+  }, [defaultHasSiblings]);
 
   const selectedSet = useMemo(
     () => new Set(defaultSiblingIds),
     [defaultSiblingIds]
   );
+
+  const linkedNames =
+    linkedSiblings.length > 0
+      ? linkedSiblings
+      : candidates.filter((c) => selectedSet.has(c.id));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -60,6 +72,14 @@ export function StudentSiblingField({
 
       {hasSiblings ? (
         <div className="space-y-2">
+          {linkedNames.length > 0 ? (
+            <p className="text-xs text-violet-900 bg-white border border-violet-200 rounded-lg px-3 py-2">
+              <span className="font-semibold">兄弟あり</span>
+              {" — "}
+              {linkedNames.map((s) => s.name).join("、")}
+            </p>
+          ) : null}
+
           <Field
             label="兄弟・姉妹を選ぶ"
             htmlFor="sibling_search"

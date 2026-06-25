@@ -9,6 +9,7 @@ import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
 import { getCurrentUser } from "@/lib/auth";
 import { currentYm, formatDateLong, todayIso } from "@/lib/date";
+import { fetchSiblingSummaries } from "@/lib/siblings";
 import {
   fetchClassroomPeriodTimes,
   formatTimeRange,
@@ -84,6 +85,7 @@ export default async function StudentDetailPage({
     { data: filteredHistory },
     { data: upcoming },
     periodTimes,
+    siblingSummaries,
   ] = await Promise.all([
     supabase
       .from("lessons")
@@ -100,6 +102,7 @@ export default async function StudentDetailPage({
       .order("lesson_date", { ascending: true })
       .returns<Lesson[]>(),
     fetchClassroomPeriodTimes(supabase),
+    fetchSiblingSummaries(supabase, id, student.sibling_group_id),
   ]);
 
   // 出席率は記録済みのみで集計
@@ -209,6 +212,18 @@ export default async function StudentDetailPage({
                   <SubjectChip key={s} subject={s} size="md" />
                 ))}
               </div>
+            </div>
+          ) : null}
+          {siblingSummaries.length > 0 ? (
+            <div className="pt-3 border-t border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-700 mb-2">
+                兄弟・姉妹
+              </h2>
+              <p className="text-sm text-violet-900 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+                <span className="font-semibold">兄弟あり</span>
+                {" — "}
+                {siblingSummaries.map((s) => s.name).join("、")}
+              </p>
             </div>
           ) : null}
           {(student.subjects ?? []).some((s) => s === "ロボット" || s === "プログラミング") ? (
