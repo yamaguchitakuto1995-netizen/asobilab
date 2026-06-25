@@ -59,13 +59,30 @@ export type MarkAbsentInput = {
   name: string;
   classroom: string;
   grade: string;
+  subjects?: string[];
   lessonDate: string;
   period: number;
   subject: string;
 };
 
+type MakeupStudentIdentity = {
+  studentId: string;
+  name: string;
+  classroom: string;
+  grade: string;
+};
+
+function filterLessonsBySubjects(
+  lessons: ScheduledLessonOption[],
+  subjects: readonly string[] | null | undefined
+): ScheduledLessonOption[] {
+  if (!subjects?.length) return lessons;
+  return lessons.filter((l) => studentEnrollsInSubject(subjects, l.subject));
+}
+
+/** 匿名の振替フォーム向け: students 直読みではなく RPC で本人確認 */
 async function verifyStudentForMakeup(
-  studentId: string
+  input: MakeupStudentIdentity
 ): Promise<
   | {
       ok: true;
@@ -74,56 +91,44 @@ async function verifyStudentForMakeup(
         name: string;
         classroom: string;
         grade: string;
-        subjects: string[] | null;
+        subjects: string[];
       };
     }
   | { ok: false; error: string }
 > {
+  const name = input.name.trim();
+  const classroom = input.classroom.trim();
+  const grade = input.grade.trim();
   const supabase = await createClient();
-  const { data: studentRow } = await supabase
-    .from("students")
-    .select("name, classroom, grade, subjects")
-    .eq("id", studentId)
-    .maybeSingle<{
-      name: string;
-      classroom: string | null;
-      grade: string;
-      subjects: string[] | null;
-    }>();
 
-  if (!studentRow?.classroom) {
+  const { data, error } = await supabase.rpc("find_student_for_makeup", {
+    p_name: name,
+    p_classroom: classroom,
+    p_grade: grade,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  const list = (data ?? []) as FoundStudent[];
+  const found = list.find((s) => s.id === input.studentId);
+  if (!found) {
     return {
       ok: false,
-      error: "生徒情報を確認できませんでした。教室にお問い合わせください。",
+      error: "生徒情報を確認できませんでした。教室までお問い合わせください。",
     };
   }
 
+  const student = normalizeFoundStudent(found);
   return {
     ok: true,
     supabase,
     row: {
-      name: studentRow.name,
-      classroom: studentRow.classroom,
-      grade: studentRow.grade,
-      subjects: studentRow.subjects,
+      name: student.name,
+      classroom: student.classroom,
+      grade: student.grade,
+      subjects: student.subjects,
     },
   };
-}
-
-async function filterLessonsByEnrollment(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  studentId: string,
-  lessons: ScheduledLessonOption[]
-): Promise<ScheduledLessonOption[]> {
-  const { data: studentRow } = await supabase
-    .from("students")
-    .select("subjects")
-    .eq("id", studentId)
-    .maybeSingle<{ subjects: string[] | null }>();
-
-  return lessons.filter((l) =>
-    studentEnrollsInSubject(studentRow?.subjects, l.subject)
-  );
 }
 
 /** 保護者がお子様を本人確認 (RPC: find_student_for_makeup) */
@@ -246,6 +251,8 @@ export async function listScheduledLessonsForMakeup(input: {
   name: string;
   classroom: string;
   grade: string;
+  /** lookupStudent で取得済みの受講教科（匿名ユーザー向け） */
+  subjects?: string[];
 }): Promise<ListScheduledResult> {
   if (!input.studentId) return { ok: false, error: "生徒情報が不正です。" };
   const name = input.name.trim();
@@ -270,10 +277,9 @@ export async function listScheduledLessonsForMakeup(input: {
 
   if (error) return { ok: false, error: error.message };
 
-  const lessons = await filterLessonsByEnrollment(
-    supabase,
-    input.studentId,
-    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[])
+  const lessons = filterLessonsBySubjects(
+    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[]),
+    input.subjects
   );
   return { ok: true, lessons };
 }
@@ -284,6 +290,7 @@ export async function listPendingAbsencesForMakeup(input: {
   name: string;
   classroom: string;
   grade: string;
+  subjects?: string[];
 }): Promise<ListScheduledResult> {
   if (!input.studentId) return { ok: false, error: "生徒情報が不正です。" };
   const name = input.name.trim();
@@ -308,10 +315,9 @@ export async function listPendingAbsencesForMakeup(input: {
 
   if (error) return { ok: false, error: error.message };
 
-  const lessons = await filterLessonsByEnrollment(
-    supabase,
-    input.studentId,
-    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[])
+  const lessons = filterLessonsBySubjects(
+    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[]),
+    input.subjects
   );
   return { ok: true, lessons };
 }
@@ -321,6 +327,7 @@ async function isAllowedAttendanceSource(input: {
   name: string;
   classroom: string;
   grade: string;
+  subjects?: string[];
   lessonDate: string;
   period: number;
   subject: string;
@@ -330,6 +337,7 @@ async function isAllowedAttendanceSource(input: {
     name: input.name,
     classroom: input.classroom,
     grade: input.grade,
+    subjects: input.subjects,
   });
 
   if (!scheduled.ok) return false;
@@ -347,6 +355,7 @@ async function isAllowedMakeupSource(input: {
   name: string;
   classroom: string;
   grade: string;
+  subjects?: string[];
   lessonDate: string;
   period: number;
   subject: string;
@@ -357,12 +366,14 @@ async function isAllowedMakeupSource(input: {
       name: input.name,
       classroom: input.classroom,
       grade: input.grade,
+      subjects: input.subjects,
     }),
     listPendingAbsencesForMakeup({
       studentId: input.studentId,
       name: input.name,
       classroom: input.classroom,
       grade: input.grade,
+      subjects: input.subjects,
     }),
   ]);
 
@@ -399,7 +410,7 @@ export async function markLessonAbsentForMakeup(
     return { ok: false, error: "教科の指定が不正です。" };
   }
 
-  const verified = await verifyStudentForMakeup(input.studentId);
+  const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
 
   if (!studentEnrollsInSubject(verified.row.subjects, input.subject)) {
@@ -414,6 +425,7 @@ export async function markLessonAbsentForMakeup(
     name: verified.row.name,
     classroom: verified.row.classroom,
     grade: verified.row.grade,
+    subjects: verified.row.subjects,
     lessonDate: input.lessonDate,
     period: input.period,
     subject: input.subject,
@@ -470,6 +482,9 @@ export async function markLessonsAbsentBatch(
 /** 振替予約 (RPC: book_makeup_lesson) */
 export async function bookMakeupLesson(input: {
   studentId: string;
+  name: string;
+  classroom: string;
+  grade: string;
   lessonDate: string;
   period: number;
   subject: string;
@@ -517,7 +532,7 @@ export async function bookMakeupLesson(input: {
     };
   }
 
-  const verified = await verifyStudentForMakeup(input.studentId);
+  const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
 
   if (
@@ -535,6 +550,7 @@ export async function bookMakeupLesson(input: {
     name: verified.row.name,
     classroom: verified.row.classroom,
     grade: verified.row.grade,
+    subjects: verified.row.subjects,
     lessonDate: input.sourceLessonDate,
     period: input.sourcePeriod,
     subject: input.sourceSubject,
@@ -579,6 +595,9 @@ export async function bookMakeupLesson(input: {
 
 export type MakeupBookingInput = {
   studentId: string;
+  name: string;
+  classroom: string;
+  grade: string;
   lessonDate: string;
   period: number;
   subject: string;
@@ -637,7 +656,7 @@ async function validateMakeupBooking(
     return { ok: false, error: "実施会場の指定が不正です。" };
   }
 
-  const verified = await verifyStudentForMakeup(input.studentId);
+  const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
 
   if (
@@ -655,6 +674,7 @@ async function validateMakeupBooking(
     name: verified.row.name,
     classroom: verified.row.classroom,
     grade: verified.row.grade,
+    subjects: verified.row.subjects,
     lessonDate: input.sourceLessonDate,
     period: input.sourcePeriod,
     subject: input.sourceSubject,

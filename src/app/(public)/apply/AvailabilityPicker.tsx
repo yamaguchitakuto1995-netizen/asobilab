@@ -182,12 +182,14 @@ export function AvailabilityPicker({
                   name: s.name,
                   classroom: s.classroom,
                   grade: s.grade,
+                  subjects: s.subjects,
                 }),
                 listPendingAbsencesForMakeup({
                   studentId: s.id,
                   name: s.name,
                   classroom: s.classroom,
                   grade: s.grade,
+                  subjects: s.subjects,
                 }),
               ]);
               if (cancelled) return;
@@ -404,6 +406,7 @@ export function AvailabilityPicker({
           name: s.name,
           classroom: s.classroom,
           grade: s.grade,
+          subjects: s.subjects,
           lessonDate: source.lessonDate,
           period: source.period,
           subject: source.subject,
@@ -454,6 +457,9 @@ export function AvailabilityPicker({
         const dest = destByStudent[s.id]!;
         return {
           studentId: s.id,
+          name: s.name,
+          classroom: s.classroom,
+          grade: s.grade,
           lessonDate: selectedDate,
           period: dest.period,
           subject: dest.subject,
