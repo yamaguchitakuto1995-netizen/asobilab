@@ -23,10 +23,16 @@ import {
 import {
   bookMakeupLesson,
   bookMakeupLessonsBatch,
+  listPendingAbsencesForMakeup,
   listScheduledLessonsForMakeup,
+  markLessonsAbsentBatch,
   type FoundStudent,
   type ScheduledLessonOption,
 } from "./actions";
+
+type FlowTab = "absence" | "makeup" | "both";
+
+type SourceKind = "attendance" | "pending_absence";
 
 type Props = {
   students: FoundStudent[];
@@ -41,16 +47,43 @@ type SourceSelection = {
   lessonDate: string;
   period: number;
   subject: string;
+  kind: SourceKind;
 };
 
-type BookedSummary = {
-  student: FoundStudent;
-  lessonId: string;
-  source: SourceSelection;
-  dest: SlotAvailability;
-};
+type CompletedSummary =
+  | {
+      mode: "absence";
+      student: FoundStudent;
+      source: SourceSelection;
+      lessonId: string;
+    }
+  | {
+      mode: "makeup";
+      student: FoundStudent;
+      source: SourceSelection;
+      dest: SlotAvailability;
+      lessonId: string;
+    };
 
 type Cache = Record<string, SlotAvailability[]>;
+
+const FLOW_TABS: { id: FlowTab; label: string; hint: string }[] = [
+  {
+    id: "absence",
+    label: "欠席のみ",
+    hint: "振替先は後から登録できます",
+  },
+  {
+    id: "makeup",
+    label: "振替のみ",
+    hint: "欠席済みの授業から振替先を選びます",
+  },
+  {
+    id: "both",
+    label: "まとめて",
+    hint: "欠席と振替を一度に登録します",
+  },
+];
 
 export function AvailabilityPicker({
   students,
@@ -63,6 +96,7 @@ export function AvailabilityPicker({
   const isMulti = students.length > 1;
   const today = todayIso();
   const maxDate = useMemo(() => shiftDate(today, daysAhead), [today, daysAhead]);
+  const [flowTab, setFlowTab] = useState<FlowTab>("both");
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [cache, setCache] = useState<Cache>({});
   const [loading, setLoading] = useState(false);
@@ -75,15 +109,27 @@ export function AvailabilityPicker({
   const [suggestionsByStudent, setSuggestionsByStudent] = useState<
     Record<string, ScheduledLessonOption[] | null>
   >({});
+  const [pendingByStudent, setPendingByStudent] = useState<
+    Record<string, ScheduledLessonOption[] | null>
+  >({});
   const [suggestErrors, setSuggestErrors] = useState<Record<string, string>>({});
+  const [pendingErrors, setPendingErrors] = useState<Record<string, string>>({});
 
   const [destByStudent, setDestByStudent] = useState<
     Record<string, SlotAvailability | null>
   >({});
   const [submitting, setSubmitting] = useState(false);
-  const [booked, setBooked] = useState<BookedSummary[] | null>(null);
+  const [booked, setBooked] = useState<CompletedSummary[] | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmMode, setConfirmMode] = useState<"absence" | "makeup" | null>(
+    null
+  );
+  const [lessonListVersion, setLessonListVersion] = useState(0);
+
+  const needsMakeupSteps = flowTab === "makeup" || flowTab === "both";
+  const showAttendanceSources = flowTab === "absence" || flowTab === "both";
+  const showPendingSources = flowTab === "makeup";
 
   const subjectsByStudent = useMemo(
     () =>
@@ -115,42 +161,64 @@ export function AvailabilityPicker({
   useEffect(() => {
     let cancelled = false;
     setSuggestErrors({});
+    setPendingErrors({});
     setSuggestionsByStudent(
       Object.fromEntries(students.map((s) => [s.id, null]))
     );
+    setPendingByStudent(Object.fromEntries(students.map((s) => [s.id, null])));
     (async () => {
       try {
         const nextSuggestions: Record<string, ScheduledLessonOption[] | null> =
           {};
+        const nextPending: Record<string, ScheduledLessonOption[] | null> = {};
         const nextErrors: Record<string, string> = {};
+        const nextPendingErr: Record<string, string> = {};
         await Promise.all(
           students.map(async (s) => {
             try {
-              const r = await listScheduledLessonsForMakeup({
-                studentId: s.id,
-                name: s.name,
-                classroom: s.classroom,
-                grade: s.grade,
-              });
+              const [scheduled, pending] = await Promise.all([
+                listScheduledLessonsForMakeup({
+                  studentId: s.id,
+                  name: s.name,
+                  classroom: s.classroom,
+                  grade: s.grade,
+                }),
+                listPendingAbsencesForMakeup({
+                  studentId: s.id,
+                  name: s.name,
+                  classroom: s.classroom,
+                  grade: s.grade,
+                }),
+              ]);
               if (cancelled) return;
-              if (r.ok) nextSuggestions[s.id] = r.lessons;
+              if (scheduled.ok) nextSuggestions[s.id] = scheduled.lessons;
               else {
                 nextSuggestions[s.id] = [];
-                nextErrors[s.id] = r.error;
+                nextErrors[s.id] = scheduled.error;
+              }
+              if (pending.ok) nextPending[s.id] = pending.lessons;
+              else {
+                nextPending[s.id] = [];
+                nextPendingErr[s.id] = pending.error;
               }
             } catch (e) {
               if (cancelled) return;
               nextSuggestions[s.id] = [];
-              nextErrors[s.id] =
+              nextPending[s.id] = [];
+              const msg =
                 e instanceof Error
                   ? e.message
                   : "予定の取得に失敗しました。";
+              nextErrors[s.id] = msg;
+              nextPendingErr[s.id] = msg;
             }
           })
         );
         if (!cancelled) {
           setSuggestionsByStudent(nextSuggestions);
+          setPendingByStudent(nextPending);
           setSuggestErrors(nextErrors);
+          setPendingErrors(nextPendingErr);
         }
       } catch (e) {
         if (!cancelled) {
@@ -165,7 +233,11 @@ export function AvailabilityPicker({
     return () => {
       cancelled = true;
     };
-  }, [students]);
+  }, [students, lessonListVersion]);
+
+  function bumpLessonLists() {
+    setLessonListVersion((v) => v + 1);
+  }
 
   const dates = useMemo(() => {
     const arr: string[] = [];
@@ -199,13 +271,15 @@ export function AvailabilityPicker({
   }, []);
 
   useEffect(() => {
+    if (!needsMakeupSteps) return;
     fetchAvailability(selectedDate);
-  }, [selectedDate, fetchAvailability]);
+  }, [selectedDate, fetchAvailability, needsMakeupSteps]);
 
   useEffect(() => {
+    if (!needsMakeupSteps) return;
     const id = setInterval(() => fetchAvailability(selectedDate), pollIntervalMs);
     return () => clearInterval(id);
-  }, [selectedDate, fetchAvailability, pollIntervalMs]);
+  }, [selectedDate, fetchAvailability, pollIntervalMs, needsMakeupSteps]);
 
   const channelRef = useRef<ReturnType<
     ReturnType<typeof createBrowserClient>["channel"]
@@ -249,13 +323,31 @@ export function AvailabilityPicker({
 
   const slots = cache[selectedDate] ?? null;
 
-  function pickSource(studentId: string, row: ScheduledLessonOption) {
+  function resetSelections() {
+    setSources({});
+    setDestByStudent({});
+    setSubmitError(null);
+    setConfirmOpen(false);
+    setConfirmMode(null);
+  }
+
+  function switchFlowTab(tab: FlowTab) {
+    setFlowTab(tab);
+    resetSelections();
+  }
+
+  function pickSource(
+    studentId: string,
+    row: ScheduledLessonOption,
+    kind: SourceKind
+  ) {
     setSources((prev) => ({
       ...prev,
       [studentId]: {
         lessonDate: row.lesson_date,
         period: row.period,
         subject: row.subject,
+        kind,
       },
     }));
     setDestByStudent((prev) => ({ ...prev, [studentId]: null }));
@@ -265,16 +357,89 @@ export function AvailabilityPicker({
   function pickDest(studentId: string, slot: SlotAvailability) {
     if (submitting || confirmOpen) return;
     if (!sources[studentId]) {
-      setSubmitError("先に「欠席する授業」を選んでください。");
+      setSubmitError(
+        flowTab === "makeup"
+          ? "先に「欠席済みの授業」を選んでください。"
+          : "先に「欠席する授業」を選んでください。"
+      );
       return;
     }
     setDestByStudent((prev) => ({ ...prev, [studentId]: slot }));
     setSubmitError(null);
     if (isMulti && allSourcesSelected) {
       const next = { ...destByStudent, [studentId]: slot };
-      if (students.every((s) => next[s.id])) setConfirmOpen(true);
+      if (students.every((s) => next[s.id])) {
+        setConfirmMode("makeup");
+        setConfirmOpen(true);
+      }
     } else if (!isMulti) {
+      setConfirmMode("makeup");
       setConfirmOpen(true);
+    }
+  }
+
+  function openAbsenceConfirm() {
+    if (!allSourcesSelected) return;
+    setConfirmMode("absence");
+    setConfirmOpen(true);
+  }
+
+  async function submitAbsenceOnly() {
+    if (submitting || !allSourcesSelected) return;
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      if (
+        students.some((s) => sources[s.id]?.kind === "pending_absence")
+      ) {
+        setSubmitError("欠席済みの授業は「欠席のみ」では登録できません。");
+        return;
+      }
+
+      const inputs = students.map((s) => {
+        const source = sources[s.id]!;
+        return {
+          studentId: s.id,
+          name: s.name,
+          classroom: s.classroom,
+          grade: s.grade,
+          lessonDate: source.lessonDate,
+          period: source.period,
+          subject: source.subject,
+        };
+      });
+
+      const result = await markLessonsAbsentBatch(inputs);
+      if (!result.ok) {
+        setSubmitError(result.error);
+        return;
+      }
+
+      const summaries: CompletedSummary[] = students.flatMap((s, i) => {
+        const lessonId = result.lessonIds[i];
+        const source = sources[s.id];
+        if (!lessonId || !source) return [];
+        return [{ mode: "absence" as const, student: s, source, lessonId }];
+      });
+
+      if (summaries.length === 0) {
+        setSubmitError("登録結果の取得に失敗しました。教室までお問い合わせください。");
+        return;
+      }
+
+      setBooked(summaries);
+      bumpLessonLists();
+    } catch (e) {
+      setSubmitError(
+        e instanceof Error
+          ? e.message
+          : "登録中にエラーが発生しました。しばらくしてから再度お試しください。"
+      );
+    } finally {
+      setSubmitting(false);
+      setConfirmOpen(false);
+      setConfirmMode(null);
     }
   }
 
@@ -316,11 +481,12 @@ export function AvailabilityPicker({
         return;
       }
 
-      const summaries = students.flatMap((s, i) => {
+      const summaries: CompletedSummary[] = students.flatMap((s, i) => {
         const lessonId = result.lessonIds[i];
         if (!lessonId) return [];
         return [
           {
+            mode: "makeup" as const,
             student: s,
             lessonId,
             source: sources[s.id]!,
@@ -336,6 +502,7 @@ export function AvailabilityPicker({
       }
 
       setBooked(summaries);
+      bumpLessonLists();
     } catch (e) {
       setSubmitError(
         e instanceof Error
@@ -346,15 +513,25 @@ export function AvailabilityPicker({
     } finally {
       setSubmitting(false);
       setConfirmOpen(false);
+      setConfirmMode(null);
     }
   }
+
+  const allAbsenceOnly = booked?.every((b) => b.mode === "absence") ?? false;
 
   if (booked) {
     return (
       <div className="bg-white border border-emerald-200 rounded-2xl p-6 space-y-4">
         <div className="text-center">
           <div className="text-emerald-700 text-3xl">✓</div>
-          <h2 className="text-lg font-semibold mt-2">振替の登録が完了しました</h2>
+          <h2 className="text-lg font-semibold mt-2">
+            {allAbsenceOnly ? "欠席の登録が完了しました" : "振替の登録が完了しました"}
+          </h2>
+          {allAbsenceOnly ? (
+            <p className="text-xs text-slate-500 mt-1">
+              振替先は「振替のみ」から後日登録できます。
+            </p>
+          ) : null}
         </div>
         <ul className="space-y-3 text-sm text-slate-700">
           {booked.map((b) => (
@@ -374,17 +551,19 @@ export function AvailabilityPicker({
                 )}{" "}
                 {b.source.subject}
               </p>
-              <p>
-                振替先: {formatDateLong(selectedDate)}{" "}
-                {periodLabel(b.dest.period)}
-                {timeSuffix(
-                  selectedDate,
-                  b.dest.period,
-                  b.dest.subject,
-                  b.dest.classroom
-                )}{" "}
-                {b.dest.subject}（{b.dest.classroom}）
-              </p>
+              {b.mode === "makeup" ? (
+                <p>
+                  振替先: {formatDateLong(selectedDate)}{" "}
+                  {periodLabel(b.dest.period)}
+                  {timeSuffix(
+                    selectedDate,
+                    b.dest.period,
+                    b.dest.subject,
+                    b.dest.classroom
+                  )}{" "}
+                  {b.dest.subject}（{b.dest.classroom}）
+                </p>
+              ) : null}
               <p className="text-xs text-slate-400 mt-1">
                 控え: {b.lessonId.slice(0, 8)}
               </p>
@@ -396,14 +575,12 @@ export function AvailabilityPicker({
             type="button"
             onClick={() => {
               setBooked(null);
-              setSources({});
-              setDestByStudent({});
-              setSubmitError(null);
-              fetchAvailability(selectedDate);
+              resetSelections();
+              if (needsMakeupSteps) fetchAvailability(selectedDate);
             }}
             className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2"
           >
-            別の日も申請する
+            別の申請をする
           </button>
           <button
             type="button"
@@ -440,68 +617,130 @@ export function AvailabilityPicker({
         </button>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {FLOW_TABS.map((tab) => {
+          const active = flowTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => switchFlowTab(tab.id)}
+              className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                active
+                  ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                  : "border-slate-200 bg-white hover:border-brand-300"
+              }`}
+            >
+              <span className="block text-sm font-semibold text-slate-900">
+                {tab.label}
+              </span>
+              <span className="block text-[11px] text-slate-500 mt-0.5">
+                {tab.hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-1">
-          1. 欠席する授業（振替の元）を選ぶ
+          {showPendingSources
+            ? "1. 欠席済みの授業を選ぶ"
+            : "1. 欠席する授業を選ぶ"}
         </p>
         <p className="text-xs text-slate-500 mb-3">
-          {isMulti
-            ? "お子様ごとに、欠席にしたい授業（出席予定・振替予定）を選んでください。別教室のコマも選べます。"
-            : "出席予定・振替予定のコマから欠席にする授業を選んでください。所属教室以外のコマも表示されます。"}
+          {showPendingSources
+            ? "すでに欠席登録済みで、まだ振替先が決まっていない授業から選びます。"
+            : isMulti
+              ? "お子様ごとに、欠席にしたい授業（出席予定・振替予定）を選んでください。"
+              : "出席予定・振替予定のコマから欠席にする授業を選んでください。"}
         </p>
 
         <div className="space-y-5">
           {students.map((s) => {
             const suggestions = suggestionsByStudent[s.id] ?? null;
+            const pending = pendingByStudent[s.id] ?? null;
             const source = sources[s.id];
             const suggestError = suggestErrors[s.id];
-            const sourceOptions =
-              suggestions?.filter((row) =>
-                studentEnrollsInSubject(s.subjects, row.subject)
-              ) ?? null;
-            const selectedSourceRow = source
-              ? suggestions?.find(
-                  (r) =>
-                    r.lesson_date === source.lessonDate &&
-                    r.period === source.period &&
-                    r.subject === source.subject
-                )
-              : undefined;
+            const pendingError = pendingErrors[s.id];
+            const sourceOptions = showAttendanceSources
+              ? suggestions?.filter((row) =>
+                  studentEnrollsInSubject(s.subjects, row.subject)
+                ) ?? null
+              : null;
+            const pendingOptions = showPendingSources
+              ? pending?.filter((row) =>
+                  studentEnrollsInSubject(s.subjects, row.subject)
+                ) ?? null
+              : null;
+            const displayOptions = showPendingSources
+              ? pendingOptions
+              : sourceOptions;
+            const loadingOptions = showPendingSources
+              ? pending === null
+              : suggestions === null;
+            const listError = showPendingSources ? pendingError : suggestError;
+
+            const selectedSourceRow =
+              source && showPendingSources
+                ? pending?.find(
+                    (r) =>
+                      r.lesson_date === source.lessonDate &&
+                      r.period === source.period &&
+                      r.subject === source.subject
+                  )
+                : source
+                  ? suggestions?.find(
+                      (r) =>
+                        r.lesson_date === source.lessonDate &&
+                        r.period === source.period &&
+                        r.subject === source.subject
+                    )
+                  : undefined;
             const selectedSourceVenue =
               selectedSourceRow?.lesson_classroom?.trim() || s.classroom;
             const selectedIsMakeupSource =
               selectedSourceRow?.attendance === "makeup";
+            const selectedIsAbsentSource =
+              selectedSourceRow?.attendance === "absent";
+
             return (
               <div key={s.id} className="space-y-2">
                 {isMulti ? (
                   <p className="text-sm font-medium text-slate-800">{s.name} さん</p>
                 ) : null}
-                {suggestError ? (
+                {listError ? (
                   <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    {suggestError}
+                    {listError}
                   </p>
                 ) : null}
-                {suggestions === null ? (
+                {loadingOptions ? (
                   <div className="h-16 rounded-xl border border-slate-200 bg-slate-50 animate-pulse" />
-                ) : sourceOptions && sourceOptions.length > 0 ? (
+                ) : displayOptions && displayOptions.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {sourceOptions.map((row) => {
+                    {displayOptions.map((row) => {
                       const dow = dowOf(row.lesson_date);
                       const venue =
                         row.lesson_classroom?.trim() || s.classroom;
                       const isMakeupSource = row.attendance === "makeup";
-                      const attendanceLabel = isMakeupSource
-                        ? SCHEDULED_ATTENDANCE_LABEL.makeup
-                        : SCHEDULED_ATTENDANCE_LABEL.present;
+                      const isAbsentSource = row.attendance === "absent";
+                      const attendanceLabel = isAbsentSource
+                        ? SCHEDULED_ATTENDANCE_LABEL.absent
+                        : isMakeupSource
+                          ? SCHEDULED_ATTENDANCE_LABEL.makeup
+                          : SCHEDULED_ATTENDANCE_LABEL.present;
                       const picked =
                         source?.lessonDate === row.lesson_date &&
                         source?.period === row.period &&
                         source?.subject === row.subject;
+                      const kind: SourceKind = showPendingSources
+                        ? "pending_absence"
+                        : "attendance";
                       return (
                         <button
                           key={row.id}
                           type="button"
-                          onClick={() => pickSource(s.id, row)}
+                          onClick={() => pickSource(s.id, row, kind)}
                           className={`text-left rounded-2xl border bg-white p-4 shadow-sm transition ${
                             picked
                               ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
@@ -552,17 +791,21 @@ export function AvailabilityPicker({
                   </div>
                 ) : (subjectsByStudent[s.id]?.length ?? 0) === 0 ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                    受講教科が未設定のため、振替の元にできる予定がありません。教室までお問い合わせください。
+                    受講教科が未設定のため申請できません。教室までお問い合わせください。
                   </div>
                 ) : (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                    振替の元にできる予定がありません。
+                    {showPendingSources
+                      ? "振替先を選べる欠席済みの授業がありません。先に「欠席のみ」で登録してください。"
+                      : "欠席にできる予定がありません。"}
                   </div>
                 )}
                 {source ? (
                   <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                     選択中:{" "}
-                    {selectedIsMakeupSource ? (
+                    {selectedIsAbsentSource ? (
+                      <span className="font-semibold text-rose-800">欠席済 </span>
+                    ) : selectedIsMakeupSource ? (
                       <span className="font-semibold text-violet-800">振替日 </span>
                     ) : null}
                     {formatDateLong(source.lessonDate)}{" "}
@@ -580,8 +823,30 @@ export function AvailabilityPicker({
             );
           })}
         </div>
+
+        {flowTab === "absence" && allSourcesSelected ? (
+          <button
+            type="button"
+            onClick={openAbsenceConfirm}
+            disabled={submitting}
+            className="mt-4 w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 disabled:opacity-60"
+          >
+            欠席を登録する
+          </button>
+        ) : null}
+        {flowTab === "both" && allSourcesSelected ? (
+          <button
+            type="button"
+            onClick={openAbsenceConfirm}
+            disabled={submitting}
+            className="mt-4 w-full rounded-lg border border-brand-300 bg-white hover:bg-brand-50 text-brand-800 text-sm font-medium px-4 py-2.5 disabled:opacity-60"
+          >
+            欠席のみ登録する（振替は後で）
+          </button>
+        ) : null}
       </div>
 
+      {needsMakeupSteps ? (
       <div
         className={!allSourcesSelected ? "opacity-50 pointer-events-none select-none" : ""}
         aria-hidden={!allSourcesSelected}
@@ -748,7 +1013,10 @@ export function AvailabilityPicker({
           {isMulti && allSourcesSelected && allDestSelected ? (
             <button
               type="button"
-              onClick={() => setConfirmOpen(true)}
+              onClick={() => {
+                setConfirmMode("makeup");
+                setConfirmOpen(true);
+              }}
               className="mt-4 w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5"
             >
               内容を確認して登録する
@@ -756,8 +1024,65 @@ export function AvailabilityPicker({
           ) : null}
         </div>
       </div>
+      ) : null}
 
-      {confirmOpen && allSourcesSelected && allDestSelected ? (
+      {confirmOpen && allSourcesSelected && confirmMode === "absence" ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !submitting && setConfirmOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6 space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold text-slate-900">
+              この内容で欠席を登録しても良いですか？
+            </h2>
+            <ul className="text-sm text-slate-700 space-y-3">
+              {students.map((s) => {
+                const source = sources[s.id]!;
+                return (
+                  <li
+                    key={s.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1"
+                  >
+                    <p className="font-semibold">{s.name} さん</p>
+                    <p className="text-xs">
+                      欠席: {formatDateLong(source.lessonDate)}{" "}
+                      {periodLabel(source.period)} {source.subject}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2.5"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void submitAbsenceOnly()}
+                className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 disabled:opacity-60"
+              >
+                {submitting ? "登録中…" : "欠席を登録する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmOpen &&
+      allSourcesSelected &&
+      allDestSelected &&
+      confirmMode === "makeup" ? (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 bg-black/40"
           role="dialog"
