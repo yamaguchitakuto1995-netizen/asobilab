@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/Field";
 import { DAYS_OF_WEEK } from "@/lib/days";
 import {
-  classroomSubjects,
-  PERIOD_OPTIONS,
-  WEEK_ORDINAL_OPTIONS,
-  type ClassroomRecord,
-  type LessonCapacity,
-} from "@/lib/types";
+  REGULAR_WEEK_GROUPS,
+  capacityToRegularSlotParts,
+  regularSlotLabel,
+  weekGroupFromCapacity,
+  type RegularWeekGroupId,
+} from "@/lib/regularSlot";
+import { PERIOD_OPTIONS, classroomSubjects, type ClassroomRecord, type LessonCapacity } from "@/lib/types";
 
 type Props = {
   classrooms: ClassroomRecord[];
@@ -32,7 +33,16 @@ export function CapacityForm({
   const [classroom, setClassroom] = useState<string>(
     defaultValue?.classroom ?? ""
   );
-  const [dow, setDow] = useState<number | "">(defaultValue?.day_of_week ?? "");
+  const defaultParts = useMemo(
+    () => capacityToRegularSlotParts(defaultValue),
+    [defaultValue]
+  );
+  const [weekGroupId, setWeekGroupId] = useState<RegularWeekGroupId | "">(
+    () => defaultParts?.weekGroupId ?? ""
+  );
+  const [dow, setDow] = useState<number | "">(
+    defaultValue?.day_of_week ?? ""
+  );
   const [period, setPeriod] = useState<number | "">(defaultValue?.period ?? "");
   const [subject, setSubject] = useState<string>(defaultValue?.subject ?? "");
 
@@ -53,11 +63,19 @@ export function CapacityForm({
         ? `${defaultValue.classroom}|${defaultValue.day_of_week}|${defaultValue.period}|${defaultValue.subject}`
         : "");
 
-  const initialWeeks =
-    defaultValue?.week_ordinals?.length &&
-    defaultValue.week_ordinals.length > 0
-      ? defaultValue.week_ordinals
-      : [1, 2, 3, 4, 5];
+  const legacyWeeks =
+    defaultValue &&
+    !defaultParts &&
+    weekGroupFromCapacity(defaultValue) === null;
+
+  const slotPreview =
+    weekGroupId && dow !== "" && period !== ""
+      ? regularSlotLabel({
+          weekGroupId,
+          dayOfWeek: dow,
+          period,
+        })
+      : null;
 
   return (
     <form
@@ -91,71 +109,109 @@ export function CapacityForm({
         </select>
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="曜日" htmlFor="day_of_week" required>
-          <select
-            id="day_of_week"
-            name="day_of_week"
-            required
-            value={dow}
-            onChange={(e) => setDow(Number(e.target.value))}
-            className={inputClass}
-          >
-            <option value="" disabled>
-              選択
-            </option>
-            {DAYS_OF_WEEK.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.long}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="コマ" htmlFor="period" required>
-          <select
-            id="period"
-            name="period"
-            required
-            value={period}
-            onChange={(e) => setPeriod(Number(e.target.value))}
-            className={inputClass}
-          >
-            <option value="" disabled>
-              選択
-            </option>
-            {PERIOD_OPTIONS.map((p) => (
-              <option key={p} value={p}>
-                {p}コマ目
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
       <Field
-        label="開催週（月内の第◯週のその曜日）"
-        htmlFor="week_o_1"
+        label="レギュラーコマ（週グループ・曜日・コマ）"
+        htmlFor="week_group"
         required
-        hint="例: 第2・第4日曜の授業なら「第2週」「第4週」だけチェック。どの開催日も同じ受け入れ人数が適用されます。"
+        hint="登録済み教室の第1・3週 / 第2・4週 × 曜日 × コマで振替枠を特定します。"
       >
-        <div className="flex flex-wrap gap-3">
-          {WEEK_ORDINAL_OPTIONS.map(({ value, label }) => (
-            <label
-              key={value}
-              className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
-            >
-              <input
-                id={value === 1 ? "week_o_1" : undefined}
-                type="checkbox"
-                name="week_ordinals"
-                value={String(value)}
-                defaultChecked={initialWeeks.includes(value)}
-                className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-              />
-              {label}
-            </label>
-          ))}
+        <div className="space-y-2">
+          {legacyWeeks ? (
+            <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+              現在の週設定は第1・3 / 第2・4 以外です。下で選び直してください。
+            </p>
+          ) : null}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label
+                htmlFor="week_group"
+                className="block text-[11px] text-slate-500 mb-1"
+              >
+                週グループ
+              </label>
+              <select
+                id="week_group"
+                name="week_group"
+                required
+                value={weekGroupId}
+                onChange={(e) =>
+                  setWeekGroupId(e.target.value as RegularWeekGroupId | "")
+                }
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  選択
+                </option>
+                {REGULAR_WEEK_GROUPS.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="day_of_week"
+                className="block text-[11px] text-slate-500 mb-1"
+              >
+                曜日
+              </label>
+              <select
+                id="day_of_week"
+                name="day_of_week"
+                required
+                value={dow}
+                onChange={(e) => setDow(Number(e.target.value))}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  選択
+                </option>
+                {DAYS_OF_WEEK.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.long}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="period"
+                className="block text-[11px] text-slate-500 mb-1"
+              >
+                コマ
+              </label>
+              <select
+                id="period"
+                name="period"
+                required
+                value={period}
+                onChange={(e) => setPeriod(Number(e.target.value))}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  選択
+                </option>
+                {PERIOD_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}コマ目
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {slotPreview && classroom ? (
+            <p className="text-xs text-slate-600">
+              選択中:{" "}
+              <span className="font-medium text-slate-800">
+                {classroom} · {slotPreview}
+              </span>
+            </p>
+          ) : null}
         </div>
       </Field>
 

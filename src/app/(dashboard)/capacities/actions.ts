@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
+import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { REGULAR_WEEK_GROUPS } from "@/lib/regularSlot";
 import {
   COURSE_SUBJECTS,
   MAX_PERIOD,
@@ -14,8 +16,8 @@ import {
 
 const BASE = "/capacities";
 
-function fail(error: string): never {
-  redirect(`${BASE}?error=${encodeURIComponent(error)}`);
+function fail(error: string, returnTo: string = BASE): never {
+  redirect(`${returnTo}?error=${encodeURIComponent(error)}`);
 }
 
 type ParsedCapacity = {
@@ -46,14 +48,9 @@ function readForm(
       ? 4
       : Number(maxStudentsRaw);
   const note = String(formData.get("note") ?? "").trim();
-  const ordRaw = formData.getAll("week_ordinals");
-  const week_ordinals = [
-    ...new Set(
-      ordRaw
-        .map((v) => Number(v))
-        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 5)
-    ),
-  ].sort((a, b) => a - b);
+  const weekGroupRaw = String(formData.get("week_group") ?? "").trim();
+  const weekGroup = REGULAR_WEEK_GROUPS.find((g) => g.id === weekGroupRaw);
+  const week_ordinals = weekGroup ? [...weekGroup.ordinals] : [];
 
   if (!isKnownClassroom(classroom, classrooms)) {
     return { ok: false, error: "教室の選択が不正です。" };
@@ -81,7 +78,7 @@ function readForm(
   if (week_ordinals.length === 0) {
     return {
       ok: false,
-      error: "開催週を 1 つ以上選んでください（例: 第2・第4週）。",
+      error: "週グループを選んでください（第1・3週 または 第2・4週）。",
     };
   }
 
@@ -100,6 +97,9 @@ function readForm(
 }
 
 export async function createCapacity(formData: FormData) {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect(BASE);
+
   const supabase = await createClient();
   const classrooms = await fetchClassrooms(supabase);
   const parsed = readForm(formData, classrooms);
@@ -121,26 +121,39 @@ export async function createCapacity(formData: FormData) {
 }
 
 export async function updateCapacity(formData: FormData) {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect(BASE);
+
   const id = String(formData.get("id") ?? "");
   if (!id) redirect(BASE);
 
+  const returnTo = `${BASE}/${id}/edit`;
   const supabase = await createClient();
   const classrooms = await fetchClassrooms(supabase);
   const parsed = readForm(formData, classrooms);
-  if (!parsed.ok) fail(parsed.error);
+  if (!parsed.ok) fail(parsed.error, returnTo);
 
   const { error } = await supabase
     .from("lesson_capacities")
     .update(parsed.value)
     .eq("id", id);
 
-  if (error) fail(error.message);
+  if (error) {
+    if (error.code === "23505") {
+      fail("この (教室・週グループ・曜日・コマ・教科) の枠はすでに設定済みです。", returnTo);
+    }
+    fail(error.message, returnTo);
+  }
 
   revalidatePath(BASE);
+  revalidatePath(returnTo);
   redirect(BASE);
 }
 
 export async function deleteCapacity(formData: FormData) {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect(BASE);
+
   const id = String(formData.get("id") ?? "");
   if (!id) redirect(BASE);
 

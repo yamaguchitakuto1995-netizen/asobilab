@@ -25,6 +25,7 @@ type SearchParams = Promise<{
   resynced?: string;
   classroom_created?: string;
   classroom_updated?: string;
+  classroom_deleted?: string;
   csv_dupes?: string;
   overwrites?: string;
 }>;
@@ -75,7 +76,7 @@ export default async function PeriodTimesPage({
           {decodeURIComponent(sp.error)}
         </p>
       ) : null}
-      {sp.imported || sp.updated || sp.scheduled || sp.capacities || sp.resynced || sp.classroom_created || sp.classroom_updated ? (
+      {sp.imported || sp.updated || sp.scheduled || sp.capacities || sp.resynced || sp.classroom_created || sp.classroom_updated || sp.classroom_deleted ? (
         <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 space-y-1">
           {sp.classroom_created ? (
             <p>
@@ -85,6 +86,11 @@ export default async function PeriodTimesPage({
           {sp.classroom_updated ? (
             <p>
               教室「{decodeURIComponent(sp.classroom_updated)}」を更新しました。
+            </p>
+          ) : null}
+          {sp.classroom_deleted ? (
+            <p>
+              教室「{decodeURIComponent(sp.classroom_deleted)}」を削除しました。
             </p>
           ) : null}
           {sp.imported ? (

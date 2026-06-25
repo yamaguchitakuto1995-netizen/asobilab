@@ -281,7 +281,8 @@ export async function createScheduledLessonsForPeriodTimes(
           occupied.add(key);
           rows.push({
             student_id: student.id,
-            teacher_id: student.created_by || teacherIdFallback,
+            // RLS: lessons への insert は teacher_id = auth.uid() が必須
+            teacher_id: teacherIdFallback,
             lesson_date: pt.lesson_date,
             period: capacity.period,
             attendance: "present",

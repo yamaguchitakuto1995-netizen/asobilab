@@ -138,3 +138,62 @@ export async function updateClassroom(formData: FormData) {
 
   redirect(`${BASE}?classroom_updated=${encodeURIComponent(parsed.value.name)}`);
 }
+
+export async function deleteClassroom(formData: FormData) {
+  const u = await getCurrentUser();
+  if (!u?.isAdmin) redirect("/capacities");
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) redirect(BASE);
+
+  const returnTo = `${EDIT_BASE}/${id}/edit`;
+  const supabase = await createClient();
+
+  const { data: classroom } = await supabase
+    .from("classrooms")
+    .select("name")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!classroom) redirect(BASE);
+
+  const name = classroom.name;
+
+  async function relatedCount(
+    table: "students" | "lesson_capacities" | "classroom_period_times" | "lessons",
+    column: string
+  ): Promise<number> {
+    const { count } = await supabase
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq(column, name);
+    return count ?? 0;
+  }
+
+  const [students, capacities, periodTimes, lessons] = await Promise.all([
+    relatedCount("students", "classroom"),
+    relatedCount("lesson_capacities", "classroom"),
+    relatedCount("classroom_period_times", "classroom"),
+    relatedCount("lessons", "lesson_classroom"),
+  ]);
+
+  const blockers: string[] = [];
+  if (students > 0) blockers.push(`生徒 ${students} 名`);
+  if (capacities > 0) blockers.push(`振替枠 ${capacities} 件`);
+  if (periodTimes > 0) blockers.push(`コマ時刻 ${periodTimes} 件`);
+  if (lessons > 0) blockers.push(`授業記録 ${lessons} 件`);
+
+  if (blockers.length > 0) {
+    fail(
+      `この教室は削除できません。関連データがあります（${blockers.join("、")}）。先に削除するか、別の教室へ移してください。`,
+      returnTo
+    );
+  }
+
+  const { error } = await supabase.from("classrooms").delete().eq("id", id);
+
+  if (error) fail(error.message, returnTo);
+
+  revalidateClassroomPaths();
+  redirect(`${BASE}?classroom_deleted=${encodeURIComponent(name)}`);
+}

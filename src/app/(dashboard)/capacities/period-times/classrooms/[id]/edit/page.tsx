@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ClassroomForm } from "@/components/ClassroomForm";
+import { ConfirmDeleteForm } from "@/components/ConfirmDeleteForm";
 import { PageHeader } from "@/components/PageHeader";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { ClassroomRecord } from "@/lib/types";
-import { updateClassroom } from "../../actions";
+import { deleteClassroom, updateClassroom } from "../../actions";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ error?: string }>;
@@ -69,6 +70,21 @@ export default async function EditClassroomPage({
         defaultValue={record}
         submitLabel="変更を保存"
       />
+
+      <section className="border-t border-slate-200 pt-4 space-y-2">
+        <h2 className="text-sm font-semibold text-slate-800">教室の削除</h2>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          生徒・振替枠・コマ時刻・授業記録が1件もない教室のみ削除できます。
+        </p>
+        <ConfirmDeleteForm
+          action={deleteClassroom}
+          message={`「${record.name}」を削除します。よろしいですか？`}
+          buttonLabel="この教室を削除"
+          buttonClassName="rounded-lg border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 text-sm font-medium px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <input type="hidden" name="id" value={record.id} />
+        </ConfirmDeleteForm>
+      </section>
     </div>
   );
 }

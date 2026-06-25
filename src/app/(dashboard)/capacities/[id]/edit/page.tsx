@@ -53,7 +53,10 @@ export default async function EditCapacityPage({
         </Link>
       </div>
 
-      <PageHeader title="振替枠を編集" />
+      <PageHeader
+        title="振替枠を編集"
+        description="教室・週グループ（第1・3 / 第2・4）・曜日・コマ・教科で枠を変更できます。"
+      />
 
       {error ? (
         <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">

@@ -7,8 +7,9 @@ import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { getCurrentUser } from "@/lib/auth";
 import { DAYS_OF_WEEK, dayLabel } from "@/lib/days";
 import { fetchClassrooms } from "@/lib/classrooms";
+import { formatCapacityRegularSlot } from "@/lib/regularSlot";
 import { createClient } from "@/lib/supabase/server";
-import { formatWeekOrdinals, type LessonCapacity } from "@/lib/types";
+import type { LessonCapacity } from "@/lib/types";
 import { createCapacity, deleteCapacity } from "./actions";
 
 type SearchParams = Promise<{ error?: string }>;
@@ -132,7 +133,7 @@ export default async function CapacitiesPage({
                                     </span>
                                   </div>
                                   <p className="text-xs text-slate-500 mt-1">
-                                    開催: {formatWeekOrdinals(cap.week_ordinals)}
+                                    開催: {formatCapacityRegularSlot(cap)}
                                   </p>
                                   {cap.note ? (
                                     <p className="text-xs text-slate-500 mt-1 truncate">
