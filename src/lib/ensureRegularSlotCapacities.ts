@@ -3,12 +3,10 @@ import { dowOf } from "@/lib/days";
 import { weekdayOccurrenceInMonth } from "@/lib/enrollmentSchedule";
 import {
   REGULAR_WEEK_GROUPS,
-  capacityMatchesWeekGroup,
   type RegularSlotParts,
   type RegularWeekGroupId,
 } from "@/lib/regularSlot";
 import { dayLabel } from "@/lib/days";
-import type { LessonCapacity } from "@/lib/types";
 
 /** 開催日から曜日・第何週を読み取り、週グループを推定（第5週は null） */
 export function inferRegularSlotFromLessonDate(
@@ -49,11 +47,12 @@ export function getWeekGroupOccurrenceMismatchWarning(
   return `開催日は第${occ}週ですが、週グループは「${group.label}」です。第1・3 / 第2・4 は名称であり、第${occ}週の開催日でも問題ありません。このまま保存しますか？`;
 }
 
-function mergeWeekOrdinals(
-  base: readonly number[],
+function mergeCapacityWeekOrdinals(
+  existing: readonly number[],
+  groupOrdinals: readonly number[],
   lessonDate?: string
 ): number[] {
-  const set = new Set(base);
+  const set = new Set([...existing, ...groupOrdinals]);
   if (lessonDate) {
     set.add(weekdayOccurrenceInMonth(lessonDate));
   }
@@ -120,32 +119,34 @@ export async function ensureLessonCapacityForRegularSlot(
     return { id: "", created: false, error: selErr.message };
   }
 
-  const existing = (rows ?? []).find((r) =>
-    capacityMatchesWeekGroup(
-      r as Pick<LessonCapacity, "week_ordinals">,
-      params.weekGroupId
-    )
-  );
+  // DB 上は (教室・曜日・コマ・教科) で1行のみ。週グループ名が違っても同じ枠を更新する
+  const existing = (rows ?? [])[0];
   if (existing) {
-    if (params.lessonDate) {
-      const merged = mergeWeekOrdinals(existing.week_ordinals, params.lessonDate);
-      const changed =
-        merged.length !== existing.week_ordinals.length ||
-        merged.some((o, i) => o !== existing.week_ordinals[i]);
-      if (changed) {
-        const { error: updErr } = await supabase
-          .from("lesson_capacities")
-          .update({ week_ordinals: merged })
-          .eq("id", existing.id);
-        if (updErr) {
-          return { id: "", created: false, error: updErr.message };
-        }
+    const merged = mergeCapacityWeekOrdinals(
+      existing.week_ordinals,
+      group.ordinals,
+      params.lessonDate
+    );
+    const changed =
+      merged.length !== existing.week_ordinals.length ||
+      merged.some((o, i) => o !== existing.week_ordinals[i]);
+    if (changed) {
+      const { error: updErr } = await supabase
+        .from("lesson_capacities")
+        .update({ week_ordinals: merged })
+        .eq("id", existing.id);
+      if (updErr) {
+        return { id: "", created: false, error: updErr.message };
       }
     }
     return { id: existing.id, created: false };
   }
 
-  const week_ordinals = mergeWeekOrdinals(group.ordinals, params.lessonDate);
+  const week_ordinals = mergeCapacityWeekOrdinals(
+    [],
+    group.ordinals,
+    params.lessonDate
+  );
 
   const { data, error: insErr } = await supabase
     .from("lesson_capacities")
@@ -170,12 +171,7 @@ export async function ensureLessonCapacityForRegularSlot(
         .eq("day_of_week", params.dayOfWeek)
         .eq("period", params.period)
         .eq("subject", params.subject);
-      const found = (retry ?? []).find((r) =>
-        capacityMatchesWeekGroup(
-          r as Pick<LessonCapacity, "week_ordinals">,
-          params.weekGroupId
-        )
-      );
+      const found = (retry ?? [])[0];
       if (found) return { id: found.id, created: false };
     }
     return { id: "", created: false, error: insErr.message };
