@@ -11,6 +11,7 @@ import {
   makeupRegistrationClosedMessage,
   todayJstIso,
   validateMakeupTargetDate,
+  canBookMakeupTarget,
 } from "@/lib/registrationDeadlines";
 import {
   readBirthdayFromInput,
@@ -548,11 +549,9 @@ export async function bookMakeupLesson(input: {
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayJstIso();
   const targetDateCheck = validateMakeupTargetDate(
     input.sourceLessonDate,
-    input.lessonDate,
-    today
+    input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
 
@@ -567,6 +566,16 @@ export async function bookMakeupLesson(input: {
   }
 
   const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: (input.lessonClassroom ?? "").trim() || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,
@@ -693,11 +702,9 @@ async function validateMakeupBooking(
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayJstIso();
   const targetDateCheck = validateMakeupTargetDate(
     input.sourceLessonDate,
-    input.lessonDate,
-    today
+    input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
 
@@ -720,6 +727,16 @@ async function validateMakeupBooking(
   }
 
   const periodTimes = await fetchClassroomPeriodTimes(supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: lessonVenue || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,

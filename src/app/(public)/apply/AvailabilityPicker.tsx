@@ -11,10 +11,13 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
+  canBookMakeupTarget,
   canRegisterAbsence,
   enumerateDatesInclusive,
+  formatEarliestMakeupTargetLabel,
   formatMakeupDeadlineLabel,
   formatMakeupTargetMaxLabel,
+  isMakeupRegistrationOpen,
   isMakeupSourceSelectable,
   makeupRegistrationClosedMessage,
   makeupTargetDateRangeForSources,
@@ -162,12 +165,15 @@ export function AvailabilityPicker({
   );
 
   const targetRange = useMemo(
-    () => makeupTargetDateRangeForSources(sourceLessonDates, today),
-    [sourceLessonDates, today]
+    () => makeupTargetDateRangeForSources(sourceLessonDates),
+    [sourceLessonDates]
   );
 
   const dates = useMemo(
-    () => enumerateDatesInclusive(targetRange.min, targetRange.max),
+    () =>
+      enumerateDatesInclusive(targetRange.min, targetRange.max).filter((d) =>
+        isMakeupRegistrationOpen(d)
+      ),
     [targetRange]
   );
 
@@ -395,6 +401,17 @@ export function AvailabilityPicker({
           ? "先に「欠席済みの授業」を選んでください。"
           : "先に「欠席する授業」を選んでください。"
       );
+      return;
+    }
+    const bookable = canBookMakeupTarget({
+      lessonDate: selectedDate,
+      period: slot.period,
+      subject: slot.subject,
+      classroom: slot.classroom,
+      periodTimes,
+    });
+    if (!bookable.ok) {
+      setSubmitError(bookable.error);
       return;
     }
     setDestByStudent((prev) => ({ ...prev, [studentId]: slot }));
@@ -927,8 +944,9 @@ export function AvailabilityPicker({
           </p>
           {sourceLessonDates.length > 0 ? (
             <p className="text-xs text-slate-500 mb-2 leading-relaxed">
-              同月内であれば欠席日より前の日付も選べます。振替先は欠席月の翌々月末（
-              {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）が上限です。
+              振替先も授業日の3日前 23:59 までに申請できます（現在選べる最早日:{" "}
+              {formatEarliestMakeupTargetLabel()}）。同月内であれば欠席日より前の日付も可。上限は欠席月の翌々月末（
+              {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）です。
             </p>
           ) : null}
           <label className="block mb-3">
@@ -1033,7 +1051,18 @@ export function AvailabilityPicker({
                             pickedDest?.classroom === slot.classroom &&
                             pickedDest?.period === slot.period &&
                             pickedDest?.subject === slot.subject;
-                          const disabled = isFull || submitting || confirmOpen;
+                          const bookable = canBookMakeupTarget({
+                            lessonDate: selectedDate,
+                            period: slot.period,
+                            subject: slot.subject,
+                            classroom: slot.classroom,
+                            periodTimes,
+                          });
+                          const disabled =
+                            isFull ||
+                            !bookable.ok ||
+                            submitting ||
+                            confirmOpen;
                           return (
                             <li key={`${s.id}-${slot.classroom}-${slot.period}-${slot.subject}`}>
                               <button

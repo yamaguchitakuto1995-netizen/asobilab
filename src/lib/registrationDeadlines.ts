@@ -50,6 +50,12 @@ export function makeupRegistrationClosedMessage(
   return `振替申請は授業日の${MAKEUP_REGISTRATION_DAYS_BEFORE}日前（${formatMakeupDeadlineLabel(sourceLessonDate)}）までです。`;
 }
 
+export function makeupTargetBookingClosedMessage(
+  targetLessonDate: string
+): string {
+  return `振替先の授業は授業日の${MAKEUP_REGISTRATION_DAYS_BEFORE}日前（${formatMakeupDeadlineLabel(targetLessonDate)}）までに申請してください。`;
+}
+
 export function canRegisterAbsence(
   opts: {
     lessonDate: string;
@@ -126,19 +132,31 @@ export function makeupTargetMaxDate(sourceLessonDate: string): string {
   return `${lastDay.getFullYear()}-${mm}-${dd}`;
 }
 
-/** 振替先の最早日（同月内前振替では欠席月の1日から） */
+/** 振替先として選べる最早日（3日前 23:59 締切を満たす最初の日） */
+export function earliestMakeupTargetDate(now = new Date()): string {
+  const today = todayJstIso(now);
+  let d = today;
+  for (let i = 0; i < 366; i++) {
+    if (isMakeupRegistrationOpen(d, now)) {
+      return d;
+    }
+    d = shiftDate(d, 1);
+  }
+  return shiftDate(today, MAKEUP_REGISTRATION_DAYS_BEFORE);
+}
+
+export function formatEarliestMakeupTargetLabel(now = new Date()): string {
+  return formatDateShort(earliestMakeupTargetDate(now));
+}
+
+/** 振替先の最早日（欠席月の1日以降かつ3日前締切を満たす日の遅い方） */
 export function makeupTargetMinDate(
   sourceLessonDate: string,
-  today: string
+  now = new Date()
 ): string {
   const sourceMonthStart = `${sourceLessonDate.slice(0, 7)}-01`;
-  const sourceYm = sourceLessonDate.slice(0, 7);
-  const todayYm = today.slice(0, 7);
-
-  if (sourceYm >= todayYm) {
-    return sourceMonthStart;
-  }
-  return today;
+  const leadTimeMin = earliestMakeupTargetDate(now);
+  return sourceMonthStart > leadTimeMin ? sourceMonthStart : leadTimeMin;
 }
 
 export function formatMakeupTargetMaxLabel(sourceLessonDate: string): string {
@@ -149,7 +167,7 @@ export function formatMakeupTargetMaxLabel(sourceLessonDate: string): string {
 export function validateMakeupTargetDate(
   sourceLessonDate: string,
   targetLessonDate: string,
-  today: string
+  now = new Date()
 ): { ok: true } | { ok: false; error: string } {
   const sourceYm = sourceLessonDate.slice(0, 7);
   const targetYm = targetLessonDate.slice(0, 7);
@@ -162,7 +180,14 @@ export function validateMakeupTargetDate(
     };
   }
 
-  const min = makeupTargetMinDate(sourceLessonDate, today);
+  if (!isMakeupRegistrationOpen(targetLessonDate, now)) {
+    return {
+      ok: false,
+      error: makeupTargetBookingClosedMessage(targetLessonDate),
+    };
+  }
+
+  const min = makeupTargetMinDate(sourceLessonDate, now);
   if (targetLessonDate < min) {
     return {
       ok: false,
@@ -178,12 +203,56 @@ export function validateMakeupTargetDate(
     };
   }
 
-  const sameMonthPreMakeup =
-    targetYm === sourceYm && targetLessonDate <= sourceLessonDate;
-  if (targetLessonDate < today && !sameMonthPreMakeup) {
+  return { ok: true };
+}
+
+/** 振替先コマがまだ予約可能か（3日前 23:59 締切・当日は開始時刻まで） */
+export function canBookMakeupTarget(
+  opts: {
+    lessonDate: string;
+    period: number;
+    subject: string;
+    classroom: string | null;
+    periodTimes: ClassroomPeriodTime[];
+  },
+  now = new Date()
+): { ok: true } | { ok: false; error: string } {
+  if (!isMakeupRegistrationOpen(opts.lessonDate, now)) {
     return {
       ok: false,
-      error: "振替先は今日以降の日付を選んでください。",
+      error: makeupTargetBookingClosedMessage(opts.lessonDate),
+    };
+  }
+
+  const today = todayJstIso(now);
+
+  if (opts.lessonDate < today) {
+    return {
+      ok: false,
+      error: "振替先の授業はすでに終了しているため、登録できません。",
+    };
+  }
+
+  if (opts.lessonDate > today) {
+    return { ok: true };
+  }
+
+  const row = resolveClassroomPeriodTime(opts.periodTimes, {
+    classroom: opts.classroom,
+    lessonDate: opts.lessonDate,
+    period: opts.period,
+    subject: opts.subject,
+  });
+
+  if (!row) {
+    return { ok: true };
+  }
+
+  const startMs = jstDateTimeToMs(opts.lessonDate, row.start_time);
+  if (now.getTime() >= startMs) {
+    return {
+      ok: false,
+      error: `振替先の開始時刻（${formatClock(row.start_time)}）を過ぎたため、登録できません。`,
     };
   }
 
@@ -193,12 +262,13 @@ export function validateMakeupTargetDate(
 /** 複数欠席元があるときの振替先日付レンジ（共通部分） */
 export function makeupTargetDateRangeForSources(
   sourceLessonDates: string[],
-  today: string
+  now = new Date()
 ): { min: string; max: string } {
+  const today = todayJstIso(now);
   if (sourceLessonDates.length === 0) {
-    return { min: today, max: shiftDate(today, 120) };
+    return { min: earliestMakeupTargetDate(now), max: shiftDate(today, 120) };
   }
-  const mins = sourceLessonDates.map((d) => makeupTargetMinDate(d, today));
+  const mins = sourceLessonDates.map((d) => makeupTargetMinDate(d, now));
   const maxs = sourceLessonDates.map((d) => makeupTargetMaxDate(d));
   return {
     min: mins.sort().reverse()[0]!,

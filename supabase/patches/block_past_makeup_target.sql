@@ -1,7 +1,63 @@
--- 振替先日付ルール
--- 1) 同月内であれば前振替可（欠席月より前の月は不可）
--- 2) 振替先は欠席月の翌々月末まで
+-- 振替先の過去日時をブロック
+-- （同月内前振替でも、すでに終わった日・コマには登録不可）
 -- Supabase SQL Editor で実行してください。
+
+create or replace function public.assert_makeup_target_bookable(
+  p_lesson_date date,
+  p_period      smallint,
+  p_subject     text,
+  p_venue       text
+)
+returns void
+language plpgsql
+stable
+set search_path = public
+as $assert_target$
+declare
+  v_now_jst    timestamp;
+  v_today_jst  date;
+  v_start_time time;
+begin
+  perform public.assert_makeup_registration_open(p_lesson_date);
+
+  v_now_jst := now() at time zone 'Asia/Tokyo';
+  v_today_jst := v_now_jst::date;
+
+  if p_lesson_date < v_today_jst then
+    raise exception '振替先の授業はすでに終了しているため、登録できません。';
+  end if;
+
+  if p_lesson_date > v_today_jst then
+    return;
+  end if;
+
+  select cpt.start_time
+    into v_start_time
+    from public.classroom_period_times cpt
+   where cpt.classroom = p_venue
+     and cpt.lesson_date = p_lesson_date
+     and cpt.period = p_period
+     and (cpt.subject = p_subject or cpt.subject is null)
+   order by
+     case
+       when cpt.subject = p_subject then 0
+       when cpt.subject is null then 1
+       else 2
+     end
+   limit 1;
+
+  if v_start_time is null then
+    return;
+  end if;
+
+  if v_now_jst >= (p_lesson_date + v_start_time) then
+    raise exception '振替先の開始時刻（%）を過ぎたため、登録できません。', to_char(v_start_time, 'HH24:MI');
+  end if;
+end;
+$assert_target$;
+
+revoke all on function public.assert_makeup_target_bookable(date, smallint, text, text) from public;
+grant execute on function public.assert_makeup_target_bookable(date, smallint, text, text) to anon, authenticated;
 
 create or replace function public.book_makeup_lesson(
   p_student_id         uuid,
@@ -61,8 +117,6 @@ begin
     raise exception '欠席コマと振替コマが同じです。';
   end if;
 
-  perform public.assert_makeup_registration_open(p_lesson_date);
-
   select * into v_student from public.students where id = p_student_id;
   if v_student is null then
     raise exception '生徒が見つかりません。';
@@ -75,6 +129,13 @@ begin
   if v_venue is null then
     raise exception '実施会場を特定できません。';
   end if;
+
+  perform public.assert_makeup_target_bookable(
+    p_lesson_date,
+    p_period,
+    p_subject,
+    v_venue
+  );
 
   select c.max_students
     into v_max
