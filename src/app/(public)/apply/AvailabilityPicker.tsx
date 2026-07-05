@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inputClass } from "@/components/Field";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-import { formatDateLong, isValidDate, shiftDate, todayIso } from "@/lib/date";
+import { formatDateLong, isValidDate } from "@/lib/date";
 import { dayColor, dayLabel, dowOf } from "@/lib/days";
 import {
   formatTimeRange,
@@ -12,12 +12,15 @@ import {
 } from "@/lib/periodTimes";
 import {
   canRegisterAbsence,
+  enumerateDatesInclusive,
   formatMakeupDeadlineLabel,
+  formatMakeupTargetMaxLabel,
   isMakeupSourceSelectable,
   makeupRegistrationClosedMessage,
+  makeupTargetDateRangeForSources,
+  todayJstIso,
 } from "@/lib/registrationDeadlines";
 import {
-  MAKEUP_TARGET_MAX_DAYS_AHEAD,
   SCHEDULED_ATTENDANCE_LABEL,
   periodLabel,
   studentEnrolledSubjects,
@@ -45,7 +48,6 @@ type Props = {
   portalId: string;
   birthday: string;
   periodTimes?: ClassroomPeriodTime[];
-  daysAhead?: number;
   pollIntervalMs?: number;
   onBack: () => void;
   onReset: () => void;
@@ -99,14 +101,12 @@ export function AvailabilityPicker({
   portalId,
   birthday,
   periodTimes = [],
-  daysAhead = MAKEUP_TARGET_MAX_DAYS_AHEAD,
   pollIntervalMs = 30_000,
   onBack,
   onReset,
 }: Props) {
   const isMulti = students.length > 1;
-  const today = todayIso();
-  const maxDate = useMemo(() => shiftDate(today, daysAhead), [today, daysAhead]);
+  const today = todayJstIso();
   const [flowTab, setFlowTab] = useState<FlowTab>("both");
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [cache, setCache] = useState<Cache>({});
@@ -152,6 +152,33 @@ export function AvailabilityPicker({
 
   const allSourcesSelected = students.every((s) => sources[s.id]);
   const allDestSelected = students.every((s) => destByStudent[s.id]);
+
+  const sourceLessonDates = useMemo(
+    () =>
+      students
+        .map((s) => sources[s.id]?.lessonDate)
+        .filter((d): d is string => Boolean(d)),
+    [students, sources]
+  );
+
+  const targetRange = useMemo(
+    () => makeupTargetDateRangeForSources(sourceLessonDates, today),
+    [sourceLessonDates, today]
+  );
+
+  const dates = useMemo(
+    () => enumerateDatesInclusive(targetRange.min, targetRange.max),
+    [targetRange]
+  );
+
+  useEffect(() => {
+    if (!allSourcesSelected || sourceLessonDates.length === 0) return;
+    const { min, max } = targetRange;
+    if (selectedDate < min || selectedDate > max) {
+      setSelectedDate(min);
+      setDestByStudent({});
+    }
+  }, [allSourcesSelected, sourceLessonDates.length, targetRange, selectedDate]);
 
   function timeSuffix(
     date: string,
@@ -249,12 +276,6 @@ export function AvailabilityPicker({
   function bumpLessonLists() {
     setLessonListVersion((v) => v + 1);
   }
-
-  const dates = useMemo(() => {
-    const arr: string[] = [];
-    for (let i = 0; i <= daysAhead; i++) arr.push(shiftDate(today, i));
-    return arr;
-  }, [today, daysAhead]);
 
   const fetchAvailability = useCallback(async (date: string) => {
     setLoading(true);
@@ -904,12 +925,18 @@ export function AvailabilityPicker({
           <p className="text-sm font-semibold text-slate-700 mb-2">
             2. 振替先の日付を選ぶ
           </p>
+          {sourceLessonDates.length > 0 ? (
+            <p className="text-xs text-slate-500 mb-2 leading-relaxed">
+              同月内であれば欠席日より前の日付も選べます。振替先は欠席月の翌々月末（
+              {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）が上限です。
+            </p>
+          ) : null}
           <label className="block mb-3">
             <span className="sr-only">振替先の日付</span>
             <input
               type="date"
-              min={today}
-              max={maxDate}
+              min={targetRange.min}
+              max={targetRange.max}
               value={selectedDate}
               onChange={(e) => {
                 const v = e.target.value;

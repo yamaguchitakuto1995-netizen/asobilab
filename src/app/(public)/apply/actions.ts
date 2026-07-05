@@ -10,6 +10,7 @@ import {
   isMakeupRegistrationOpen,
   makeupRegistrationClosedMessage,
   todayJstIso,
+  validateMakeupTargetDate,
 } from "@/lib/registrationDeadlines";
 import {
   readBirthdayFromInput,
@@ -17,7 +18,6 @@ import {
 } from "@/lib/studentPortal";
 import {
   COURSE_SUBJECTS,
-  MAKEUP_TARGET_MAX_DAYS_AHEAD,
   MAX_PERIOD,
   studentEnrollsInSubject,
 } from "@/lib/types";
@@ -549,13 +549,12 @@ export async function bookMakeupLesson(input: {
   }
 
   const today = todayJstIso();
-  const maxLesson = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
-  if (input.lessonDate < today || input.lessonDate > maxLesson) {
-    return {
-      ok: false,
-      error: `振替先の日付は今日から ${MAKEUP_TARGET_MAX_DAYS_AHEAD} 日以内で選んでください。`,
-    };
-  }
+  const targetDateCheck = validateMakeupTargetDate(
+    input.sourceLessonDate,
+    input.lessonDate,
+    today
+  );
+  if (!targetDateCheck.ok) return targetDateCheck;
 
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
@@ -695,13 +694,12 @@ async function validateMakeupBooking(
   }
 
   const today = todayJstIso();
-  const maxLesson = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
-  if (input.lessonDate < today || input.lessonDate > maxLesson) {
-    return {
-      ok: false,
-      error: `振替先の日付は今日から ${MAKEUP_TARGET_MAX_DAYS_AHEAD} 日以内で選んでください。`,
-    };
-  }
+  const targetDateCheck = validateMakeupTargetDate(
+    input.sourceLessonDate,
+    input.lessonDate,
+    today
+  );
+  if (!targetDateCheck.ok) return targetDateCheck;
 
   const lessonVenue = (input.lessonClassroom ?? "").trim();
   const supabase = await createClient();
