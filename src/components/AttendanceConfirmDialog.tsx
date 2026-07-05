@@ -34,6 +34,7 @@ export function AttendanceConfirmDialog({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [attendance, setAttendance] = useState<AttendanceStatus>(
     lesson.status === "scheduled" && lesson.attendance === "makeup"
       ? "makeup"
@@ -68,19 +69,28 @@ export function AttendanceConfirmDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, pending, onClose]);
 
+  useEffect(() => {
+    if (!open) return;
+    setSubmitError(null);
+  }, [open]);
+
   if (!open || !mounted) return null;
 
   function submit() {
+    setSubmitError(null);
     const fd = new FormData();
     fd.set("lesson_id", lesson.id);
-    fd.set("return_date", date);
     fd.set("attendance", attendance);
     fd.set("textbook", textbook);
     fd.set("text_memo", textMemo);
     startTransition(async () => {
-      await confirmLessonFromDailyBoard(fd);
-      router.refresh();
+      const result = await confirmLessonFromDailyBoard(fd);
+      if (!result.ok) {
+        setSubmitError(result.error);
+        return;
+      }
       onClose();
+      router.refresh();
     });
   }
 
@@ -192,6 +202,12 @@ export function AttendanceConfirmDialog({
               placeholder="どこまで進んだか、次回への申し送りなど"
             />
           </Field>
+
+          {submitError ? (
+            <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+              {submitError}
+            </p>
+          ) : null}
         </div>
 
         <footer className="shrink-0 border-t border-slate-200 px-4 py-3 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end bg-white">

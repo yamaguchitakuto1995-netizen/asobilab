@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import {
+  quickPresentLessonFromDailyBoard,
+} from "@/app/(dashboard)/daily/actions";
 import { AttendanceConfirmDialog } from "@/components/AttendanceConfirmDialog";
 import { TextbookCourseChip } from "@/components/TextbookCourseChip";
 import {
@@ -9,7 +13,7 @@ import {
   lessonTodayTextLabel,
   lessonTodayTextParts,
 } from "@/lib/todayLessonDisplay";
-import type { ClassroomPeriodTime } from "@/lib/types";
+import type { AttendanceStatus, ClassroomPeriodTime } from "@/lib/types";
 import type { DailyLessonItem } from "./DailyLessonCarousel";
 
 type Props = {
@@ -27,7 +31,10 @@ export function DailyLessonStudentRow({
   previousMemo,
   classroomPeriodTimes: _classroomPeriodTimes,
 }: Props) {
+  const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [isQuickPending, startQuickTransition] = useTransition();
   const st = lesson.students;
   const regularClassroom = st?.classroom ?? null;
   const todayText = lessonTodayTextLabel(lesson, st);
@@ -35,6 +42,31 @@ export function DailyLessonStudentRow({
   const attendanceLabel = dailyAttendanceStatusLabel(lesson);
   const isAbsent = isDailyAbsentLesson(lesson);
   const isScheduled = lesson.status === "scheduled";
+  const canQuickPresent =
+    isScheduled &&
+    !isAbsent &&
+    todayText.trim() !== "" &&
+    todayText.trim() !== "—";
+
+  const defaultAttendance: AttendanceStatus =
+    lesson.attendance === "makeup" ? "makeup" : "present";
+
+  function handleQuickPresent() {
+    if (!canQuickPresent || isQuickPending) return;
+    setQuickError(null);
+    startQuickTransition(async () => {
+      const result = await quickPresentLessonFromDailyBoard({
+        lessonId: lesson.id,
+        textbook: todayText,
+        attendance: defaultAttendance,
+      });
+      if (!result.ok) {
+        setQuickError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   return (
     <>
@@ -121,19 +153,50 @@ export function DailyLessonStudentRow({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setDialogOpen(true)}
-            className={`w-full rounded-lg text-xs font-medium px-3 py-2 text-white ${
-              isAbsent
-                ? "bg-slate-400 hover:bg-slate-500"
-                : isScheduled
-                  ? "bg-red-600 hover:bg-red-700"
+          {quickError ? (
+            <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">
+              {quickError}
+            </p>
+          ) : null}
+
+          {isScheduled && !isAbsent ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleQuickPresent}
+                disabled={!canQuickPresent || isQuickPending}
+                className="rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-[10px] leading-snug font-medium px-2 py-2 text-left"
+              >
+                {isQuickPending ? "登録中…" : "出席登録"}
+                <span className="block text-[9px] font-normal opacity-90 mt-0.5">
+                  予定通り実施・備考なし
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                disabled={isQuickPending}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[10px] leading-snug font-medium px-2 py-2 text-left"
+              >
+                備考入力あり
+                <span className="block text-[9px] font-normal text-slate-500 mt-0.5">
+                  こちらから登録
+                </span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDialogOpen(true)}
+              className={`w-full rounded-lg text-xs font-medium px-3 py-2 text-white ${
+                isAbsent
+                  ? "bg-slate-400 hover:bg-slate-500"
                   : "bg-slate-500 hover:bg-slate-600"
-            }`}
-          >
-            {isScheduled ? "出席確認" : "内容を更新"}
-          </button>
+              }`}
+            >
+              {isScheduled ? "出席確認" : "内容を更新"}
+            </button>
+          )}
         </div>
       </div>
 
