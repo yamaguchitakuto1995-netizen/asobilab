@@ -20,10 +20,12 @@ import {
   formatPendingAbsenceMakeupDeadlineLabel,
   isMakeupRegistrationOpen,
   isPendingAbsenceMakeupOpen,
+  isSameMakeupSourceAndTarget,
   isStudentSlotOccupied,
   makeupRegistrationClosedMessage,
   makeupTargetDateRangeForSources,
   pendingAbsenceMakeupClosedMessage,
+  sameMakeupSourceAndTargetMessage,
   studentSlotOccupiedMessage,
   todayJstIso,
 } from "@/lib/registrationDeadlines";
@@ -440,6 +442,24 @@ export function AvailabilityPicker({
       ...(pendingByStudent[studentId] ?? []),
     ];
     const source = sources[studentId];
+    if (
+      source &&
+      isSameMakeupSourceAndTarget(
+        {
+          lessonDate: source.lessonDate,
+          period: source.period,
+          subject: source.subject,
+        },
+        {
+          lessonDate: selectedDate,
+          period: slot.period,
+          subject: slot.subject,
+        }
+      )
+    ) {
+      setSubmitError(sameMakeupSourceAndTargetMessage());
+      return;
+    }
     if (
       isStudentSlotOccupied(studentLessons, {
         lessonDate: selectedDate,
@@ -1102,7 +1122,23 @@ export function AvailabilityPicker({
                             ...(pendingByStudent[s.id] ?? []),
                           ];
                           const source = sources[s.id];
-                          const studentOccupied = isStudentSlotOccupied(
+                          const sameAsSource =
+                            source &&
+                            isSameMakeupSourceAndTarget(
+                              {
+                                lessonDate: source.lessonDate,
+                                period: source.period,
+                                subject: source.subject,
+                              },
+                              {
+                                lessonDate: selectedDate,
+                                period: slot.period,
+                                subject: slot.subject,
+                              }
+                            );
+                          const studentOccupied =
+                            !sameAsSource &&
+                            isStudentSlotOccupied(
                             studentLessons,
                             {
                               lessonDate: selectedDate,
@@ -1130,6 +1166,7 @@ export function AvailabilityPicker({
                           });
                           const disabled =
                             isFull ||
+                            sameAsSource ||
                             studentOccupied ||
                             !bookable.ok ||
                             submitting ||
@@ -1167,18 +1204,22 @@ export function AvailabilityPicker({
                                 </div>
                                 <span
                                   className={`shrink-0 text-sm font-bold rounded-lg px-3 py-1.5 ${
-                                    studentOccupied
-                                      ? "bg-slate-200 text-slate-600"
-                                      : isFull
-                                        ? "bg-rose-100 text-rose-700"
-                                        : "bg-emerald-100 text-emerald-700"
+                                    sameAsSource
+                                      ? "bg-amber-100 text-amber-800"
+                                      : studentOccupied
+                                        ? "bg-slate-200 text-slate-600"
+                                        : isFull
+                                          ? "bg-rose-100 text-rose-700"
+                                          : "bg-emerald-100 text-emerald-700"
                                   }`}
                                 >
-                                  {studentOccupied
-                                    ? "授業あり"
-                                    : isFull
-                                      ? "満員"
-                                      : `空き${slot.available}`}
+                                  {sameAsSource
+                                    ? "振替元と同じ"
+                                    : studentOccupied
+                                      ? "授業あり"
+                                      : isFull
+                                        ? "満員"
+                                        : `空き${slot.available}`}
                                 </span>
                               </button>
                             </li>

@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * - /apply: 保護者向け 振替申請フォーム
  * - /api/availability: 振替枠の空き状況 API (保護者フォームから直接 fetch)
  */
-const PUBLIC_PATHS = ["/login", "/auth", "/apply", "/api/availability"];
+const PUBLIC_PATHS = ["/login", "/auth", "/apply", "/schedule", "/api/availability"];
 
 function missingEnvResponse(): NextResponse {
   const jp =

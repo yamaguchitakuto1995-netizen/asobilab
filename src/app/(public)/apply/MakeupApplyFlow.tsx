@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
 import { Field, inputClass } from "@/components/Field";
+import {
+  readParentPortalSession,
+  writeParentPortalSession,
+} from "@/lib/parentPortalSession";
 import { AvailabilityPicker } from "./AvailabilityPicker";
 import { SiblingParticipantPicker } from "./SiblingParticipantPicker";
 import { lookupStudent, type FoundStudent } from "./actions";
@@ -26,6 +31,36 @@ export function MakeupApplyFlow({
 
   const [portalId, setPortalId] = useState(initialPortalId);
   const [birthday, setBirthday] = useState(initialBirthday);
+  const [autoTried, setAutoTried] = useState(false);
+
+  useEffect(() => {
+    if (autoTried || student) return;
+    setAutoTried(true);
+    const fromUrl =
+      initialPortalId.trim() && initialBirthday.trim()
+        ? { portalId: initialPortalId.trim(), birthday: initialBirthday.trim() }
+        : null;
+    const stored = readParentPortalSession();
+    const creds = fromUrl ?? stored;
+    if (!creds) return;
+    setPortalId(creds.portalId);
+    setBirthday(creds.birthday);
+    startTransition(async () => {
+      try {
+        const result = await lookupStudent(creds);
+        if (result.ok) {
+          setPortalId(creds.portalId);
+          setBirthday(creds.birthday);
+          setStudent(result.student);
+          setSiblings(result.siblings);
+          setParticipants(null);
+          setError(null);
+        }
+      } catch {
+        /* 自動ログイン失敗時はフォームを表示 */
+      }
+    });
+  }, [autoTried, student, initialPortalId, initialBirthday]);
 
   function handleLookup(formData: FormData) {
     const input = {
@@ -42,6 +77,7 @@ export function MakeupApplyFlow({
           setError(result.error);
           return;
         }
+        writeParentPortalSession(input);
         setStudent(result.student);
         setSiblings(result.siblings);
         setParticipants(null);
@@ -175,6 +211,14 @@ export function MakeupApplyFlow({
             {isPending ? "確認中…" : "次へ進む"}
           </button>
         </form>
+
+        <p className="text-xs text-slate-500 text-center pt-1">
+          授業予定の確認は
+          <Link href="/schedule" className="text-brand-700 hover:underline mx-1">
+            授業日一覧
+          </Link>
+          からもできます。
+        </p>
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-slate-500 space-y-1">

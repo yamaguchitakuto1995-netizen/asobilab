@@ -1068,6 +1068,54 @@ $list_sched$;
 revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) from public;
 grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) to anon, authenticated;
 
+-- 保護者ポータル: 授業予定一覧（出席・振替・欠席すべて）
+create or replace function public.list_student_schedule_for_portal(
+  p_student_id uuid,
+  p_portal_id  text,
+  p_birthday   date,
+  p_from_date  date default current_date,
+  p_to_date    date default (current_date + interval '120 days')
+)
+returns table (
+  id                 uuid,
+  lesson_date        date,
+  period             smallint,
+  subject            text,
+  attendance         attendance_status,
+  lesson_classroom   text,
+  source_lesson_date date,
+  source_period      smallint,
+  source_subject     text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $list_schedule$
+  select
+    l.id,
+    l.lesson_date,
+    l.period,
+    l.subject,
+    l.attendance,
+    l.lesson_classroom,
+    l.source_lesson_date,
+    l.source_period,
+    l.source_subject
+  from public.lessons l
+  where l.student_id = p_student_id
+    and public.verify_makeup_session_access(p_portal_id, p_birthday, p_student_id)
+    and l.status = 'scheduled'
+    and l.lesson_date >= p_from_date
+    and l.lesson_date <= p_to_date
+    and l.period is not null
+    and l.subject is not null
+  order by l.lesson_date, l.period;
+$list_schedule$;
+
+revoke all on function public.list_student_schedule_for_portal(uuid, text, date, date, date) from public;
+grant execute on function public.list_student_schedule_for_portal(uuid, text, date, date, date) to anon, authenticated;
+
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text, text);

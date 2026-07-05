@@ -353,3 +353,27 @@ export function isStudentSlotOccupied(
 export function studentSlotOccupiedMessage(): string {
   return "このコマにはすでに授業が登録されているため、振替先に選べません。";
 }
+
+/** 振替元と振替先が同じ日・コマ・教科か */
+export function isSameMakeupSourceAndTarget(
+  source: {
+    lessonDate: string;
+    period: number;
+    subject: string;
+  },
+  target: {
+    lessonDate: string;
+    period: number;
+    subject: string;
+  }
+): boolean {
+  return (
+    source.lessonDate === target.lessonDate &&
+    source.period === target.period &&
+    source.subject === target.subject
+  );
+}
+
+export function sameMakeupSourceAndTargetMessage(): string {
+  return "同じコマから同じコマへは振替できません。";
+}

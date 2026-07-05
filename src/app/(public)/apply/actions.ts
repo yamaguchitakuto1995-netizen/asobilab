@@ -10,8 +10,10 @@ import {
   isMakeupRegistrationOpen,
   isPendingAbsenceMakeupOpen,
   isStudentSlotOccupied,
+  isSameMakeupSourceAndTarget,
   makeupRegistrationClosedMessage,
   pendingAbsenceMakeupClosedMessage,
+  sameMakeupSourceAndTargetMessage,
   studentSlotOccupiedMessage,
   todayJstIso,
   validateMakeupTargetDate,
@@ -488,6 +490,7 @@ export async function markLessonAbsentForMakeup(
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
   revalidatePath("/parent");
 
   return { ok: true, lessonId: String(data) };
@@ -558,6 +561,23 @@ export async function bookMakeupLesson(input: {
     input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
+
+  if (
+    isSameMakeupSourceAndTarget(
+      {
+        lessonDate: input.sourceLessonDate,
+        period: input.sourcePeriod,
+        subject: input.sourceSubject,
+      },
+      {
+        lessonDate: input.lessonDate,
+        period: input.period,
+        subject: input.subject,
+      }
+    )
+  ) {
+    return { ok: false, error: sameMakeupSourceAndTargetMessage() };
+  }
 
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
@@ -680,6 +700,7 @@ export async function bookMakeupLesson(input: {
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
 
   return { ok: true, lessonId: String(data) };
 }
@@ -734,6 +755,23 @@ async function validateMakeupBooking(
     input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
+
+  if (
+    isSameMakeupSourceAndTarget(
+      {
+        lessonDate: input.sourceLessonDate,
+        period: input.sourcePeriod,
+        subject: input.sourceSubject,
+      },
+      {
+        lessonDate: input.lessonDate,
+        period: input.period,
+        subject: input.subject,
+      }
+    )
+  ) {
+    return { ok: false, error: sameMakeupSourceAndTargetMessage() };
+  }
 
   const lessonVenue = (input.lessonClassroom ?? "").trim();
   const supabase = await createClient();
@@ -879,6 +917,7 @@ export async function bookMakeupLessonsBatch(
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
   revalidatePath("/parent");
 
   return { ok: true, lessonIds: (data ?? []) as string[] };
