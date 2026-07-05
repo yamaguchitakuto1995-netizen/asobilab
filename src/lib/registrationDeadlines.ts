@@ -126,19 +126,13 @@ export function makeupTargetMaxDate(sourceLessonDate: string): string {
   return `${lastDay.getFullYear()}-${mm}-${dd}`;
 }
 
-/** 振替先の最早日（同月内前振替では欠席月の1日から） */
+/** 振替先の最早日（欠席月の1日以降かつ今日以降の遅い方） */
 export function makeupTargetMinDate(
   sourceLessonDate: string,
   today: string
 ): string {
   const sourceMonthStart = `${sourceLessonDate.slice(0, 7)}-01`;
-  const sourceYm = sourceLessonDate.slice(0, 7);
-  const todayYm = today.slice(0, 7);
-
-  if (sourceYm >= todayYm) {
-    return sourceMonthStart;
-  }
-  return today;
+  return sourceMonthStart > today ? sourceMonthStart : today;
 }
 
 export function formatMakeupTargetMaxLabel(sourceLessonDate: string): string {
@@ -178,12 +172,56 @@ export function validateMakeupTargetDate(
     };
   }
 
-  const sameMonthPreMakeup =
-    targetYm === sourceYm && targetLessonDate <= sourceLessonDate;
-  if (targetLessonDate < today && !sameMonthPreMakeup) {
+  if (targetLessonDate < today) {
     return {
       ok: false,
       error: "振替先は今日以降の日付を選んでください。",
+    };
+  }
+
+  return { ok: true };
+}
+
+/** 振替先コマがまだ予約可能か（当日は開始時刻まで） */
+export function canBookMakeupTarget(
+  opts: {
+    lessonDate: string;
+    period: number;
+    subject: string;
+    classroom: string | null;
+    periodTimes: ClassroomPeriodTime[];
+  },
+  now = new Date()
+): { ok: true } | { ok: false; error: string } {
+  const today = todayJstIso(now);
+
+  if (opts.lessonDate < today) {
+    return {
+      ok: false,
+      error: "振替先の授業はすでに終了しているため、登録できません。",
+    };
+  }
+
+  if (opts.lessonDate > today) {
+    return { ok: true };
+  }
+
+  const row = resolveClassroomPeriodTime(opts.periodTimes, {
+    classroom: opts.classroom,
+    lessonDate: opts.lessonDate,
+    period: opts.period,
+    subject: opts.subject,
+  });
+
+  if (!row) {
+    return { ok: true };
+  }
+
+  const startMs = jstDateTimeToMs(opts.lessonDate, row.start_time);
+  if (now.getTime() >= startMs) {
+    return {
+      ok: false,
+      error: `振替先の開始時刻（${formatClock(row.start_time)}）を過ぎたため、登録できません。`,
     };
   }
 

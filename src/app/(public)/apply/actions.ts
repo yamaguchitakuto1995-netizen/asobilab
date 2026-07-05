@@ -11,6 +11,7 @@ import {
   makeupRegistrationClosedMessage,
   todayJstIso,
   validateMakeupTargetDate,
+  canBookMakeupTarget,
 } from "@/lib/registrationDeadlines";
 import {
   readBirthdayFromInput,
@@ -567,6 +568,16 @@ export async function bookMakeupLesson(input: {
   }
 
   const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: (input.lessonClassroom ?? "").trim() || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,
@@ -720,6 +731,16 @@ async function validateMakeupBooking(
   }
 
   const periodTimes = await fetchClassroomPeriodTimes(supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: lessonVenue || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,

@@ -11,6 +11,7 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
+  canBookMakeupTarget,
   canRegisterAbsence,
   enumerateDatesInclusive,
   formatMakeupDeadlineLabel,
@@ -395,6 +396,17 @@ export function AvailabilityPicker({
           ? "先に「欠席済みの授業」を選んでください。"
           : "先に「欠席する授業」を選んでください。"
       );
+      return;
+    }
+    const bookable = canBookMakeupTarget({
+      lessonDate: selectedDate,
+      period: slot.period,
+      subject: slot.subject,
+      classroom: slot.classroom,
+      periodTimes,
+    });
+    if (!bookable.ok) {
+      setSubmitError(bookable.error);
       return;
     }
     setDestByStudent((prev) => ({ ...prev, [studentId]: slot }));
@@ -1033,7 +1045,18 @@ export function AvailabilityPicker({
                             pickedDest?.classroom === slot.classroom &&
                             pickedDest?.period === slot.period &&
                             pickedDest?.subject === slot.subject;
-                          const disabled = isFull || submitting || confirmOpen;
+                          const bookable = canBookMakeupTarget({
+                            lessonDate: selectedDate,
+                            period: slot.period,
+                            subject: slot.subject,
+                            classroom: slot.classroom,
+                            periodTimes,
+                          });
+                          const disabled =
+                            isFull ||
+                            !bookable.ok ||
+                            submitting ||
+                            confirmOpen;
                           return (
                             <li key={`${s.id}-${slot.classroom}-${slot.period}-${slot.subject}`}>
                               <button
