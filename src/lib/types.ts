@@ -222,6 +222,16 @@ export type Student = {
   persistent_memo?: string | null;
   /** 退会予定月 YYYY-MM（この月まで在籍） */
   withdrawal_until_ym?: string | null;
+  /** スクラッチログインID（プログラミング受講時） */
+  scratch_login_id?: string | null;
+  /** スクラッチログインPASS（プログラミング受講時） */
+  scratch_login_pass?: string | null;
+  /** マイクラログイン ID:PASS（任意） */
+  minecraft_login?: string | null;
+  /** 進級予定月 YYYY-MM */
+  promotion_scheduled_ym?: string | null;
+  /** 進級種別: normal=進級, skip_grade=飛び級 */
+  promotion_type?: "normal" | "skip_grade";
   note: string | null;
   created_at: string;
   created_by: string;

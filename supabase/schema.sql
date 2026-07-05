@@ -742,6 +742,22 @@ do $$ begin
     check (withdrawal_until_ym is null or withdrawal_until_ym ~ '^\d{4}-(0[1-9]|1[0-2])$');
 exception when duplicate_object then null; end $$;
 
+alter table public.students add column if not exists scratch_login_id text;
+alter table public.students add column if not exists scratch_login_pass text;
+alter table public.students add column if not exists minecraft_login text;
+alter table public.students add column if not exists promotion_scheduled_ym text;
+alter table public.students add column if not exists promotion_type text not null default 'normal';
+
+do $$ begin
+  alter table public.students add constraint students_promotion_scheduled_ym_check
+    check (promotion_scheduled_ym is null or promotion_scheduled_ym ~ '^\d{4}-(0[1-9]|1[0-2])$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.students add constraint students_promotion_type_check
+    check (promotion_type in ('normal', 'skip_grade'));
+exception when duplicate_object then null; end $$;
+
 create index if not exists students_sibling_group_id_idx
   on public.students (sibling_group_id)
   where sibling_group_id is not null;

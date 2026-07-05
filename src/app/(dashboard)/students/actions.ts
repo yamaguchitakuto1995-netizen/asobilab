@@ -44,6 +44,8 @@ import { syncEnrollmentLessons } from "@/lib/syncEnrollmentLessons";
 import { applyStudentLeaveEffects } from "@/lib/applyStudentLeave";
 import { applyWithdrawalToScheduledLessons } from "@/lib/applyStudentWithdrawal";
 import { readLeavePeriodFromForm } from "@/lib/studentLeave";
+import { readProgrammingLoginFromForm } from "@/lib/studentProgrammingLogin";
+import { readPromotionFromForm } from "@/lib/studentPromotion";
 import { readWithdrawalUntilFromForm } from "@/lib/studentWithdrawal";
 import type { LessonCapacity } from "@/lib/types";
 
@@ -339,6 +341,16 @@ export async function createStudent(formData: FormData) {
     );
   }
 
+  const promotion = readPromotionFromForm(formData);
+  if (promotion.error) {
+    redirect(`/students/new?error=${encodeURIComponent(promotion.error)}`);
+  }
+
+  const progLogin = readProgrammingLoginFromForm(formData, subjects);
+  if (progLogin.error) {
+    redirect(`/students/new?error=${encodeURIComponent(progLogin.error)}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -365,6 +377,11 @@ export async function createStudent(formData: FormData) {
       leave_from_ym: leavePeriod.leave_from_ym,
       leave_until_ym: leavePeriod.leave_until_ym,
       withdrawal_until_ym: withdrawalPeriod.withdrawal_until_ym,
+      scratch_login_id: progLogin.value.scratch_login_id,
+      scratch_login_pass: progLogin.value.scratch_login_pass,
+      minecraft_login: progLogin.value.minecraft_login,
+      promotion_scheduled_ym: promotion.promotion_scheduled_ym,
+      promotion_type: promotion.promotion_type,
       note: note || null,
       created_by: user.id,
     })
@@ -549,6 +566,16 @@ export async function updateStudent(formData: FormData) {
     redirect(`${editPath}?error=${encodeURIComponent(withdrawalPeriod.error)}`);
   }
 
+  const promotion = readPromotionFromForm(formData);
+  if (promotion.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(promotion.error)}`);
+  }
+
+  const progLogin = readProgrammingLoginFromForm(formData, subjects);
+  if (progLogin.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(progLogin.error)}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -575,6 +602,11 @@ export async function updateStudent(formData: FormData) {
       leave_from_ym: leavePeriod.leave_from_ym,
       leave_until_ym: leavePeriod.leave_until_ym,
       withdrawal_until_ym: withdrawalPeriod.withdrawal_until_ym,
+      scratch_login_id: progLogin.value.scratch_login_id,
+      scratch_login_pass: progLogin.value.scratch_login_pass,
+      minecraft_login: progLogin.value.minecraft_login,
+      promotion_scheduled_ym: promotion.promotion_scheduled_ym,
+      promotion_type: promotion.promotion_type,
       note: note || null,
     })
     .eq("id", id);
