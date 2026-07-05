@@ -27,12 +27,19 @@ export function lessonYearMonth(lessonDate: string): string {
 /** 授業日の月が休会期間に含まれるか */
 export function isLessonMonthOnLeave(
   lessonDate: string,
-  leave: StudentLeavePeriod
+  leave: StudentLeavePeriod,
+  now = new Date()
 ): boolean {
-  const { leave_from_ym, leave_until_ym } = leave;
-  if (!leave_from_ym || !leave_until_ym) return false;
+  const until = leave.leave_until_ym?.trim();
+  if (!until) return false;
+
+  let from = leave.leave_from_ym?.trim();
+  if (!from) {
+    from = todayJstIso(now).slice(0, 7);
+  }
+
   const ym = lessonYearMonth(lessonDate);
-  return ym >= leave_from_ym && ym <= leave_until_ym;
+  return ym >= from && ym <= until;
 }
 
 export function readLeavePeriodFromForm(formData: FormData): {
