@@ -2,22 +2,21 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   quickPresentLessonFromDailyBoard,
 } from "@/app/(dashboard)/daily/actions";
 import { AttendanceConfirmDialog } from "@/components/AttendanceConfirmDialog";
 import { TextbookCourseChip } from "@/components/TextbookCourseChip";
+import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
 import {
   dailyAttendanceStatusLabel,
+  effectiveDailyLessonAttendance,
   isDailyAbsentLesson,
   lessonTodayTextLabel,
   lessonTodayTextParts,
 } from "@/lib/todayLessonDisplay";
 import { formatCarryOverMemoDisplay } from "@/lib/studentCarryOverMemo";
-import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
-import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
-import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
 import type { AttendanceStatus, ClassroomPeriodTime } from "@/lib/types";
 import type { DailyLessonItem } from "./DailyLessonCarousel";
 
@@ -42,11 +41,20 @@ export function DailyLessonStudentRow({
   const [isQuickPending, startQuickTransition] = useTransition();
   const st = lesson.students;
   const regularClassroom = st?.classroom ?? null;
+
+  const lessonForDisplay = useMemo(
+    () => ({
+      ...lesson,
+      attendance: effectiveDailyLessonAttendance(lesson, st),
+    }),
+    [lesson, st]
+  );
+
   const todayText = lessonTodayTextLabel(lesson, st);
   const todayTextParts = lessonTodayTextParts(lesson, st);
-  const attendanceLabel = dailyAttendanceStatusLabel(lesson);
+  const attendanceLabel = dailyAttendanceStatusLabel(lessonForDisplay);
   const carryOverMemo = st ? formatCarryOverMemoDisplay(st) : null;
-  const isAbsent = isDailyAbsentLesson(lesson);
+  const isAbsent = isDailyAbsentLesson(lessonForDisplay);
   const isScheduled = lesson.status === "scheduled";
   const canQuickPresent =
     isScheduled &&
@@ -54,12 +62,8 @@ export function DailyLessonStudentRow({
     todayText.trim() !== "" &&
     todayText.trim() !== "—";
 
-  const isProgrammingLesson = lesson.subject === "プログラミング";
-  const showProgLogin =
-    isProgrammingLesson && st && hasProgrammingLoginDisplay(st);
-
   const defaultAttendance: AttendanceStatus =
-    lesson.attendance === "makeup" ? "makeup" : "present";
+    lessonForDisplay.attendance === "makeup" ? "makeup" : "present";
 
   function handleQuickPresent() {
     if (!canQuickPresent || isQuickPending) return;
@@ -89,7 +93,7 @@ export function DailyLessonStudentRow({
       >
         {isAbsent ? (
           <div className="bg-slate-500 px-3 py-1.5 text-center text-[11px] font-bold tracking-wide text-white">
-            {lesson.attendance === "on_leave"
+            {lessonForDisplay.attendance === "on_leave"
               ? isScheduled
                 ? "休会中"
                 : "休会"
@@ -127,10 +131,6 @@ export function DailyLessonStudentRow({
                   </p>
                 ) : null}
               </div>
-
-              {showProgLogin ? (
-                <ProgrammingLoginDisplay student={st} compact />
-              ) : null}
               <dl className={`text-[11px] space-y-0.5 ${isAbsent ? "text-slate-500" : "text-slate-600"}`}>
                 <div className="flex gap-1">
                   <dt className="text-slate-400 shrink-0">学年</dt>
