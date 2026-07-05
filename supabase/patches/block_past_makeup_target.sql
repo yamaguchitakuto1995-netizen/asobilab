@@ -205,11 +205,15 @@ begin
     raise exception '振替の元に指定できる授業が見つかりません。一覧にない場合は教室までお問い合わせください。';
   end if;
 
-  perform public.assert_makeup_registration_open(v_chain_date);
-
   v_max_target := (
     date_trunc('month', v_chain_date) + interval '3 months' - interval '1 day'
   )::date;
+
+  if v_src_attendance in ('present', 'makeup') then
+    perform public.assert_makeup_registration_open(v_chain_date);
+  elsif (now() at time zone 'Asia/Tokyo') > (v_max_target + time '23:59:59') then
+    raise exception '振替登録は欠席月の翌々月末（% 23:59）までです。', to_char(v_max_target, 'MM/DD');
+  end if;
 
   if p_lesson_date > v_max_target then
     raise exception '振替先は欠席月の翌々月末（%）まで選べます。', to_char(v_max_target, 'MM/DD');
