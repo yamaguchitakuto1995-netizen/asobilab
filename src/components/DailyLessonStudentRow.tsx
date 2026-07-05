@@ -79,7 +79,13 @@ export function DailyLessonStudentRow({
       >
         {isAbsent ? (
           <div className="bg-slate-500 px-3 py-1.5 text-center text-[11px] font-bold tracking-wide text-white">
-            {isScheduled ? "欠席予定" : "欠席"}
+            {lesson.attendance === "on_leave"
+              ? isScheduled
+                ? "休会中"
+                : "休会"
+              : isScheduled
+                ? "欠席予定"
+                : "欠席"}
           </div>
         ) : null}
 

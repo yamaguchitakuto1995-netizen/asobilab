@@ -129,6 +129,8 @@ export function isRobotNextText(s: string): s is RobotNextText {
 
 const TWO_LAP_ROBOT_COURSES = new Set<string>([R_BASIC, R_MIDDLE, R_ADV]);
 
+export { TWO_LAP_ROBOT_COURSES };
+
 /**
  * DB・フォーム用に「コース」と「テキスト名」を分けて扱う。
  * - 2段（大枠 / 単元）: テキスト名は単元のみ（例: 1-1）

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { attendanceForScheduledEnrollment } from "@/lib/applyStudentLeave";
 import { todayIso } from "@/lib/date";
+import type { StudentLeavePeriod } from "@/lib/studentLeave";
 import { dowOf } from "@/lib/days";
 import { weekdayOccurrenceInMonth } from "@/lib/enrollmentSchedule";
 import type { ClassroomPeriodTime, LessonCapacity } from "@/lib/types";
@@ -9,7 +11,7 @@ export type PeriodTimeSlot = Pick<
   "classroom" | "lesson_date" | "period" | "subject"
 >;
 
-type StudentEnrollment = {
+type StudentEnrollment = StudentLeavePeriod & {
   id: string;
   created_by: string;
   classroom: string | null;
@@ -23,7 +25,7 @@ type LessonInsert = {
   teacher_id: string;
   lesson_date: string;
   period: number;
-  attendance: "present";
+  attendance: "present" | "on_leave";
   subject: string;
   status: "scheduled";
   created_from_enrollment: true;
@@ -100,7 +102,7 @@ async function loadStudentsForClassrooms(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, created_by, classroom, subjects, enrollment_robot_capacity_id, enrollment_prog_capacity_id"
+      "id, created_by, classroom, subjects, enrollment_robot_capacity_id, enrollment_prog_capacity_id, leave_from_ym, leave_until_ym"
     )
     .in("classroom", classrooms)
     .or(
@@ -284,7 +286,7 @@ export async function createScheduledLessonsForPeriodTimes(
             teacher_id: teacherIdFallback,
             lesson_date: pt.lesson_date,
             period: capacity.period,
-            attendance: "present",
+            attendance: attendanceForScheduledEnrollment(pt.lesson_date, student),
             subject,
             status: "scheduled",
             created_from_enrollment: true,
@@ -321,6 +323,16 @@ export async function syncStudentRegularAttendance(
   p: SyncStudentRegularAttendanceParams
 ): Promise<{ created: number; error: string | null }> {
   const today = todayIso();
+
+  const { data: leaveRow, error: leaveErr } = await supabase
+    .from("students")
+    .select("leave_from_ym, leave_until_ym")
+    .eq("id", p.studentId)
+    .maybeSingle<StudentLeavePeriod>();
+
+  if (leaveErr) {
+    return { created: 0, error: leaveErr.message };
+  }
 
   const { error: delErr } = await supabase
     .from("lessons")
@@ -392,6 +404,8 @@ export async function syncStudentRegularAttendance(
     subjects: p.subjects,
     enrollment_robot_capacity_id: p.robotCapacityId,
     enrollment_prog_capacity_id: p.progCapacityId,
+    leave_from_ym: leaveRow?.leave_from_ym ?? null,
+    leave_until_ym: leaveRow?.leave_until_ym ?? null,
   };
   const capsById = byId;
 
@@ -420,7 +434,7 @@ export async function syncStudentRegularAttendance(
         teacher_id: p.teacherId,
         lesson_date: pt.lesson_date,
         period: capacity.period,
-        attendance: "present",
+        attendance: attendanceForScheduledEnrollment(pt.lesson_date, student),
         subject,
         status: "scheduled",
         created_from_enrollment: true,

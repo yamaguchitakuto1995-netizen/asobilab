@@ -24,7 +24,7 @@ export type LessonLikeForInventory = {
 export function countsTowardTextbookInventory(
   lesson: Pick<LessonLikeForInventory, "status" | "attendance">
 ): boolean {
-  return !(lesson.status === "scheduled" && lesson.attendance === "absent");
+  return !(lesson.status === "scheduled" && (lesson.attendance === "absent" || lesson.attendance === "on_leave"));
 }
 
 /**

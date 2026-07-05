@@ -17,7 +17,7 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   create type attendance_status as enum (
-    'present', 'absent', 'late', 'makeup'
+    'present', 'absent', 'late', 'makeup', 'on_leave'
   );
 exception when duplicate_object then null; end $$;
 
@@ -730,6 +730,9 @@ create unique index if not exists students_portal_id_unique
   where portal_id is not null;
 
 alter table public.students add column if not exists name_kana text;
+
+alter table public.students add column if not exists leave_from_ym text;
+alter table public.students add column if not exists leave_until_ym text;
 
 create index if not exists students_sibling_group_id_idx
   on public.students (sibling_group_id)

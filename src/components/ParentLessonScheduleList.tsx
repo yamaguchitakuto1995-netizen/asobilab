@@ -60,6 +60,7 @@ export function ParentLessonScheduleList({
               })
             : null;
         const isMakeup = lesson.attendance === "makeup";
+        const isOnLeave = lesson.attendance === "on_leave";
 
         return (
           <li
@@ -106,6 +107,8 @@ export function ParentLessonScheduleList({
               className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
                 isMakeup
                   ? "bg-violet-100 text-violet-800 ring-violet-600/20"
+                  : isOnLeave
+                    ? "bg-slate-200 text-slate-700 ring-slate-400/40"
                   : lesson.attendance === "absent"
                     ? "bg-amber-100 text-amber-900 ring-amber-600/20"
                     : "bg-brand-100 text-brand-800 ring-brand-600/20"

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentLeaveField } from "@/components/StudentLeaveField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
@@ -128,6 +129,8 @@ export default async function NewStudentPage({
           classrooms={classrooms}
           capacityRows={capRows ?? []}
         />
+
+        <StudentLeaveField />
 
         <Field
           label="メモ"

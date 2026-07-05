@@ -21,6 +21,7 @@ const RECORDED_BG: Record<AttendanceStatus, string> = {
   absent:  "bg-rose-500   text-white",
   late:    "bg-amber-500  text-white",
   makeup:  "bg-sky-500    text-white",
+  on_leave: "bg-slate-400 text-white",
 };
 
 const SCHEDULED_BG: Record<AttendanceStatus, string> = {
@@ -28,6 +29,7 @@ const SCHEDULED_BG: Record<AttendanceStatus, string> = {
   absent:  "bg-white text-rose-700    border-2 border-dashed border-rose-400",
   late:    "bg-white text-amber-700   border-2 border-dashed border-amber-400",
   makeup:  "bg-white text-sky-700     border-2 border-dashed border-sky-400",
+  on_leave: "bg-slate-100 text-slate-600 border-2 border-dashed border-slate-400",
 };
 
 export function AttendanceCalendar({ ym, lessons, baseHref }: Props) {
