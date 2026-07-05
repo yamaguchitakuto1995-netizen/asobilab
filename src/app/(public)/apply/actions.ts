@@ -490,6 +490,7 @@ export async function markLessonAbsentForMakeup(
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
   revalidatePath("/parent");
 
   return { ok: true, lessonId: String(data) };
@@ -699,6 +700,7 @@ export async function bookMakeupLesson(input: {
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
 
   return { ok: true, lessonId: String(data) };
 }
@@ -915,6 +917,7 @@ export async function bookMakeupLessonsBatch(
 
   revalidatePath("/");
   revalidatePath("/apply");
+  revalidatePath("/schedule");
   revalidatePath("/parent");
 
   return { ok: true, lessonIds: (data ?? []) as string[] };

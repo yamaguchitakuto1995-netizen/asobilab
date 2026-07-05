@@ -13,16 +13,27 @@ export default function PublicLayout({
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <header className="bg-white border-b border-slate-200">
-        <div className="mx-auto max-w-2xl px-4 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-2xl px-4 h-14 flex items-center justify-between gap-3">
           <Link
-            href="/apply"
-            className="font-bold tracking-tight text-slate-900 text-base sm:text-lg"
+            href="/schedule"
+            className="font-bold tracking-tight text-slate-900 text-base sm:text-lg shrink-0"
           >
             <BrandMark />
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              振替申請フォーム
-            </span>
           </Link>
+          <nav className="flex items-center gap-3 text-xs sm:text-sm">
+            <Link
+              href="/schedule"
+              className="text-slate-600 hover:text-brand-700 font-medium"
+            >
+              授業日
+            </Link>
+            <Link
+              href="/apply"
+              className="text-slate-600 hover:text-brand-700 font-medium"
+            >
+              振替申請
+            </Link>
+          </nav>
         </div>
       </header>
       <main className="flex-1">
