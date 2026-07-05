@@ -5,6 +5,27 @@ import {
   type CourseSubject,
 } from "@/lib/types";
 
+function dailyLessonSlotKey(lesson: DailyLessonItem): string {
+  return `${lesson.student_id}|${lesson.lesson_date}|${lesson.period ?? ""}|${lesson.subject ?? ""}`;
+}
+
+/** 同一コマの重複行を統合（記録済みを予定より優先） */
+export function dedupeDailyLessons(lessons: DailyLessonItem[]): DailyLessonItem[] {
+  const byKey = new Map<string, DailyLessonItem>();
+  for (const lesson of lessons) {
+    const key = dailyLessonSlotKey(lesson);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, lesson);
+      continue;
+    }
+    if (existing.status === "scheduled" && lesson.status === "recorded") {
+      byKey.set(key, lesson);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 export function lessonClassroomForFilter(lesson: DailyLessonItem): string | null {
   return effectiveLessonClassroom(lesson, lesson.students?.classroom ?? null);
 }
@@ -46,7 +67,7 @@ export function filterAndSortDailyLessons(
   selectedSubjects: ReadonlySet<string>,
   classroomOrder: ReadonlyMap<string, number>
 ): DailyLessonItem[] {
-  return lessons
+  return dedupeDailyLessons(lessons)
     .filter((l) => {
       const classroom = lessonClassroomForFilter(l);
       const classroomOk =

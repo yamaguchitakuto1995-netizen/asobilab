@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { AttendanceConfirmDialog } from "@/components/AttendanceConfirmDialog";
-import { SubjectChip } from "@/components/SubjectChip";
 import { TextbookCourseChip } from "@/components/TextbookCourseChip";
 import {
   dailyAttendanceStatusLabel,
@@ -77,12 +76,6 @@ export function DailyLessonStudentRow({
                 <div className="flex gap-1">
                   <dt className="text-slate-400 shrink-0">レギュラー教室</dt>
                   <dd>{regularClassroom ?? "—"}</dd>
-                </div>
-                <div className="flex gap-1 items-center">
-                  <dt className="text-slate-400 shrink-0">教科</dt>
-                  <dd>
-                    <SubjectChip subject={lesson.subject} />
-                  </dd>
                 </div>
                 <div className="flex gap-1 items-center">
                   <dt className="text-slate-400 shrink-0">出欠</dt>

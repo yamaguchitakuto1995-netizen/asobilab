@@ -15,7 +15,6 @@ import {
   type ClassroomPeriodTime,
 } from "@/lib/types";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
-import { SubjectChip } from "@/components/SubjectChip";
 import { DailyLessonStudentRow } from "@/components/DailyLessonStudentRow";
 import type { Lesson } from "@/lib/types";
 
@@ -92,7 +91,6 @@ export function DailyLessonCarousel({
             {multiSegment ? (
               <div className="flex flex-wrap items-center gap-2 mb-2 px-4 sm:px-0">
                 <ClassroomBadge classroom={segment.classroom} size="md" />
-                <SubjectChip subject={segment.subject} size="md" />
                 <span className="text-xs text-slate-500">
                   {segment.lessons.length}名 · {periodGroups.length}コマ
                 </span>

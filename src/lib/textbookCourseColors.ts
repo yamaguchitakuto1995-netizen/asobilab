@@ -16,8 +16,8 @@ export type TextbookCourseChipKey =
   | "default";
 
 const CHIP_STYLES: Record<TextbookCourseChipKey, string> = {
-  "robot-prep": "bg-pink-100 text-pink-800 ring-pink-500/20",
-  "robot-primary": "bg-pink-200 text-pink-900 ring-pink-600/30",
+  "robot-prep": "bg-pink-50 text-pink-500 ring-pink-200/90",
+  "robot-primary": "bg-fuchsia-300 text-fuchsia-950 ring-fuchsia-700/40",
   "robot-basic": "bg-orange-100 text-orange-800 ring-orange-600/20",
   "robot-middle": "bg-emerald-100 text-emerald-800 ring-emerald-600/20",
   "robot-advance": "bg-violet-100 text-violet-800 ring-violet-600/20",
