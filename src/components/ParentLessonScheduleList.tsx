@@ -30,7 +30,10 @@ export function ParentLessonScheduleList({
   studentClassroom,
   periodTimes,
 }: Props) {
-  const visibleLessons = visiblePortalScheduleLessons(lessons);
+  const visibleLessons = visiblePortalScheduleLessons(lessons, {
+    studentClassroom,
+    periodTimes,
+  });
 
   if (visibleLessons.length === 0) {
     return (
