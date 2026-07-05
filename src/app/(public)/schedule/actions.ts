@@ -11,7 +11,7 @@ import {
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   studentEnrollsInSubject,
 } from "@/lib/types";
-import type { PortalScheduleLesson } from "@/components/ParentLessonScheduleList";
+import type { PortalScheduleLesson } from "@/lib/portalScheduleLessons";
 import {
   lookupStudent,
   type FoundStudent,

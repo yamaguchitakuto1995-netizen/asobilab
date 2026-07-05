@@ -6,23 +6,16 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
-  SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
-  type AttendanceStatus,
   type ClassroomPeriodTime,
 } from "@/lib/types";
+import {
+  portalScheduleAttendanceLabel,
+  visiblePortalScheduleLessons,
+  type PortalScheduleLesson,
+} from "@/lib/portalScheduleLessons";
 
-export type PortalScheduleLesson = {
-  id: string;
-  lesson_date: string;
-  period: number;
-  subject: string;
-  attendance: AttendanceStatus;
-  lesson_classroom?: string | null;
-  source_lesson_date?: string | null;
-  source_period?: number | null;
-  source_subject?: string | null;
-};
+export type { PortalScheduleLesson };
 
 type Props = {
   lessons: PortalScheduleLesson[];
@@ -37,7 +30,9 @@ export function ParentLessonScheduleList({
   studentClassroom,
   periodTimes,
 }: Props) {
-  if (lessons.length === 0) {
+  const visibleLessons = visiblePortalScheduleLessons(lessons);
+
+  if (visibleLessons.length === 0) {
     return (
       <div className="bg-white border border-dashed border-sky-200 rounded-xl p-6 text-center text-sm text-slate-500">
         {studentName} さんのこの期間の授業予定はありません。
@@ -47,7 +42,7 @@ export function ParentLessonScheduleList({
 
   return (
     <ul className="bg-white border border-sky-200 rounded-2xl divide-y divide-sky-100 overflow-hidden">
-      {lessons.map((lesson) => {
+      {visibleLessons.map((lesson) => {
         const lessonVenue = effectiveLessonClassroom(
           lesson,
           studentClassroom
@@ -109,11 +104,11 @@ export function ParentLessonScheduleList({
                 isMakeup
                   ? "bg-violet-100 text-violet-800 ring-violet-600/20"
                   : lesson.attendance === "absent"
-                    ? "bg-slate-100 text-slate-700 ring-slate-300/50"
+                    ? "bg-amber-100 text-amber-900 ring-amber-600/20"
                     : "bg-brand-100 text-brand-800 ring-brand-600/20"
               }`}
             >
-              {SCHEDULED_ATTENDANCE_LABEL[lesson.attendance]}
+              {portalScheduleAttendanceLabel(lesson)}
             </span>
           </li>
         );
