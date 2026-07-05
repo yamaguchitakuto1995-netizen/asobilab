@@ -13,6 +13,7 @@ import {
   lessonTodayTextLabel,
   lessonTodayTextParts,
 } from "@/lib/todayLessonDisplay";
+import { formatCarryOverMemoDisplay } from "@/lib/studentCarryOverMemo";
 import type { AttendanceStatus, ClassroomPeriodTime } from "@/lib/types";
 import type { DailyLessonItem } from "./DailyLessonCarousel";
 
@@ -40,6 +41,7 @@ export function DailyLessonStudentRow({
   const todayText = lessonTodayTextLabel(lesson, st);
   const todayTextParts = lessonTodayTextParts(lesson, st);
   const attendanceLabel = dailyAttendanceStatusLabel(lesson);
+  const carryOverMemo = st ? formatCarryOverMemoDisplay(st) : null;
   const isAbsent = isDailyAbsentLesson(lesson);
   const isScheduled = lesson.status === "scheduled";
   const canQuickPresent =
@@ -153,6 +155,16 @@ export function DailyLessonStudentRow({
                   <dt className="text-slate-400 shrink-0">前回の備考</dt>
                   <dd className={`whitespace-pre-wrap ${isAbsent ? "text-slate-500" : "text-slate-700"}`}>
                     {previousMemo ?? "—"}
+                  </dd>
+                </div>
+                <div className="flex gap-1">
+                  <dt className="text-slate-400 shrink-0">備考（継続）</dt>
+                  <dd
+                    className={`whitespace-pre-wrap ${
+                      isAbsent ? "text-slate-500" : "text-amber-900"
+                    }`}
+                  >
+                    {carryOverMemo ?? "—"}
                   </dd>
                 </div>
               </dl>

@@ -19,6 +19,8 @@ type SaveLessonInput = {
   attendance: AttendanceStatus;
   textbook: string;
   textMemo: string;
+  viaDetail: boolean;
+  persistentMemo?: string;
 };
 
 async function saveLessonFromDailyBoard(
@@ -72,11 +74,24 @@ async function saveLessonFromDailyBoard(
       attendance,
       textbook,
       text_memo: textMemo || null,
+      registered_via_detail: input.viaDetail,
     })
     .eq("id", lessonId);
 
   if (error) {
     return { ok: false, error: error.message };
+  }
+
+  if (input.viaDetail) {
+    const persistentMemo = (input.persistentMemo ?? "").trim();
+    const { error: memoErr } = await supabase
+      .from("students")
+      .update({ persistent_memo: persistentMemo || null })
+      .eq("id", before.student_id);
+
+    if (memoErr) {
+      return { ok: false, error: memoErr.message };
+    }
   }
 
   if (before.status === "scheduled") {
@@ -106,6 +121,8 @@ export async function confirmLessonFromDailyBoard(
     attendance: attendance as AttendanceStatus,
     textbook: String(formData.get("textbook") ?? ""),
     textMemo: String(formData.get("text_memo") ?? ""),
+    viaDetail: true,
+    persistentMemo: String(formData.get("persistent_memo") ?? ""),
   });
 }
 
@@ -120,5 +137,6 @@ export async function quickPresentLessonFromDailyBoard(input: {
     attendance: input.attendance ?? "present",
     textbook: input.textbook,
     textMemo: "",
+    viaDetail: false,
   });
 }

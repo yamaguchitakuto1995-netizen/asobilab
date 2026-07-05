@@ -3,6 +3,7 @@ import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
+import { StudentWithdrawalField } from "@/components/StudentWithdrawalField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
@@ -131,6 +132,7 @@ export default async function NewStudentPage({
         />
 
         <StudentLeaveField />
+        <StudentWithdrawalField />
 
         <Field
           label="メモ"

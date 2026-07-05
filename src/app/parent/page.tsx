@@ -24,6 +24,7 @@ import {
   type Lesson,
   type Student,
 } from "@/lib/types";
+import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 
 type LessonRow = Lesson & {
   students: Pick<Student, "id" | "name" | "grade" | "classroom"> | null;
@@ -76,7 +77,7 @@ export default async function ParentHomePage() {
   const { data: students } = await supabase
     .from("students")
     .select(
-      "id, name, grade, classroom, portal_id, birthday, subjects, sibling_group_id, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
+      "id, name, grade, classroom, portal_id, birthday, subjects, sibling_group_id, withdrawal_until_ym, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
     )
     .in("id", studentIds)
     .returns<
@@ -90,6 +91,7 @@ export default async function ParentHomePage() {
         | "birthday"
         | "subjects"
         | "sibling_group_id"
+        | "withdrawal_until_ym"
         | "next_text_robot"
         | "next_text_robot_course"
         | "next_text_robot_text"
@@ -130,6 +132,13 @@ export default async function ParentHomePage() {
   const lessonsByStudent = new Map<string, LessonRow[]>();
   for (const id of studentIds) lessonsByStudent.set(id, []);
   for (const lesson of lessons ?? []) {
+    const student = byStudent.get(lesson.student_id);
+    if (
+      student &&
+      isLessonAfterWithdrawal(lesson.lesson_date, student.withdrawal_until_ym)
+    ) {
+      continue;
+    }
     const arr = lessonsByStudent.get(lesson.student_id);
     if (arr) arr.push(lesson);
   }

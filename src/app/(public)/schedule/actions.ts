@@ -12,6 +12,7 @@ import {
   studentEnrollsInSubject,
 } from "@/lib/types";
 import type { PortalScheduleLesson } from "@/lib/portalScheduleLessons";
+import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import {
   lookupStudent,
   type FoundStudent,
@@ -59,6 +60,14 @@ export async function listStudentScheduleForPortal(input: {
   const end = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
   const supabase = await createClient();
 
+  const { data: studentRow, error: studentErr } = await supabase
+    .from("students")
+    .select("withdrawal_until_ym")
+    .eq("id", input.studentId)
+    .maybeSingle<{ withdrawal_until_ym: string | null }>();
+
+  if (studentErr) return { ok: false, error: studentErr.message };
+
   const { data, error } = await supabase.rpc("list_student_schedule_for_portal", {
     p_student_id: input.studentId,
     p_portal_id: portalIdResult.value,
@@ -89,6 +98,13 @@ export async function listStudentScheduleForPortal(input: {
   if (input.subjects?.length) {
     lessons = lessons.filter((l) =>
       studentEnrollsInSubject(input.subjects!, l.subject)
+    );
+  }
+
+  const withdrawalYm = studentRow?.withdrawal_until_ym ?? null;
+  if (withdrawalYm) {
+    lessons = lessons.filter(
+      (l) => !isLessonAfterWithdrawal(l.lesson_date, withdrawalYm)
     );
   }
 

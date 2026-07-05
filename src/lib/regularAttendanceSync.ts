@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { attendanceForScheduledEnrollment } from "@/lib/applyStudentLeave";
 import { todayIso } from "@/lib/date";
 import type { StudentLeavePeriod } from "@/lib/studentLeave";
+import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { dowOf } from "@/lib/days";
 import { weekdayOccurrenceInMonth } from "@/lib/enrollmentSchedule";
 import type { ClassroomPeriodTime, LessonCapacity } from "@/lib/types";
@@ -18,6 +19,7 @@ type StudentEnrollment = StudentLeavePeriod & {
   subjects: string[];
   enrollment_robot_capacity_id: string | null;
   enrollment_prog_capacity_id: string | null;
+  withdrawal_until_ym?: string | null;
 };
 
 type LessonInsert = {
@@ -102,7 +104,7 @@ async function loadStudentsForClassrooms(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, created_by, classroom, subjects, enrollment_robot_capacity_id, enrollment_prog_capacity_id, leave_from_ym, leave_until_ym"
+      "id, created_by, classroom, subjects, enrollment_robot_capacity_id, enrollment_prog_capacity_id, leave_from_ym, leave_until_ym, withdrawal_until_ym"
     )
     .in("classroom", classrooms)
     .or(
@@ -277,6 +279,9 @@ export async function createScheduledLessonsForPeriodTimes(
       for (const student of students) {
         const matches = matchingEnrollmentsForPeriodTime(pt, student, capsById);
         for (const { subject, capacity } of matches) {
+          if (isLessonAfterWithdrawal(pt.lesson_date, student.withdrawal_until_ym)) {
+            continue;
+          }
           const key = lessonKey(student.id, pt.lesson_date, capacity.period, subject);
           if (occupied.has(key)) continue;
           occupied.add(key);
@@ -326,9 +331,9 @@ export async function syncStudentRegularAttendance(
 
   const { data: leaveRow, error: leaveErr } = await supabase
     .from("students")
-    .select("leave_from_ym, leave_until_ym")
+    .select("leave_from_ym, leave_until_ym, withdrawal_until_ym")
     .eq("id", p.studentId)
-    .maybeSingle<StudentLeavePeriod>();
+    .maybeSingle<StudentLeavePeriod & { withdrawal_until_ym?: string | null }>();
 
   if (leaveErr) {
     return { created: 0, error: leaveErr.message };
@@ -406,6 +411,7 @@ export async function syncStudentRegularAttendance(
     enrollment_prog_capacity_id: p.progCapacityId,
     leave_from_ym: leaveRow?.leave_from_ym ?? null,
     leave_until_ym: leaveRow?.leave_until_ym ?? null,
+    withdrawal_until_ym: leaveRow?.withdrawal_until_ym ?? null,
   };
   const capsById = byId;
 
@@ -426,6 +432,9 @@ export async function syncStudentRegularAttendance(
   for (const pt of (periodTimes ?? []) as PeriodTimeSlot[]) {
     const matches = matchingEnrollmentsForPeriodTime(pt, student, capsById);
     for (const { subject, capacity } of matches) {
+      if (isLessonAfterWithdrawal(pt.lesson_date, student.withdrawal_until_ym)) {
+        continue;
+      }
       const key = `${pt.lesson_date}|${capacity.period}|${subject}`;
       if (occupied.has(key)) continue;
       occupied.add(key);

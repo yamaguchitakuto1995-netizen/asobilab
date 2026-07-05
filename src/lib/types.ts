@@ -218,6 +218,10 @@ export type Student = {
   leave_from_ym?: string | null;
   /** 休会終了月 YYYY-MM（この月まで休会） */
   leave_until_ym?: string | null;
+  /** 継続備考（備考入力あり登録でのみ更新・次回以降も表示） */
+  persistent_memo?: string | null;
+  /** 退会予定月 YYYY-MM（この月まで在籍） */
+  withdrawal_until_ym?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;
@@ -234,6 +238,8 @@ export type Lesson = {
   textbook: string | null;
   status: LessonStatus;
   text_memo: string | null;
+  /** 備考入力ありダイアログから登録した記録 */
+  registered_via_detail?: boolean;
   /** 実施会場。未指定または undefined のときは生徒の所属教室で開催したものとして扱う */
   lesson_classroom?: string | null;
   /** 振替で埋めた場合: 欠席する元の授業日 */

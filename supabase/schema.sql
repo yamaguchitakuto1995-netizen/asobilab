@@ -570,6 +570,7 @@ alter table public.lessons add column if not exists source_period   smallint;
 alter table public.lessons add column if not exists source_subject  text;
 alter table public.lessons add column if not exists lesson_classroom text;
 alter table public.lessons add column if not exists created_from_enrollment boolean not null default false;
+alter table public.lessons add column if not exists registered_via_detail boolean not null default false;
 
 -- 実施会場（別教室での振替など）。null = 生徒の所属教室と同じ扱い
 do $$ begin
@@ -733,6 +734,13 @@ alter table public.students add column if not exists name_kana text;
 
 alter table public.students add column if not exists leave_from_ym text;
 alter table public.students add column if not exists leave_until_ym text;
+alter table public.students add column if not exists persistent_memo text;
+alter table public.students add column if not exists withdrawal_until_ym text;
+
+do $$ begin
+  alter table public.students add constraint students_withdrawal_until_ym_check
+    check (withdrawal_until_ym is null or withdrawal_until_ym ~ '^\d{4}-(0[1-9]|1[0-2])$');
+exception when duplicate_object then null; end $$;
 
 create index if not exists students_sibling_group_id_idx
   on public.students (sibling_group_id)
