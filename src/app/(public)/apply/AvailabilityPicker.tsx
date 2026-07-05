@@ -173,22 +173,39 @@ export function AvailabilityPicker({
     [sourceLessonDates]
   );
 
+  const periodTimeDates = useMemo(
+    () => new Set(periodTimes.map((pt) => pt.lesson_date)),
+    [periodTimes]
+  );
+
   const dates = useMemo(
     () =>
-      enumerateDatesInclusive(targetRange.min, targetRange.max).filter((d) =>
-        isMakeupRegistrationOpen(d)
+      enumerateDatesInclusive(targetRange.min, targetRange.max).filter(
+        (d) => isMakeupRegistrationOpen(d) && periodTimeDates.has(d)
       ),
-    [targetRange]
+    [targetRange, periodTimeDates]
   );
 
   useEffect(() => {
     if (!allSourcesSelected || sourceLessonDates.length === 0) return;
     const { min, max } = targetRange;
-    if (selectedDate < min || selectedDate > max) {
-      setSelectedDate(min);
-      setDestByStudent({});
+    const inRange = selectedDate >= min && selectedDate <= max;
+    const hasPeriodTimes = periodTimeDates.has(selectedDate);
+    if (!inRange || !hasPeriodTimes) {
+      const next = dates[0] ?? min;
+      if (next && selectedDate !== next) {
+        setSelectedDate(next);
+        setDestByStudent({});
+      }
     }
-  }, [allSourcesSelected, sourceLessonDates.length, targetRange, selectedDate]);
+  }, [
+    allSourcesSelected,
+    sourceLessonDates.length,
+    targetRange,
+    selectedDate,
+    periodTimeDates,
+    dates,
+  ]);
 
   function timeSuffix(
     date: string,
@@ -976,7 +993,7 @@ export function AvailabilityPicker({
           {sourceLessonDates.length > 0 ? (
             <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               振替先も授業日の3日前 23:59 までに申請できます（現在選べる最早日:{" "}
-              {formatEarliestMakeupTargetLabel()}）。同月内であれば欠席日より前の日付も可（その日に別コマで授業があっても、空いているコマなら選べます）。上限は欠席月の翌々月末（
+              {formatEarliestMakeupTargetLabel()}）。表示される日付は<strong>コマ時刻が登録されている日</strong>のみです。同月内であれば欠席日より前の日付も可（その日に別コマで授業があっても、空いているコマなら選べます）。上限は欠席月の翌々月末（
               {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）です。
             </p>
           ) : null}
@@ -1072,7 +1089,9 @@ export function AvailabilityPicker({
                       </div>
                     ) : visibleSlots.length === 0 ? (
                       <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-4 text-center text-sm text-slate-500">
-                        この日に空きのある振替枠はありません。
+                        {periodTimeDates.has(selectedDate)
+                          ? "この日に空きのある振替枠はありません。"
+                          : "この日はコマ時刻が登録されていないため、振替先に選べません。"}
                       </div>
                     ) : (
                       <ul className="space-y-2">
