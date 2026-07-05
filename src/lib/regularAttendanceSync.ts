@@ -45,7 +45,7 @@ export function periodTimeMatchesCapacity(
   if (dowOf(pt.lesson_date) !== cap.day_of_week) return false;
   if (pt.subject !== null && pt.subject !== cap.subject) return false;
   // コマ時刻は暦日（lesson_date）で指定。出席連動は曜日・コマ・教科の一致で判定する。
-  // week_ordinals は振替枠の公開条件用（get_makeup_availability 等）で、ここでは見ない。
+  // week_ordinals はレギュラー出席コマのパターン用。振替枠の公開は classroom_period_times（暦日）基準。
   return true;
 }
 

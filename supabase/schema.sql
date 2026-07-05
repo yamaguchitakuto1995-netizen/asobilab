@@ -833,7 +833,7 @@ as $occ$
   where extract(dow from g.day::date) = extract(dow from d);
 $occ$;
 
--- (a) 指定日の各枠の空き状況を返す
+-- (a) 指定日の各枠の空き状況を返す（コマ時刻登録がある日・コマのみ）
 create or replace function public.get_makeup_availability(target_date date)
 returns table (
   classroom    text,
@@ -848,11 +848,40 @@ stable
 security definer
 set search_path = public
 as $get_makeup$
-  with capacity as (
-    select c.classroom, c.period, c.subject, c.max_students
-    from public.lesson_capacities c
-    where c.day_of_week = extract(dow from target_date)::smallint
-      and public.weekday_occurrence_in_month(target_date) = any(c.week_ordinals)
+  with period_slots as (
+    select cpt.classroom, cpt.period, cpt.subject as slot_subject
+      from public.classroom_period_times cpt
+     where cpt.lesson_date = target_date
+  ),
+  expanded as (
+    select
+      ps.classroom,
+      ps.period,
+      s.subject
+    from period_slots ps
+    cross join lateral (
+      select unnest(
+        case
+          when ps.slot_subject is not null then array[ps.slot_subject::text]
+          else array['プログラミング', 'ロボット']::text[]
+        end
+      ) as subject
+    ) s
+  ),
+  capacity as (
+    select
+      e.classroom,
+      e.period,
+      e.subject,
+      coalesce(lc.max_students, cl.default_max_students, 4)::smallint as max_students
+    from expanded e
+    join public.classrooms cl on cl.name = e.classroom
+    left join public.lesson_capacities lc
+      on lc.classroom = e.classroom
+     and lc.day_of_week = extract(dow from target_date)::smallint
+     and lc.period = e.period
+     and lc.subject = e.subject
+    where e.subject in ('プログラミング', 'ロボット')
   ),
   occupied as (
     select
