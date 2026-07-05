@@ -239,8 +239,6 @@ export default async function StudentDetailPage({
       />
 
       <StudentPromotionScheduleNotices
-        promotionScheduledYm={student.promotion_scheduled_ym}
-        promotionType={student.promotion_type}
         subjects={student.subjects}
         student={student}
       />

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
 import { StudentWithdrawalField } from "@/components/StudentWithdrawalField";
 import { StudentProgrammingLoginField } from "@/components/StudentProgrammingLoginField";
-import { StudentPromotionField } from "@/components/StudentPromotionField";
+import { StudentSkipPromotionField } from "@/components/StudentSkipPromotionField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
@@ -235,9 +235,12 @@ export default async function EditStudentPage({
           defaultScratchPass={student.scratch_login_pass}
           defaultMinecraftLogin={student.minecraft_login}
         />
-        <StudentPromotionField
-          defaultPromotionScheduledYm={student.promotion_scheduled_ym}
-          defaultPromotionType={student.promotion_type ?? "normal"}
+        <StudentSkipPromotionField
+          defaultSkipPromotionYm={
+            student.promotion_type === "skip_grade"
+              ? student.promotion_scheduled_ym
+              : null
+          }
         />
 
         <StudentLeaveField
