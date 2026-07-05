@@ -12,8 +12,8 @@ import { todayJstIso } from "@/lib/registrationDeadlines";
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export type StudentLeavePeriod = {
-  leave_from_ym: string | null;
-  leave_until_ym: string | null;
+  leave_from_ym?: string | null;
+  leave_until_ym?: string | null;
 };
 
 export function isValidYearMonth(value: string): boolean {

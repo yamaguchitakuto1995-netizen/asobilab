@@ -4,6 +4,7 @@ import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import { isLessonMonthOnLeave, type StudentLeavePeriod } from "@/lib/studentLeave";
 import {
   ATTENDANCE_LABEL,
   SCHEDULED_ATTENDANCE_LABEL,
@@ -47,6 +48,22 @@ function parseTodayTextParts(
   }
 
   return { course: trimmed, detail: null };
+}
+
+/** コマ表表示用の出欠（休会期間は生徒設定から on_leave を反映） */
+export function effectiveDailyLessonAttendance(
+  lesson: Pick<Lesson, "lesson_date" | "status" | "attendance">,
+  student: StudentLeavePeriod | null | undefined
+): AttendanceStatus {
+  if (lesson.attendance === "makeup") return lesson.attendance;
+  if (
+    lesson.status === "scheduled" &&
+    student &&
+    isLessonMonthOnLeave(lesson.lesson_date, student)
+  ) {
+    return "on_leave";
+  }
+  return lesson.attendance;
 }
 
 /** コマ表の出欠表示（予定 / 記録済みでラベルを切り替え） */

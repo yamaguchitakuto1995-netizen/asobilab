@@ -26,13 +26,11 @@ export async function applyLeaveToScheduledLessons(
   studentId: string,
   leave: StudentLeavePeriod
 ): Promise<{ error: string | null }> {
-  const today = todayIso();
   const { data: lessons, error } = await supabase
     .from("lessons")
     .select("id, lesson_date, attendance, status")
     .eq("student_id", studentId)
-    .eq("status", "scheduled")
-    .gte("lesson_date", today);
+    .eq("status", "scheduled");
 
   if (error) return { error: error.message };
 

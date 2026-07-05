@@ -71,7 +71,7 @@ export default async function DashboardHomePage({
     supabase
       .from("lessons")
       .select(
-        "*, students ( id, name, name_kana, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text, persistent_memo, withdrawal_until_ym, scratch_login_id, scratch_login_pass, minecraft_login, promotion_scheduled_ym, promotion_type )"
+        "*, students ( id, name, name_kana, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text, persistent_memo, withdrawal_until_ym, scratch_login_id, scratch_login_pass, minecraft_login, promotion_scheduled_ym, promotion_type, leave_from_ym, leave_until_ym )"
       )
       .eq("lesson_date", selectedDate)
       .order("period", { ascending: true, nullsFirst: false })
