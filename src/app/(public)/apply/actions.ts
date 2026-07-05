@@ -549,11 +549,9 @@ export async function bookMakeupLesson(input: {
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayJstIso();
   const targetDateCheck = validateMakeupTargetDate(
     input.sourceLessonDate,
-    input.lessonDate,
-    today
+    input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
 
@@ -704,11 +702,9 @@ async function validateMakeupBooking(
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayJstIso();
   const targetDateCheck = validateMakeupTargetDate(
     input.sourceLessonDate,
-    input.lessonDate,
-    today
+    input.lessonDate
   );
   if (!targetDateCheck.ok) return targetDateCheck;
 

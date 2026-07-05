@@ -61,9 +61,7 @@ begin
     raise exception '欠席コマと振替コマが同じです。';
   end if;
 
-  if p_lesson_date < v_today_jst + interval '3 days' then
-    raise exception '振替先は今日から3日後以降（% 以降）の授業のみ選べます。', to_char(v_today_jst + interval '3 days', 'MM/DD');
-  end if;
+  perform public.assert_makeup_registration_open(p_lesson_date);
 
   select * into v_student from public.students where id = p_student_id;
   if v_student is null then

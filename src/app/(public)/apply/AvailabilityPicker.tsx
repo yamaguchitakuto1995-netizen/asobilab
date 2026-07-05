@@ -17,6 +17,7 @@ import {
   formatEarliestMakeupTargetLabel,
   formatMakeupDeadlineLabel,
   formatMakeupTargetMaxLabel,
+  isMakeupRegistrationOpen,
   isMakeupSourceSelectable,
   makeupRegistrationClosedMessage,
   makeupTargetDateRangeForSources,
@@ -164,12 +165,15 @@ export function AvailabilityPicker({
   );
 
   const targetRange = useMemo(
-    () => makeupTargetDateRangeForSources(sourceLessonDates, today),
-    [sourceLessonDates, today]
+    () => makeupTargetDateRangeForSources(sourceLessonDates),
+    [sourceLessonDates]
   );
 
   const dates = useMemo(
-    () => enumerateDatesInclusive(targetRange.min, targetRange.max),
+    () =>
+      enumerateDatesInclusive(targetRange.min, targetRange.max).filter((d) =>
+        isMakeupRegistrationOpen(d)
+      ),
     [targetRange]
   );
 
@@ -940,8 +944,8 @@ export function AvailabilityPicker({
           </p>
           {sourceLessonDates.length > 0 ? (
             <p className="text-xs text-slate-500 mb-2 leading-relaxed">
-              振替先は今日から3日後以降（{formatEarliestMakeupTargetLabel(today)}{" "}
-              以降）の授業枠のみ選べます。同月内であれば欠席日より前の日付も可。上限は欠席月の翌々月末（
+              振替先も授業日の3日前 23:59 までに申請できます（現在選べる最早日:{" "}
+              {formatEarliestMakeupTargetLabel()}）。同月内であれば欠席日より前の日付も可。上限は欠席月の翌々月末（
               {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）です。
             </p>
           ) : null}
