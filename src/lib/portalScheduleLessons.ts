@@ -1,4 +1,12 @@
-import type { AttendanceStatus } from "@/lib/types";
+import {
+  effectiveLessonClassroom,
+  type AttendanceStatus,
+  type ClassroomPeriodTime,
+} from "@/lib/types";
+import {
+  canRegisterAbsence,
+  isPendingAbsenceMakeupOpen,
+} from "@/lib/registrationDeadlines";
 
 export type PortalScheduleLesson = {
   id: string;
@@ -45,14 +53,50 @@ function makeupSourceKeys(lessons: PortalScheduleLesson[]): Set<string> {
   return keys;
 }
 
-/** 振替登録済みの欠席予定を除いた、保護者ポータル用の授業一覧 */
+/** 保護者ポータルで授業行を表示し続けるか */
+export function isPortalScheduleLessonVisible(
+  lesson: PortalScheduleLesson,
+  opts: {
+    studentClassroom: string | null;
+    periodTimes: ClassroomPeriodTime[];
+    now?: Date;
+  }
+): boolean {
+  if (lesson.attendance === "absent") {
+    return isPendingAbsenceMakeupOpen(lesson.lesson_date, opts.now);
+  }
+
+  const venue = effectiveLessonClassroom(lesson, opts.studentClassroom);
+  return canRegisterAbsence(
+    {
+      lessonDate: lesson.lesson_date,
+      period: lesson.period,
+      subject: lesson.subject,
+      classroom: venue,
+      periodTimes: opts.periodTimes,
+    },
+    opts.now
+  ).ok;
+}
+
+/** 振替登録済みの欠席予定を除き、締切を過ぎた授業も除いた一覧 */
 export function visiblePortalScheduleLessons(
-  lessons: PortalScheduleLesson[]
+  lessons: PortalScheduleLesson[],
+  opts: {
+    studentClassroom: string | null;
+    periodTimes: ClassroomPeriodTime[];
+    now?: Date;
+  }
 ): PortalScheduleLesson[] {
   const covered = makeupSourceKeys(lessons);
   return lessons.filter((lesson) => {
-    if (lesson.attendance !== "absent") return true;
-    return !covered.has(absenceSourceKey(lesson));
+    if (
+      lesson.attendance === "absent" &&
+      covered.has(absenceSourceKey(lesson))
+    ) {
+      return false;
+    }
+    return isPortalScheduleLessonVisible(lesson, opts);
   });
 }
 
