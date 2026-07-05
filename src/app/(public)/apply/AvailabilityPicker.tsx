@@ -17,10 +17,12 @@ import {
   formatEarliestMakeupTargetLabel,
   formatMakeupDeadlineLabel,
   formatMakeupTargetMaxLabel,
+  formatPendingAbsenceMakeupDeadlineLabel,
   isMakeupRegistrationOpen,
-  isMakeupSourceSelectable,
+  isPendingAbsenceMakeupOpen,
   makeupRegistrationClosedMessage,
   makeupTargetDateRangeForSources,
+  pendingAbsenceMakeupClosedMessage,
   todayJstIso,
 } from "@/lib/registrationDeadlines";
 import {
@@ -796,14 +798,16 @@ export function AvailabilityPicker({
                         classroom: venue,
                         periodTimes,
                       });
-                      const makeupOpen = isMakeupSourceSelectable(row.lesson_date);
+                      const pendingMakeupOpen = isPendingAbsenceMakeupOpen(
+                        row.lesson_date
+                      );
                       const selectable = showPendingSources
-                        ? makeupOpen
+                        ? pendingMakeupOpen
                         : absenceCheck.ok;
                       const closedMessage = showPendingSources
-                        ? makeupOpen
+                        ? pendingMakeupOpen
                           ? null
-                          : makeupRegistrationClosedMessage(row.lesson_date)
+                          : pendingAbsenceMakeupClosedMessage(row.lesson_date)
                         : absenceCheck.ok
                           ? null
                           : absenceCheck.error;
@@ -864,7 +868,10 @@ export function AvailabilityPicker({
                           </div>
                           {selectable && showPendingSources ? (
                             <p className="mt-2 text-[10px] text-slate-500">
-                              申請締切: {formatMakeupDeadlineLabel(row.lesson_date)}
+                              振替登録締切:{" "}
+                              {formatPendingAbsenceMakeupDeadlineLabel(
+                                row.lesson_date
+                              )}
                             </p>
                           ) : null}
                           {closedMessage ? (

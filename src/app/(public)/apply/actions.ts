@@ -8,7 +8,9 @@ import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import {
   canRegisterAbsence,
   isMakeupRegistrationOpen,
+  isPendingAbsenceMakeupOpen,
   makeupRegistrationClosedMessage,
+  pendingAbsenceMakeupClosedMessage,
   todayJstIso,
   validateMakeupTargetDate,
   canBookMakeupTarget,
@@ -558,24 +560,6 @@ export async function bookMakeupLesson(input: {
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
 
-  if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
-    return {
-      ok: false,
-      error: makeupRegistrationClosedMessage(input.sourceLessonDate),
-    };
-  }
-
-  const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
-  const targetTimeCheck = canBookMakeupTarget(
-    {
-      lessonDate: input.lessonDate,
-      period: input.period,
-      subject: input.subject,
-      classroom: (input.lessonClassroom ?? "").trim() || verified.row.classroom,
-      periodTimes,
-    }
-  );
-  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,
@@ -590,6 +574,32 @@ export async function bookMakeupLesson(input: {
         l.period === input.sourcePeriod &&
         l.subject === input.sourceSubject
     );
+
+  if (sourceStillScheduled) {
+    if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
+      return {
+        ok: false,
+        error: makeupRegistrationClosedMessage(input.sourceLessonDate),
+      };
+    }
+  } else if (!isPendingAbsenceMakeupOpen(input.sourceLessonDate)) {
+    return {
+      ok: false,
+      error: pendingAbsenceMakeupClosedMessage(input.sourceLessonDate),
+    };
+  }
+
+  const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: (input.lessonClassroom ?? "").trim() || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   if (sourceStillScheduled) {
     const absenceCheck = canRegisterAbsence({
       lessonDate: input.sourceLessonDate,
@@ -719,24 +729,6 @@ async function validateMakeupBooking(
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
 
-  if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
-    return {
-      ok: false,
-      error: makeupRegistrationClosedMessage(input.sourceLessonDate),
-    };
-  }
-
-  const periodTimes = await fetchClassroomPeriodTimes(supabase);
-  const targetTimeCheck = canBookMakeupTarget(
-    {
-      lessonDate: input.lessonDate,
-      period: input.period,
-      subject: input.subject,
-      classroom: lessonVenue || verified.row.classroom,
-      periodTimes,
-    }
-  );
-  if (!targetTimeCheck.ok) return targetTimeCheck;
   const scheduled = await listScheduledLessonsForMakeup({
     studentId: input.studentId,
     portalId: input.portalId,
@@ -751,6 +743,32 @@ async function validateMakeupBooking(
         l.period === input.sourcePeriod &&
         l.subject === input.sourceSubject
     );
+
+  if (sourceStillScheduled) {
+    if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
+      return {
+        ok: false,
+        error: makeupRegistrationClosedMessage(input.sourceLessonDate),
+      };
+    }
+  } else if (!isPendingAbsenceMakeupOpen(input.sourceLessonDate)) {
+    return {
+      ok: false,
+      error: pendingAbsenceMakeupClosedMessage(input.sourceLessonDate),
+    };
+  }
+
+  const periodTimes = await fetchClassroomPeriodTimes(supabase);
+  const targetTimeCheck = canBookMakeupTarget(
+    {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      classroom: lessonVenue || verified.row.classroom,
+      periodTimes,
+    }
+  );
+  if (!targetTimeCheck.ok) return targetTimeCheck;
   if (sourceStillScheduled) {
     const absenceCheck = canRegisterAbsence({
       lessonDate: input.sourceLessonDate,
