@@ -128,26 +128,19 @@ async function verifyStudentForMakeup(
     };
   }
 
-  const { data, error } = await supabase
-    .from("students")
-    .select("id, name, classroom, grade, subjects")
-    .eq("id", input.studentId)
-    .maybeSingle();
+  const student = await fetchStudentRowForMakeupSession(
+    supabase,
+    portalIdResult.value,
+    birthdayResult.value!,
+    input.studentId
+  );
 
-  if (error || !data?.classroom) {
+  if (!student?.classroom) {
     return {
       ok: false,
       error: "生徒情報を確認できませんでした。教室までお問い合わせください。",
     };
   }
-
-  const student = normalizeFoundStudent({
-    id: data.id,
-    name: data.name,
-    classroom: data.classroom,
-    grade: data.grade as string,
-    subjects: data.subjects,
-  });
 
   return {
     ok: true,
@@ -159,6 +152,40 @@ async function verifyStudentForMakeup(
       subjects: student.subjects,
     },
   };
+}
+
+/** 匿名ユーザーは students 直読み不可のため RPC で取得 */
+async function fetchStudentRowForMakeupSession(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  portalId: string,
+  birthday: string,
+  studentId: string
+): Promise<FoundStudent | null> {
+  const { data, error } = await supabase.rpc("find_student_for_makeup", {
+    p_portal_id: portalId,
+    p_birthday: birthday,
+  });
+  if (error) return null;
+
+  const list = (data ?? []) as FoundStudent[];
+  const primary = list[0];
+  if (!primary) return null;
+  if (primary.id === studentId) return normalizeFoundStudent(primary);
+
+  const { data: sibRows, error: sibError } = await supabase.rpc(
+    "list_siblings_for_makeup",
+    {
+      p_student_id: primary.id,
+      p_portal_id: portalId,
+      p_birthday: birthday,
+    }
+  );
+  if (sibError) return null;
+
+  const sibling = ((sibRows ?? []) as FoundStudent[]).find(
+    (s) => s.id === studentId
+  );
+  return sibling ? normalizeFoundStudent(sibling) : null;
 }
 
 /** 保護者がお子様を本人確認 (RPC: find_student_for_makeup) */
