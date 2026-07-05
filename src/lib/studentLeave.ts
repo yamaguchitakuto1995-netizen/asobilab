@@ -42,6 +42,62 @@ export function isLessonMonthOnLeave(
   return ym >= from && ym <= until;
 }
 
+export function formatYearMonthJa(ym: string): string {
+  const year = ym.slice(0, 4);
+  const month = Number(ym.slice(5, 7));
+  return `${year}年${month}月`;
+}
+
+/** 表示用の休会開始月（未設定時は今月） */
+export function effectiveLeaveFromYm(
+  leave: StudentLeavePeriod,
+  now = new Date()
+): string | null {
+  const until = leave.leave_until_ym?.trim();
+  if (!until) return null;
+  return leave.leave_from_ym?.trim() || todayJstIso(now).slice(0, 7);
+}
+
+export type LeavePeriodStatus = "active" | "upcoming" | "past";
+
+/** 休会期間の表示ラベル（例: 2025年7月〜2026年8月） */
+export function formatLeavePeriodRange(
+  leave: StudentLeavePeriod,
+  now = new Date()
+): string | null {
+  const until = leave.leave_until_ym?.trim();
+  const from = effectiveLeaveFromYm(leave, now);
+  if (!until || !from) return null;
+  return `${formatYearMonthJa(from)}〜${formatYearMonthJa(until)}`;
+}
+
+export function leavePeriodStatus(
+  leave: StudentLeavePeriod,
+  now = new Date()
+): LeavePeriodStatus | null {
+  const until = leave.leave_until_ym?.trim();
+  const from = effectiveLeaveFromYm(leave, now);
+  if (!until || !from) return null;
+
+  const currentYm = todayJstIso(now).slice(0, 7);
+  if (currentYm > until) return "past";
+  if (currentYm < from) return "upcoming";
+  return "active";
+}
+
+export function leavePeriodStatusLabel(
+  status: LeavePeriodStatus
+): string {
+  switch (status) {
+    case "active":
+      return "現在休会中";
+    case "upcoming":
+      return "休会予定";
+    case "past":
+      return "休会終了";
+  }
+}
+
 export function readLeavePeriodFromForm(formData: FormData): {
   leave_from_ym: string | null;
   leave_until_ym: string | null;

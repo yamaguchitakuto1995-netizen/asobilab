@@ -24,6 +24,7 @@ import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
 import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
 import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
+import { StudentLeavePeriodDisplay } from "@/components/StudentLeavePeriodDisplay";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
@@ -231,6 +232,11 @@ export default async function StudentDetailPage({
           </Link>
         </section>
       ) : null}
+
+      <StudentLeavePeriodDisplay
+        student={student}
+        editHref={`/students/${student.id}/edit`}
+      />
 
       <PromotionScheduleNotice
         promotionScheduledYm={student.promotion_scheduled_ym}
