@@ -93,7 +93,7 @@ export async function updateLesson(formData: FormData) {
 
   const { data: before } = await supabase
     .from("lessons")
-    .select("status")
+    .select("status, lesson_date")
     .eq("id", lessonId)
     .maybeSingle();
 
@@ -120,7 +120,8 @@ export async function updateLesson(formData: FormData) {
       supabase,
       studentId,
       subject,
-      attendance as AttendanceStatus
+      attendance as AttendanceStatus,
+      before.lesson_date ?? lessonDate
     );
   }
 
@@ -166,7 +167,7 @@ export async function markLessonRecorded(formData: FormData) {
     .eq("id", lessonId)
     .eq("student_id", studentId)
     .eq("status", "scheduled")
-    .select("student_id, subject, attendance")
+    .select("student_id, subject, attendance, lesson_date")
     .maybeSingle();
 
   if (error) {
@@ -186,7 +187,8 @@ export async function markLessonRecorded(formData: FormData) {
     supabase,
     updated.student_id,
     updated.subject,
-    updated.attendance
+    updated.attendance,
+    updated.lesson_date
   );
 
   revalidatePath(`/students/${studentId}`);

@@ -232,6 +232,10 @@ export type Student = {
   promotion_scheduled_ym?: string | null;
   /** 進級種別: normal=進級, skip_grade=飛び級 */
   promotion_type?: "normal" | "skip_grade";
+  /** ロボット現コースの開始月 YYYY-MM（入会月・進級月で更新） */
+  course_start_robot_ym?: string | null;
+  /** プログラミング現コースの開始月 YYYY-MM */
+  course_start_programming_ym?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;

@@ -117,7 +117,8 @@ export async function createLesson(formData: FormData) {
       supabase,
       studentId,
       subject,
-      attendance as AttendanceStatus
+      attendance as AttendanceStatus,
+      lessonDate
     );
   }
 

@@ -53,7 +53,7 @@ async function saveLessonFromDailyBoard(
 
   const { data: before } = await supabase
     .from("lessons")
-    .select("id, student_id, subject, status, attendance")
+    .select("id, student_id, subject, status, attendance, lesson_date")
     .eq("id", lessonId)
     .maybeSingle<{
       id: string;
@@ -61,6 +61,7 @@ async function saveLessonFromDailyBoard(
       subject: string | null;
       status: string;
       attendance: AttendanceStatus;
+      lesson_date: string;
     }>();
 
   if (!before) {
@@ -99,7 +100,8 @@ async function saveLessonFromDailyBoard(
       supabase,
       before.student_id,
       before.subject,
-      attendance
+      attendance,
+      before.lesson_date
     );
   }
 

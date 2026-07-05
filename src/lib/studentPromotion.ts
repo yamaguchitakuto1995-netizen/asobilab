@@ -1,4 +1,5 @@
 import { currentYm, shiftMonth } from "@/lib/date";
+import { resolveCourseStartYm } from "@/lib/studentCourseStart";
 import { isValidYearMonth } from "@/lib/studentWithdrawal";
 import {
   PROGRAMMING_NEXT_TEXT_OPTIONS,
@@ -27,6 +28,8 @@ export type PromotionType = (typeof PROMOTION_TYPES)[number]["value"];
 export type PromotionStudentFields = {
   promotion_scheduled_ym?: string | null;
   promotion_type?: PromotionType | string | null;
+  course_start_robot_ym?: string | null;
+  course_start_programming_ym?: string | null;
   next_text_robot?: string | null;
   next_text_robot_course?: string | null;
   next_text_robot_text?: string | null;
@@ -101,16 +104,29 @@ function remainingLessonsInCourse(
   return null;
 }
 
-/** カリキュラム上の残り授業数から進級予定月を見積もる */
+/** コース修了までの見積もり月数（月2回ペース） */
+export function estimateMonthsUntilCourseEnd(
+  subject: string | null | undefined,
+  student: PromotionStudentFields | null | undefined
+): number | null {
+  if (!student || !subject) return null;
+  const remaining = remainingLessonsInCourse(subject, student);
+  if (remaining == null || remaining <= 0) return null;
+  return Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
+}
+
+/** コース開始月と残り授業数から進級予定月を算出 */
 export function estimateAutoPromotionScheduledYm(
   subject: string | null | undefined,
   student: PromotionStudentFields | null | undefined
 ): string | null {
   if (!student || !subject) return null;
-  const remaining = remainingLessonsInCourse(subject, student);
-  if (remaining == null || remaining <= 0) return null;
-  const months = Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
-  return shiftMonth(currentYm(), months - 1);
+  const months = estimateMonthsUntilCourseEnd(subject, student);
+  if (months == null) return null;
+
+  const courseStartYm = resolveCourseStartYm(subject, student);
+  const baseYm = courseStartYm ?? currentYm();
+  return shiftMonth(baseYm, months - 1);
 }
 
 export function formatPromotionScheduleLabel(

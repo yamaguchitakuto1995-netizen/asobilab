@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
 import { StudentWithdrawalField } from "@/components/StudentWithdrawalField";
 import { StudentProgrammingLoginField } from "@/components/StudentProgrammingLoginField";
+import { StudentCourseStartField } from "@/components/StudentCourseStartField";
 import { StudentSkipPromotionField } from "@/components/StudentSkipPromotionField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
@@ -234,6 +235,10 @@ export default async function EditStudentPage({
           defaultScratchId={student.scratch_login_id}
           defaultScratchPass={student.scratch_login_pass}
           defaultMinecraftLogin={student.minecraft_login}
+        />
+        <StudentCourseStartField
+          defaultCourseStartRobotYm={student.course_start_robot_ym}
+          defaultCourseStartProgrammingYm={student.course_start_programming_ym}
         />
         <StudentSkipPromotionField
           defaultSkipPromotionYm={

@@ -46,6 +46,8 @@ import { applyWithdrawalToScheduledLessons } from "@/lib/applyStudentWithdrawal"
 import { readLeavePeriodFromForm } from "@/lib/studentLeave";
 import { readProgrammingLoginFromForm } from "@/lib/studentProgrammingLogin";
 import { readPromotionFromForm } from "@/lib/studentPromotion";
+import { readCourseStartFromForm } from "@/lib/studentCourseStart";
+import { applyDueSkipPromotionIfNeeded } from "@/lib/applyStudentPromotion";
 import { readWithdrawalUntilFromForm } from "@/lib/studentWithdrawal";
 import type { LessonCapacity } from "@/lib/types";
 
@@ -346,6 +348,11 @@ export async function createStudent(formData: FormData) {
     redirect(`/students/new?error=${encodeURIComponent(promotion.error)}`);
   }
 
+  const courseStart = readCourseStartFromForm(formData, subjects);
+  if (courseStart.error) {
+    redirect(`/students/new?error=${encodeURIComponent(courseStart.error)}`);
+  }
+
   const progLogin = readProgrammingLoginFromForm(formData, subjects);
   if (progLogin.error) {
     redirect(`/students/new?error=${encodeURIComponent(progLogin.error)}`);
@@ -382,6 +389,8 @@ export async function createStudent(formData: FormData) {
       minecraft_login: progLogin.value.minecraft_login,
       promotion_scheduled_ym: promotion.promotion_scheduled_ym,
       promotion_type: promotion.promotion_type,
+      course_start_robot_ym: courseStart.course_start_robot_ym,
+      course_start_programming_ym: courseStart.course_start_programming_ym,
       note: note || null,
       created_by: user.id,
     })
@@ -571,6 +580,11 @@ export async function updateStudent(formData: FormData) {
     redirect(`${editPath}?error=${encodeURIComponent(promotion.error)}`);
   }
 
+  const courseStart = readCourseStartFromForm(formData, subjects);
+  if (courseStart.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(courseStart.error)}`);
+  }
+
   const progLogin = readProgrammingLoginFromForm(formData, subjects);
   if (progLogin.error) {
     redirect(`${editPath}?error=${encodeURIComponent(progLogin.error)}`);
@@ -607,12 +621,23 @@ export async function updateStudent(formData: FormData) {
       minecraft_login: progLogin.value.minecraft_login,
       promotion_scheduled_ym: promotion.promotion_scheduled_ym,
       promotion_type: promotion.promotion_type,
+      course_start_robot_ym: courseStart.course_start_robot_ym,
+      course_start_programming_ym: courseStart.course_start_programming_ym,
       note: note || null,
     })
     .eq("id", id);
 
   if (error) {
     redirect(`${editPath}?error=${encodeURIComponent(error.message)}`);
+  }
+
+  const skipPromotion = await applyDueSkipPromotionIfNeeded(supabase, id);
+  if (skipPromotion.error) {
+    redirect(
+      `/students/${id}?error=${encodeURIComponent(
+        `生徒情報は保存できましたが、飛び級の反映に失敗しました: ${skipPromotion.error}`
+      )}`
+    );
   }
 
   const siblingInput = readSiblingFormInput(formData);

@@ -747,6 +747,8 @@ alter table public.students add column if not exists scratch_login_pass text;
 alter table public.students add column if not exists minecraft_login text;
 alter table public.students add column if not exists promotion_scheduled_ym text;
 alter table public.students add column if not exists promotion_type text not null default 'normal';
+alter table public.students add column if not exists course_start_robot_ym text;
+alter table public.students add column if not exists course_start_programming_ym text;
 
 do $$ begin
   alter table public.students add constraint students_promotion_scheduled_ym_check
@@ -756,6 +758,16 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter table public.students add constraint students_promotion_type_check
     check (promotion_type in ('normal', 'skip_grade'));
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.students add constraint students_course_start_robot_ym_check
+    check (course_start_robot_ym is null or course_start_robot_ym ~ '^\d{4}-(0[1-9]|1[0-2])$');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table public.students add constraint students_course_start_programming_ym_check
+    check (course_start_programming_ym is null or course_start_programming_ym ~ '^\d{4}-(0[1-9]|1[0-2])$');
 exception when duplicate_object then null; end $$;
 
 create index if not exists students_sibling_group_id_idx

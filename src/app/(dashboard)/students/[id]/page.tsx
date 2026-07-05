@@ -24,7 +24,9 @@ import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
 import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
 import { StudentPromotionScheduleNotices } from "@/components/PromotionScheduleNotice";
+import { StudentCourseStartDisplay } from "@/components/StudentCourseStartDisplay";
 import { StudentLeavePeriodDisplay } from "@/components/StudentLeavePeriodDisplay";
+import { applyDueSkipPromotionIfNeeded } from "@/lib/applyStudentPromotion";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
@@ -59,6 +61,8 @@ export default async function StudentDetailPage({
   } = await searchParams;
   const supabase = await createClient();
   const user = await getCurrentUser();
+
+  await applyDueSkipPromotionIfNeeded(supabase, id);
 
   const { data: student } = await supabase
     .from("students")
@@ -234,6 +238,12 @@ export default async function StudentDetailPage({
       ) : null}
 
       <StudentLeavePeriodDisplay
+        student={student}
+        editHref={`/students/${student.id}/edit`}
+      />
+
+      <StudentCourseStartDisplay
+        subjects={student.subjects}
         student={student}
         editHref={`/students/${student.id}/edit`}
       />

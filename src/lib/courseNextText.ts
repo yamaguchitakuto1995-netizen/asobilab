@@ -406,6 +406,75 @@ export function resolveProgrammingNextTextPartsForStudent(student: {
   return { course: parsed.course, text: parsed.text, full };
 }
 
+function nextCourseInCurriculumOrder(
+  currentCourse: string,
+  order: readonly string[]
+): string | null {
+  const idx = order.indexOf(currentCourse);
+  if (idx === -1 || idx >= order.length - 1) return null;
+  return order[idx + 1] ?? null;
+}
+
+/** 現コースの次コースの先頭テキスト（進級時のジャンプ先） */
+export function firstCombinedTextOfNextCourse(
+  subject: "ロボット" | "プログラミング",
+  student: {
+    next_text_robot?: string | null;
+    next_text_robot_course?: string | null;
+    next_text_robot_text?: string | null;
+    next_text_programming?: string | null;
+    next_text_programming_course?: string | null;
+    next_text_programming_text?: string | null;
+  }
+): string | null {
+  if (subject === "ロボット") {
+    const parts = resolveRobotNextTextPartsForStudent(student);
+    if (!parts?.course) return null;
+    const nextCourse = nextCourseInCurriculumOrder(
+      parts.course,
+      robotCourseOptionsInOrder()
+    );
+    if (!nextCourse) return null;
+    return (
+      ROBOT_NEXT_TEXT_OPTIONS.find((opt) => {
+        const p = parseRobotNextTextParts(opt);
+        return p?.course === nextCourse;
+      }) ?? null
+    );
+  }
+
+  const parts = resolveProgrammingNextTextPartsForStudent(student);
+  if (!parts?.course) return null;
+  const nextCourse = nextCourseInCurriculumOrder(
+    parts.course,
+    programmingCourseOptionsInOrder()
+  );
+  if (!nextCourse) return null;
+  return (
+    PROGRAMMING_NEXT_TEXT_OPTIONS.find((opt) => {
+      const p = parseProgrammingNextTextParts(opt);
+      return p?.course === nextCourse;
+    }) ?? null
+  );
+}
+
+/** 次回テキスト更新でコースが変わったか */
+export function didCrossCourseBoundary(
+  subject: "ロボット" | "プログラミング",
+  previousFull: string | null | undefined,
+  nextFull: string | null | undefined
+): boolean {
+  if (!previousFull?.trim() || !nextFull?.trim()) return false;
+  if (subject === "ロボット") {
+    const prev = parseRobotNextTextParts(previousFull);
+    const next = parseRobotNextTextParts(nextFull);
+    return Boolean(prev?.course && next?.course && prev.course !== next.course);
+  }
+  const prev = parseProgrammingNextTextParts(previousFull);
+  const next = parseProgrammingNextTextParts(nextFull);
+  return Boolean(prev?.course && next?.course && prev.course !== next.course);
+}
+
 /**
  * カリキュラム順の「次の」正規テキスト。
  * 末尾にいる場合は現在値のまま（上書きスキップ用に同一参照で返す）。

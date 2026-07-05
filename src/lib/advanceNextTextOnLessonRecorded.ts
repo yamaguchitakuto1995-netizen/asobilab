@@ -3,11 +3,14 @@ import type { AttendanceStatus } from "@/lib/types";
 import {
   advanceProgrammingNextTextCombined,
   advanceRobotNextTextCombined,
+  didCrossCourseBoundary,
   programmingNextTextStudentColumnsFromCombined,
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
   robotNextTextStudentColumnsFromCombined,
 } from "@/lib/courseNextText";
+import { updateCourseStartOnAutoPromotion } from "@/lib/applyStudentPromotion";
+import { lessonYearMonth } from "@/lib/studentLeave";
 
 type StudentNextRow = {
   next_text_robot?: string | null;
@@ -27,14 +30,14 @@ const ATTENDANCE_ADVANCES_NEXT_TEXT: ReadonlySet<AttendanceStatus> = new Set([
 
 /**
  * 授業を記録済みにした 1 回につき、その科目の次回テキストをカリキュラム順で 1 つ進める。
- * 欠席のみ進めず次回テキストはそのまま。出席・遅刻・振替（振替枠で受講した場合）では進める。
- * 末尾・未設定・値が不正なときは更新しない。
+ * コース境界を越えたときはコース開始月を授業月で更新する。
  */
 export async function advanceStudentNextTextAfterLessonRecorded(
   supabase: SupabaseClient,
   studentId: string,
   subject: string | null,
-  attendance: AttendanceStatus | null
+  attendance: AttendanceStatus | null,
+  lessonDate?: string | null
 ): Promise<void> {
   if (attendance == null || !ATTENDANCE_ADVANCES_NEXT_TEXT.has(attendance)) return;
   if (subject !== "ロボット" && subject !== "プログラミング") return;
@@ -49,15 +52,32 @@ export async function advanceStudentNextTextAfterLessonRecorded(
 
   if (!student) return;
 
+  const promotionYm = lessonDate?.trim()
+    ? lessonYearMonth(lessonDate)
+    : null;
+
   if (subject === "ロボット") {
     const resolved = resolveRobotNextTextPartsForStudent(student);
     const current = resolved?.full ?? null;
     const next = advanceRobotNextTextCombined(current);
     if (next == null || next === current) return;
+
     await supabase
       .from("students")
       .update(robotNextTextStudentColumnsFromCombined(next))
       .eq("id", studentId);
+
+    if (
+      promotionYm &&
+      didCrossCourseBoundary("ロボット", current, next)
+    ) {
+      await updateCourseStartOnAutoPromotion(
+        supabase,
+        studentId,
+        "ロボット",
+        promotionYm
+      );
+    }
     return;
   }
 
@@ -65,8 +85,21 @@ export async function advanceStudentNextTextAfterLessonRecorded(
   const current = resolved?.full ?? null;
   const next = advanceProgrammingNextTextCombined(current);
   if (next == null || next === current) return;
+
   await supabase
     .from("students")
     .update(programmingNextTextStudentColumnsFromCombined(next))
     .eq("id", studentId);
+
+  if (
+    promotionYm &&
+    didCrossCourseBoundary("プログラミング", current, next)
+  ) {
+    await updateCourseStartOnAutoPromotion(
+      supabase,
+      studentId,
+      "プログラミング",
+      promotionYm
+    );
+  }
 }
