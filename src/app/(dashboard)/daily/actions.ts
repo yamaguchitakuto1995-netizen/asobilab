@@ -1,9 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
-import { isValidDate } from "@/lib/date";
 import { createClient } from "@/lib/supabase/server";
 import {
   ATTENDANCE_OPTIONS,
@@ -12,29 +10,44 @@ import {
 
 const ATTENDANCE_VALUES = ATTENDANCE_OPTIONS.map((o) => o.value);
 
-export async function confirmLessonFromDailyBoard(formData: FormData) {
-  const lessonId = String(formData.get("lesson_id") ?? "");
-  const returnDate = String(formData.get("return_date") ?? "");
-  const attendance = String(formData.get("attendance") ?? "");
-  const textbook = String(formData.get("textbook") ?? "").trim();
-  const textMemo = String(formData.get("text_memo") ?? "").trim();
+export type DailyBoardSaveResult =
+  | { ok: true }
+  | { ok: false; error: string };
 
-  const back =
-    isValidDate(returnDate) ? `/?date=${returnDate}` : "/";
+type SaveLessonInput = {
+  lessonId: string;
+  attendance: AttendanceStatus;
+  textbook: string;
+  textMemo: string;
+};
 
-  if (!lessonId) redirect(back);
+async function saveLessonFromDailyBoard(
+  input: SaveLessonInput
+): Promise<DailyBoardSaveResult> {
+  const lessonId = input.lessonId.trim();
+  const textbook = input.textbook.trim();
+  const textMemo = input.textMemo.trim();
+  const attendance = input.attendance;
 
-  if (!ATTENDANCE_VALUES.includes(attendance as AttendanceStatus)) {
-    redirect(
-      `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent("出欠を選んでください。")}`
-    );
+  if (!lessonId) {
+    return { ok: false, error: "授業が指定されていません。" };
+  }
+
+  if (!ATTENDANCE_VALUES.includes(attendance)) {
+    return { ok: false, error: "出欠を選んでください。" };
+  }
+
+  if (!textbook) {
+    return { ok: false, error: "本日のテキストを入力してください。" };
   }
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    return { ok: false, error: "ログインが必要です。" };
+  }
 
   const { data: before } = await supabase
     .from("lessons")
@@ -49,25 +62,21 @@ export async function confirmLessonFromDailyBoard(formData: FormData) {
     }>();
 
   if (!before) {
-    redirect(
-      `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent("授業が見つかりません。")}`
-    );
+    return { ok: false, error: "授業が見つかりません。" };
   }
 
   const { error } = await supabase
     .from("lessons")
     .update({
       status: "recorded",
-      attendance: attendance as AttendanceStatus,
-      textbook: textbook || null,
+      attendance,
+      textbook,
       text_memo: textMemo || null,
     })
     .eq("id", lessonId);
 
   if (error) {
-    redirect(
-      `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`
-    );
+    return { ok: false, error: error.message };
   }
 
   if (before.status === "scheduled") {
@@ -75,11 +84,41 @@ export async function confirmLessonFromDailyBoard(formData: FormData) {
       supabase,
       before.student_id,
       before.subject,
-      attendance as AttendanceStatus
+      attendance
     );
   }
 
   revalidatePath("/");
   revalidatePath(`/students/${before.student_id}`);
-  redirect(back);
+  return { ok: true };
+}
+
+export async function confirmLessonFromDailyBoard(
+  formData: FormData
+): Promise<DailyBoardSaveResult> {
+  const attendance = String(formData.get("attendance") ?? "");
+  if (!ATTENDANCE_VALUES.includes(attendance as AttendanceStatus)) {
+    return { ok: false, error: "出欠を選んでください。" };
+  }
+
+  return saveLessonFromDailyBoard({
+    lessonId: String(formData.get("lesson_id") ?? ""),
+    attendance: attendance as AttendanceStatus,
+    textbook: String(formData.get("textbook") ?? ""),
+    textMemo: String(formData.get("text_memo") ?? ""),
+  });
+}
+
+/** 予定通り・備考なしのワンクリック出席登録 */
+export async function quickPresentLessonFromDailyBoard(input: {
+  lessonId: string;
+  textbook: string;
+  attendance?: AttendanceStatus;
+}): Promise<DailyBoardSaveResult> {
+  return saveLessonFromDailyBoard({
+    lessonId: input.lessonId,
+    attendance: input.attendance ?? "present",
+    textbook: input.textbook,
+    textMemo: "",
+  });
 }
