@@ -143,7 +143,7 @@ begin
   if p_source_lesson_date = p_lesson_date
      and p_source_period = p_period
      and p_source_subject is not distinct from p_subject then
-    raise exception '欠席コマと振替コマが同じです。';
+    raise exception '同じコマから同じコマへは振替できません。';
   end if;
 
   select * into v_student from public.students where id = p_student_id;
