@@ -134,11 +134,34 @@ export function formatPromotionScheduleLabel(
   return `${year}年${month}月${action}予定`;
 }
 
-/** コマ表・生徒情報用の進級予定ラベル（自動進級は常時、飛び級は手動設定時） */
-export function resolvePromotionScheduleLabel(
+/** コマ表・生徒情報用の進級予定（ラベル＋強調表示の要否） */
+export type PromotionScheduleInfo = {
+  label: string;
+  promotionScheduledYm: string;
+  promotionType: PromotionType;
+  highlight: boolean;
+};
+
+/** 進級予定バナーを薄オレンジで強調するか */
+export function isPromotionScheduleHighlighted(
+  promotionScheduledYm: string,
+  promotionType: PromotionType | string | null | undefined,
+  nowYm: string = currentYm()
+): boolean {
+  const ym = promotionScheduledYm.trim();
+  if (!ym) return false;
+
+  if (promotionType === "skip_grade") return true;
+
+  const highlightFrom = shiftMonth(ym, -2);
+  return nowYm >= highlightFrom && nowYm <= ym;
+}
+
+export function resolvePromotionScheduleInfo(
   subject: string | null | undefined,
-  student: PromotionStudentFields | null | undefined
-): string | null {
+  student: PromotionStudentFields | null | undefined,
+  nowYm: string = currentYm()
+): PromotionScheduleInfo | null {
   const nextCourse = resolveNextPromotionCourseDisplay(subject, student);
   if (!nextCourse) return null;
 
@@ -146,18 +169,44 @@ export function resolvePromotionScheduleLabel(
     student?.promotion_type === "skip_grade" &&
     student?.promotion_scheduled_ym?.trim();
 
+  let promotionScheduledYm: string;
+  let promotionType: PromotionType;
+
   if (isSkipGrade) {
-    return formatPromotionScheduleLabel(
-      student!.promotion_scheduled_ym,
-      "skip_grade",
-      nextCourse
-    );
+    promotionScheduledYm = student!.promotion_scheduled_ym!.trim();
+    promotionType = "skip_grade";
+  } else {
+    const estimatedYm = estimateAutoPromotionScheduledYm(subject, student);
+    if (!estimatedYm) return null;
+    promotionScheduledYm = estimatedYm;
+    promotionType = "normal";
   }
 
-  const estimatedYm = estimateAutoPromotionScheduledYm(subject, student);
-  if (!estimatedYm) return null;
+  const label = formatPromotionScheduleLabel(
+    promotionScheduledYm,
+    promotionType,
+    nextCourse
+  );
+  if (!label) return null;
 
-  return formatPromotionScheduleLabel(estimatedYm, "normal", nextCourse);
+  return {
+    label,
+    promotionScheduledYm,
+    promotionType,
+    highlight: isPromotionScheduleHighlighted(
+      promotionScheduledYm,
+      promotionType,
+      nowYm
+    ),
+  };
+}
+
+/** @deprecated resolvePromotionScheduleInfo を使用 */
+export function resolvePromotionScheduleLabel(
+  subject: string | null | undefined,
+  student: PromotionStudentFields | null | undefined
+): string | null {
+  return resolvePromotionScheduleInfo(subject, student)?.label ?? null;
 }
 
 /** 飛び級のみ手動入力（空欄なら自動進級表示） */
