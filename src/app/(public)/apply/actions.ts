@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
-import { isValidDate, shiftDate, todayIso } from "@/lib/date";
+import { isValidDate, shiftDate } from "@/lib/date";
+import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
+import {
+  canRegisterAbsence,
+  isMakeupRegistrationOpen,
+  makeupRegistrationClosedMessage,
+  todayJstIso,
+} from "@/lib/registrationDeadlines";
 import {
   readBirthdayFromInput,
   readPortalIdFromInput,
@@ -64,6 +71,7 @@ export type MarkAbsentInput = {
   lessonDate: string;
   period: number;
   subject: string;
+  lessonClassroom?: string | null;
 };
 
 type MakeupStudentIdentity = {
@@ -418,6 +426,17 @@ export async function markLessonAbsentForMakeup(
     };
   }
 
+  const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
+  const absenceCheck = canRegisterAbsence({
+    lessonDate: input.lessonDate,
+    period: input.period,
+    subject: input.subject,
+    classroom:
+      input.lessonClassroom?.trim() || verified.row.classroom || null,
+    periodTimes,
+  });
+  if (!absenceCheck.ok) return absenceCheck;
+
   const portalIdResult = readPortalIdFromInput(input.portalId);
   const birthdayResult = readBirthdayFromInput(input.birthday);
 
@@ -502,7 +521,7 @@ export async function bookMakeupLesson(input: {
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayIso();
+  const today = todayJstIso();
   const maxLesson = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
   if (input.lessonDate < today || input.lessonDate > maxLesson) {
     return {
@@ -513,6 +532,39 @@ export async function bookMakeupLesson(input: {
 
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
+
+  if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
+    return {
+      ok: false,
+      error: makeupRegistrationClosedMessage(input.sourceLessonDate),
+    };
+  }
+
+  const periodTimes = await fetchClassroomPeriodTimes(verified.supabase);
+  const scheduled = await listScheduledLessonsForMakeup({
+    studentId: input.studentId,
+    portalId: input.portalId,
+    birthday: input.birthday,
+    subjects: verified.row.subjects,
+  });
+  const sourceStillScheduled =
+    scheduled.ok &&
+    scheduled.lessons.some(
+      (l) =>
+        l.lesson_date === input.sourceLessonDate &&
+        l.period === input.sourcePeriod &&
+        l.subject === input.sourceSubject
+    );
+  if (sourceStillScheduled) {
+    const absenceCheck = canRegisterAbsence({
+      lessonDate: input.sourceLessonDate,
+      period: input.sourcePeriod,
+      subject: input.sourceSubject,
+      classroom: verified.row.classroom,
+      periodTimes,
+    });
+    if (!absenceCheck.ok) return absenceCheck;
+  }
 
   if (
     !studentEnrollsInSubject(verified.row.subjects, input.subject) ||
@@ -615,7 +667,7 @@ async function validateMakeupBooking(
     return { ok: false, error: "欠席の教科の指定が不正です。" };
   }
 
-  const today = todayIso();
+  const today = todayJstIso();
   const maxLesson = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
   if (input.lessonDate < today || input.lessonDate > maxLesson) {
     return {
@@ -634,6 +686,39 @@ async function validateMakeupBooking(
 
   const verified = await verifyStudentForMakeup(input);
   if (!verified.ok) return verified;
+
+  if (!isMakeupRegistrationOpen(input.sourceLessonDate)) {
+    return {
+      ok: false,
+      error: makeupRegistrationClosedMessage(input.sourceLessonDate),
+    };
+  }
+
+  const periodTimes = await fetchClassroomPeriodTimes(supabase);
+  const scheduled = await listScheduledLessonsForMakeup({
+    studentId: input.studentId,
+    portalId: input.portalId,
+    birthday: input.birthday,
+    subjects: verified.row.subjects,
+  });
+  const sourceStillScheduled =
+    scheduled.ok &&
+    scheduled.lessons.some(
+      (l) =>
+        l.lesson_date === input.sourceLessonDate &&
+        l.period === input.sourcePeriod &&
+        l.subject === input.sourceSubject
+    );
+  if (sourceStillScheduled) {
+    const absenceCheck = canRegisterAbsence({
+      lessonDate: input.sourceLessonDate,
+      period: input.sourcePeriod,
+      subject: input.sourceSubject,
+      classroom: verified.row.classroom,
+      periodTimes,
+    });
+    if (!absenceCheck.ok) return absenceCheck;
+  }
 
   if (
     !studentEnrollsInSubject(verified.row.subjects, input.subject) ||

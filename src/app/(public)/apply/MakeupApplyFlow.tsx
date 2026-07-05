@@ -181,6 +181,12 @@ export function MakeupApplyFlow({
         <p className="font-semibold text-slate-700">ご利用にあたって</p>
         <ul className="list-disc list-inside space-y-1">
           <li>
+            振替申請は、欠席する授業の<strong>3日前 23:59</strong>までです（例: 6/27の授業 → 6/24 23:59まで）。
+          </li>
+          <li>
+            欠席登録は、授業日の<strong>開始時刻まで</strong>です（コマ時刻が登録されている場合）。
+          </li>
+          <li>
             生徒ID・誕生日が分からない場合は、所属教室までお問い合わせください。
           </li>
           <li>
