@@ -60,12 +60,19 @@ export function lessonAttendanceDisplayLabel(
 }
 
 /**
- * コマ表で欠席・欠席予定として薄灰色カードにする。
+ * コマ表で欠席・休会として薄灰色カードにする。
  */
+export function isDailyMutedLesson(
+  lesson: Pick<Lesson, "attendance">
+): boolean {
+  return lesson.attendance === "absent" || lesson.attendance === "on_leave";
+}
+
+/** @deprecated isDailyMutedLesson を使用 */
 export function isDailyAbsentLesson(
   lesson: Pick<Lesson, "attendance">
 ): boolean {
-  return lesson.attendance === "absent";
+  return isDailyMutedLesson(lesson);
 }
 
 /**
@@ -85,6 +92,9 @@ export function isDailyExpectedPresentAbsent(
 export function dailyAttendanceStatusLabel(
   lesson: Pick<Lesson, "status" | "attendance" | "created_from_enrollment">
 ): string {
+  if (lesson.attendance === "on_leave") {
+    return lesson.status === "scheduled" ? "休会中" : "休会";
+  }
   if (isDailyExpectedPresentAbsent(lesson)) return "欠席";
   return lessonAttendanceDisplayLabel(lesson);
 }

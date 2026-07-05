@@ -41,6 +41,8 @@ import {
   readPortalIdFromForm,
 } from "@/lib/studentPortal";
 import { syncEnrollmentLessons } from "@/lib/syncEnrollmentLessons";
+import { applyStudentLeaveEffects } from "@/lib/applyStudentLeave";
+import { readLeavePeriodFromForm } from "@/lib/studentLeave";
 import type { LessonCapacity } from "@/lib/types";
 
 const STUDENTS_BASE = "/students";
@@ -323,6 +325,11 @@ export async function createStudent(formData: FormData) {
     redirect(`/students/new?error=${encodeURIComponent(progCap.error)}`);
   }
 
+  const leavePeriod = readLeavePeriodFromForm(formData);
+  if (leavePeriod.error) {
+    redirect(`/students/new?error=${encodeURIComponent(leavePeriod.error)}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -346,6 +353,8 @@ export async function createStudent(formData: FormData) {
       enrollment_prog_capacity_id: progCap.value,
       portal_id: portalIdResult.value,
       birthday: birthdayResult.value,
+      leave_from_ym: leavePeriod.leave_from_ym,
+      leave_until_ym: leavePeriod.leave_until_ym,
       note: note || null,
       created_by: user.id,
     })
@@ -383,6 +392,26 @@ export async function createStudent(formData: FormData) {
     redirect(
       `/students/${data!.id}?error=${encodeURIComponent(
         `生徒は登録できましたが、出席予定の自動作成に失敗しました: ${sync.error}`
+      )}`
+    );
+  }
+
+  const leaveEffects = await applyStudentLeaveEffects(supabase, {
+    id: data!.id,
+    subjects,
+    leave_from_ym: leavePeriod.leave_from_ym,
+    leave_until_ym: leavePeriod.leave_until_ym,
+    next_text_robot: nextRobot.value,
+    next_text_robot_course: nextRobot.course,
+    next_text_robot_text: nextRobot.text,
+    next_text_programming: nextProg.value,
+    next_text_programming_course: nextProg.course,
+    next_text_programming_text: nextProg.text,
+  });
+  if (leaveEffects.error) {
+    redirect(
+      `/students/${data!.id}?error=${encodeURIComponent(
+        `生徒は登録できましたが、休会設定の反映に失敗しました: ${leaveEffects.error}`
       )}`
     );
   }
@@ -487,6 +516,11 @@ export async function updateStudent(formData: FormData) {
     redirect(`${editPath}?error=${encodeURIComponent(progCap.error)}`);
   }
 
+  const leavePeriod = readLeavePeriodFromForm(formData);
+  if (leavePeriod.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(leavePeriod.error)}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -510,6 +544,8 @@ export async function updateStudent(formData: FormData) {
       enrollment_prog_capacity_id: progCap.value,
       portal_id: portalIdResult.value,
       birthday: birthdayResult.value,
+      leave_from_ym: leavePeriod.leave_from_ym,
+      leave_until_ym: leavePeriod.leave_until_ym,
       note: note || null,
     })
     .eq("id", id);
@@ -541,6 +577,26 @@ export async function updateStudent(formData: FormData) {
     redirect(
       `/students/${id}?error=${encodeURIComponent(
         `生徒情報は保存できましたが、出席予定の自動同期に失敗しました: ${sync.error}`
+      )}`
+    );
+  }
+
+  const leaveEffects = await applyStudentLeaveEffects(supabase, {
+    id,
+    subjects,
+    leave_from_ym: leavePeriod.leave_from_ym,
+    leave_until_ym: leavePeriod.leave_until_ym,
+    next_text_robot: nextRobot.value,
+    next_text_robot_course: nextRobot.course,
+    next_text_robot_text: nextRobot.text,
+    next_text_programming: nextProg.value,
+    next_text_programming_course: nextProg.course,
+    next_text_programming_text: nextProg.text,
+  });
+  if (leaveEffects.error) {
+    redirect(
+      `/students/${id}?error=${encodeURIComponent(
+        `生徒情報は保存できましたが、休会設定の反映に失敗しました: ${leaveEffects.error}`
       )}`
     );
   }

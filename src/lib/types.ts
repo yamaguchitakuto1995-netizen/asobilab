@@ -25,6 +25,7 @@ export const ATTENDANCE_OPTIONS = [
   { value: "absent", label: "欠席" },
   { value: "late", label: "遅刻" },
   { value: "makeup", label: "振替" },
+  { value: "on_leave", label: "休会" },
 ] as const;
 
 export type AttendanceStatus = (typeof ATTENDANCE_OPTIONS)[number]["value"];
@@ -34,6 +35,7 @@ export const SCHEDULED_ATTENDANCE_OPTIONS = [
   { value: "present", label: "出席予定" },
   { value: "absent", label: "欠席予定" },
   { value: "makeup", label: "振替予定" },
+  { value: "on_leave", label: "休会中" },
 ] as const;
 
 export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
@@ -41,6 +43,7 @@ export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
   absent: "欠席",
   late: "遅刻",
   makeup: "振替",
+  on_leave: "休会",
 };
 
 export const SCHEDULED_ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
@@ -48,6 +51,7 @@ export const SCHEDULED_ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
   absent: "欠席予定",
   late: "—",
   makeup: "振替予定",
+  on_leave: "休会中",
 };
 
 export const ATTENDANCE_BADGE: Record<AttendanceStatus, string> = {
@@ -55,6 +59,7 @@ export const ATTENDANCE_BADGE: Record<AttendanceStatus, string> = {
   absent: "bg-rose-100 text-rose-800 ring-rose-600/20",
   late: "bg-amber-100 text-amber-800 ring-amber-600/20",
   makeup: "bg-sky-100 text-sky-800 ring-sky-600/20",
+  on_leave: "bg-slate-200 text-slate-700 ring-slate-400/40",
 };
 
 /** 受講教科 (講座) の選択肢。塾の取り扱い教科を増やすときはここを編集 */
@@ -209,6 +214,10 @@ export type Student = {
   portal_id?: string | null;
   /** 保護者向け振替フォーム用の本人確認（誕生日・YYYY-MM-DD） */
   birthday?: string | null;
+  /** 休会開始月 YYYY-MM */
+  leave_from_ym?: string | null;
+  /** 休会終了月 YYYY-MM（この月まで休会） */
+  leave_until_ym?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;
