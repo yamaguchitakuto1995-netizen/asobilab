@@ -1,4 +1,6 @@
 import {
+  parseProgrammingNextTextParts,
+  parseRobotNextTextParts,
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
@@ -17,6 +19,35 @@ type StudentTextFields = {
   next_text_programming_course?: string | null;
   next_text_programming_text?: string | null;
 };
+
+export type LessonTodayTextParts = {
+  course: string | null;
+  detail: string | null;
+  full: string;
+};
+
+function parseTodayTextParts(
+  full: string,
+  subject: string
+): Pick<LessonTodayTextParts, "course" | "detail"> {
+  const trimmed = full.trim();
+  if (!trimmed || trimmed === "—") {
+    return { course: null, detail: null };
+  }
+
+  const parsed =
+    subject === "ロボット"
+      ? parseRobotNextTextParts(trimmed)
+      : subject === "プログラミング"
+        ? parseProgrammingNextTextParts(trimmed)
+        : null;
+
+  if (parsed) {
+    return { course: parsed.course, detail: parsed.text };
+  }
+
+  return { course: trimmed, detail: null };
+}
 
 /** コマ表の出欠表示（予定 / 記録済みでラベルを切り替え） */
 export function lessonAttendanceDisplayLabel(
@@ -87,6 +118,17 @@ export function lessonTodayTextLabel(
   }
 
   return "—";
+}
+
+/** 本日のテキストをコース（チップ用）と詳細に分解 */
+export function lessonTodayTextParts(
+  lesson: Pick<Lesson, "textbook" | "subject" | "status">,
+  student: StudentTextFields | null | undefined
+): LessonTodayTextParts {
+  const full = lessonTodayTextLabel(lesson, student);
+  const subject = lesson.subject ?? "";
+  const { course, detail } = parseTodayTextParts(full, subject);
+  return { course, detail, full };
 }
 
 export const DAILY_CONFIRM_ATTENDANCE_OPTIONS: {

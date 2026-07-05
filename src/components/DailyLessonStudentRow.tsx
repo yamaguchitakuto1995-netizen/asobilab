@@ -3,16 +3,14 @@
 import { useState } from "react";
 import { AttendanceConfirmDialog } from "@/components/AttendanceConfirmDialog";
 import { SubjectChip } from "@/components/SubjectChip";
-import { formatTimeRange, resolveClassroomPeriodTime } from "@/lib/periodTimes";
+import { TextbookCourseChip } from "@/components/TextbookCourseChip";
 import {
   dailyAttendanceStatusLabel,
   isDailyAbsentLesson,
   lessonTodayTextLabel,
+  lessonTodayTextParts,
 } from "@/lib/todayLessonDisplay";
-import {
-  effectiveLessonClassroom,
-  type ClassroomPeriodTime,
-} from "@/lib/types";
+import type { ClassroomPeriodTime } from "@/lib/types";
 import type { DailyLessonItem } from "./DailyLessonCarousel";
 
 type Props = {
@@ -26,26 +24,18 @@ type Props = {
 export function DailyLessonStudentRow({
   lesson,
   date,
-  period,
+  period: _period,
   previousMemo,
-  classroomPeriodTimes,
+  classroomPeriodTimes: _classroomPeriodTimes,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const st = lesson.students;
   const regularClassroom = st?.classroom ?? null;
   const todayText = lessonTodayTextLabel(lesson, st);
+  const todayTextParts = lessonTodayTextParts(lesson, st);
   const attendanceLabel = dailyAttendanceStatusLabel(lesson);
   const isAbsent = isDailyAbsentLesson(lesson);
-
-  const slotRow =
-    period && classroomPeriodTimes.length
-      ? resolveClassroomPeriodTime(classroomPeriodTimes, {
-          classroom: effectiveLessonClassroom(lesson, regularClassroom),
-          lessonDate: date,
-          period,
-          subject: lesson.subject,
-        })
-      : null;
+  const isScheduled = lesson.status === "scheduled";
 
   return (
     <>
@@ -58,7 +48,7 @@ export function DailyLessonStudentRow({
       >
         {isAbsent ? (
           <div className="bg-slate-500 px-3 py-1.5 text-center text-[11px] font-bold tracking-wide text-white">
-            {lesson.status === "scheduled" ? "欠席予定" : "欠席"}
+            {isScheduled ? "欠席予定" : "欠席"}
           </div>
         ) : null}
 
@@ -106,9 +96,27 @@ export function DailyLessonStudentRow({
                     {attendanceLabel}
                   </dd>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 items-center flex-wrap">
                   <dt className="text-slate-400 shrink-0">本日のテキスト</dt>
-                  <dd className={isAbsent ? "text-slate-500" : "text-slate-800"}>{todayText}</dd>
+                  <dd className="flex flex-wrap items-center gap-1">
+                    {todayTextParts.course ? (
+                      <>
+                        <TextbookCourseChip
+                          course={todayTextParts.course}
+                          subject={lesson.subject ?? ""}
+                        />
+                        {todayTextParts.detail ? (
+                          <span className={isAbsent ? "text-slate-500" : "text-slate-700"}>
+                            {todayTextParts.detail}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className={isAbsent ? "text-slate-500" : "text-slate-800"}>
+                        {todayText}
+                      </span>
+                    )}
+                  </dd>
                 </div>
                 <div className="flex gap-1">
                   <dt className="text-slate-400 shrink-0">前回の備考</dt>
@@ -117,24 +125,21 @@ export function DailyLessonStudentRow({
                   </dd>
                 </div>
               </dl>
-              {slotRow ? (
-                <p className="text-[10px] text-slate-400">
-                  {formatTimeRange(slotRow.start_time, slotRow.end_time)}
-                </p>
-              ) : null}
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
-            className={`w-full rounded-lg text-xs font-medium px-3 py-2 ${
+            className={`w-full rounded-lg text-xs font-medium px-3 py-2 text-white ${
               isAbsent
-                ? "bg-slate-400 hover:bg-slate-500 text-white"
-                : "bg-brand-600 hover:bg-brand-700 text-white"
+                ? "bg-slate-400 hover:bg-slate-500"
+                : isScheduled
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-slate-500 hover:bg-slate-600"
             }`}
           >
-            {lesson.status === "scheduled" ? "出席確認" : "内容を更新"}
+            {isScheduled ? "出席確認" : "内容を更新"}
           </button>
         </div>
       </div>
