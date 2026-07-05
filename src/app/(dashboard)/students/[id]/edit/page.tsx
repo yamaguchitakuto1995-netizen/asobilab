@@ -139,6 +139,42 @@ export default async function EditStudentPage({
           />
         </Field>
 
+        <Field
+          label="生徒ID"
+          htmlFor="portal_id"
+          required
+          hint="保護者の振替申請フォームで使う番号（教室が発行・英数字20文字以内）"
+        >
+          <input
+            id="portal_id"
+            name="portal_id"
+            type="text"
+            required
+            maxLength={20}
+            pattern="[0-9A-Za-z\-]{1,20}"
+            defaultValue={student.portal_id ?? ""}
+            className={inputClass}
+            placeholder="例: 10001"
+            autoComplete="off"
+          />
+        </Field>
+
+        <Field
+          label="誕生日"
+          htmlFor="birthday"
+          required
+          hint="保護者の振替申請フォームで本人確認に使います"
+        >
+          <input
+            id="birthday"
+            name="birthday"
+            type="date"
+            required
+            defaultValue={student.birthday ?? ""}
+            className={inputClass}
+          />
+        </Field>
+
         <Field label="学年" htmlFor="grade" required>
           <select
             id="grade"
@@ -227,7 +263,7 @@ export default async function EditStudentPage({
         <div>
           <h2 className="text-base font-semibold text-sky-950">保護者ログインとの紐付け</h2>
           <p className="text-xs text-sky-900/80 mt-1 leading-relaxed">
-            保護者が登録したメール（ログイン ID と同じ）を指定すると、「お子様の予定」画面にこの生徒の予定が表示されます。対象ユーザーは職員ページには入れません。
+            振替申請（<code className="text-xs">/apply</code>）は上記の<strong>生徒IDと誕生日</strong>でログインできます。予定確認（<code className="text-xs">/parent</code>）は、保護者のメールアドレスを紐付けると表示されます。
           </p>
         </div>
 

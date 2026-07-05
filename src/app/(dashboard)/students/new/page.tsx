@@ -60,6 +60,40 @@ export default async function NewStudentPage({
           />
         </Field>
 
+        <Field
+          label="生徒ID"
+          htmlFor="portal_id"
+          required
+          hint="保護者の振替申請フォームで使う番号（教室が発行・英数字20文字以内）"
+        >
+          <input
+            id="portal_id"
+            name="portal_id"
+            type="text"
+            required
+            maxLength={20}
+            pattern="[0-9A-Za-z\-]{1,20}"
+            className={inputClass}
+            placeholder="例: 10001"
+            autoComplete="off"
+          />
+        </Field>
+
+        <Field
+          label="誕生日"
+          htmlFor="birthday"
+          required
+          hint="保護者の振替申請フォームで本人確認に使います"
+        >
+          <input
+            id="birthday"
+            name="birthday"
+            type="date"
+            required
+            className={inputClass}
+          />
+        </Field>
+
         <Field label="学年" htmlFor="grade" required>
           <select id="grade" name="grade" required className={inputClass} defaultValue="">
             <option value="" disabled>

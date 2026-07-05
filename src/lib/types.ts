@@ -205,6 +205,10 @@ export type Student = {
   enrollment_prog_capacity_id?: string | null;
   /** 兄弟姉妹グループ（同一 UUID の生徒が兄弟として扱われる） */
   sibling_group_id?: string | null;
+  /** 保護者向け振替フォーム用の生徒ID（教室が発行） */
+  portal_id?: string | null;
+  /** 保護者向け振替フォーム用の本人確認（誕生日・YYYY-MM-DD） */
+  birthday?: string | null;
   note: string | null;
   created_at: string;
   created_by: string;

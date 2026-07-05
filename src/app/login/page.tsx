@@ -30,7 +30,7 @@ export default async function LoginPage({
         <div className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-left text-sm text-sky-900">
           <p className="font-medium text-sky-950">保護者の方へ</p>
           <p className="mt-1 text-sky-900/90 leading-snug">
-            振替のお申し込みは<strong>ログイン不要</strong>です。下記からお進みください。
+            振替のお申し込みは<strong>ログイン不要</strong>です。教室からお渡しの<strong>生徒ID</strong>と<strong>お子様の誕生日</strong>で下記フォームからお進みください。
           </p>
           <Link
             href="/apply"

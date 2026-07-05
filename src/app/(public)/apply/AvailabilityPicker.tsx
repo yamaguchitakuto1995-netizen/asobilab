@@ -36,6 +36,8 @@ type SourceKind = "attendance" | "pending_absence";
 
 type Props = {
   students: FoundStudent[];
+  portalId: string;
+  birthday: string;
   periodTimes?: ClassroomPeriodTime[];
   daysAhead?: number;
   pollIntervalMs?: number;
@@ -87,6 +89,8 @@ const FLOW_TABS: { id: FlowTab; label: string; hint: string }[] = [
 
 export function AvailabilityPicker({
   students,
+  portalId,
+  birthday,
   periodTimes = [],
   daysAhead = MAKEUP_TARGET_MAX_DAYS_AHEAD,
   pollIntervalMs = 30_000,
@@ -179,16 +183,14 @@ export function AvailabilityPicker({
               const [scheduled, pending] = await Promise.all([
                 listScheduledLessonsForMakeup({
                   studentId: s.id,
-                  name: s.name,
-                  classroom: s.classroom,
-                  grade: s.grade,
+                  portalId,
+                  birthday,
                   subjects: s.subjects,
                 }),
                 listPendingAbsencesForMakeup({
                   studentId: s.id,
-                  name: s.name,
-                  classroom: s.classroom,
-                  grade: s.grade,
+                  portalId,
+                  birthday,
                   subjects: s.subjects,
                 }),
               ]);
@@ -235,7 +237,7 @@ export function AvailabilityPicker({
     return () => {
       cancelled = true;
     };
-  }, [students, lessonListVersion]);
+  }, [students, portalId, birthday, lessonListVersion]);
 
   function bumpLessonLists() {
     setLessonListVersion((v) => v + 1);
@@ -403,9 +405,8 @@ export function AvailabilityPicker({
         const source = sources[s.id]!;
         return {
           studentId: s.id,
-          name: s.name,
-          classroom: s.classroom,
-          grade: s.grade,
+          portalId,
+          birthday,
           subjects: s.subjects,
           lessonDate: source.lessonDate,
           period: source.period,
@@ -457,9 +458,8 @@ export function AvailabilityPicker({
         const dest = destByStudent[s.id]!;
         return {
           studentId: s.id,
-          name: s.name,
-          classroom: s.classroom,
-          grade: s.grade,
+          portalId,
+          birthday,
           lessonDate: selectedDate,
           period: dest.period,
           subject: dest.subject,

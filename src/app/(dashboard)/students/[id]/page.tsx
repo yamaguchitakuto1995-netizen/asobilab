@@ -188,6 +188,27 @@ export default async function StudentDetailPage({
         </p>
       ) : null}
 
+      <section className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sm text-sky-950">
+        <h2 className="font-semibold text-sky-950 mb-2">保護者向け振替申請のログイン情報</h2>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt className="text-sky-800">生徒ID</dt>
+          <dd className="font-mono font-medium">
+            {student.portal_id?.trim() ? student.portal_id : (
+              <span className="text-rose-700 font-sans font-normal">未設定（編集画面で登録）</span>
+            )}
+          </dd>
+          <dt className="text-sky-800">誕生日</dt>
+          <dd className="font-medium">
+            {student.birthday ? student.birthday : (
+              <span className="text-rose-700 font-normal">未設定（編集画面で登録）</span>
+            )}
+          </dd>
+        </dl>
+        <p className="text-xs text-sky-800/80 mt-2">
+          保護者は <code className="text-xs">/apply</code> で上記2つを入力して振替申請できます。
+        </p>
+      </section>
+
       {student.classroom || (student.subjects && student.subjects.length > 0) ? (
         <section className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
           {student.classroom ? (
