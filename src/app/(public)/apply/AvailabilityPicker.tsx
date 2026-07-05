@@ -11,6 +11,12 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import {
+  canRegisterAbsence,
+  formatMakeupDeadlineLabel,
+  isMakeupSourceSelectable,
+  makeupRegistrationClosedMessage,
+} from "@/lib/registrationDeadlines";
+import {
   MAKEUP_TARGET_MAX_DAYS_AHEAD,
   SCHEDULED_ATTENDANCE_LABEL,
   periodLabel,
@@ -50,6 +56,7 @@ type SourceSelection = {
   period: number;
   subject: string;
   kind: SourceKind;
+  lessonClassroom?: string | null;
 };
 
 type CompletedSummary =
@@ -352,6 +359,7 @@ export function AvailabilityPicker({
         period: row.period,
         subject: row.subject,
         kind,
+        lessonClassroom: row.lesson_classroom ?? null,
       },
     }));
     setDestByStudent((prev) => ({ ...prev, [studentId]: null }));
@@ -411,6 +419,7 @@ export function AvailabilityPicker({
           lessonDate: source.lessonDate,
           period: source.period,
           subject: source.subject,
+          lessonClassroom: source.lessonClassroom ?? s.classroom,
         };
       });
 
@@ -742,15 +751,39 @@ export function AvailabilityPicker({
                       const kind: SourceKind = showPendingSources
                         ? "pending_absence"
                         : "attendance";
+                      const absenceCheck = canRegisterAbsence({
+                        lessonDate: row.lesson_date,
+                        period: row.period,
+                        subject: row.subject,
+                        classroom: venue,
+                        periodTimes,
+                      });
+                      const makeupOpen = isMakeupSourceSelectable(row.lesson_date);
+                      const selectable = showPendingSources
+                        ? makeupOpen
+                        : absenceCheck.ok;
+                      const closedMessage = showPendingSources
+                        ? makeupOpen
+                          ? null
+                          : makeupRegistrationClosedMessage(row.lesson_date)
+                        : absenceCheck.ok
+                          ? null
+                          : absenceCheck.error;
                       return (
                         <button
                           key={row.id}
                           type="button"
-                          onClick={() => pickSource(s.id, row, kind)}
+                          disabled={!selectable}
+                          onClick={() => {
+                            if (!selectable) return;
+                            pickSource(s.id, row, kind);
+                          }}
                           className={`text-left rounded-2xl border bg-white p-4 shadow-sm transition ${
-                            picked
-                              ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
-                              : "border-slate-200 hover:border-brand-400 hover:shadow"
+                            !selectable
+                              ? "border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
+                              : picked
+                                ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                                : "border-slate-200 hover:border-brand-400 hover:shadow"
                           }`}
                         >
                           <div className={`text-[11px] font-semibold ${dayColor(dow)}`}>
@@ -791,6 +824,16 @@ export function AvailabilityPicker({
                               {attendanceLabel}
                             </span>
                           </div>
+                          {selectable && showPendingSources ? (
+                            <p className="mt-2 text-[10px] text-slate-500">
+                              申請締切: {formatMakeupDeadlineLabel(row.lesson_date)}
+                            </p>
+                          ) : null}
+                          {closedMessage ? (
+                            <p className="mt-2 text-[10px] text-rose-700 leading-snug">
+                              {closedMessage}
+                            </p>
+                          ) : null}
                         </button>
                       );
                     })}
