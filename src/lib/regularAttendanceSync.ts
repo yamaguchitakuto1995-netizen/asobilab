@@ -146,7 +146,6 @@ async function loadOccupiedLessonKeys(
     .from("lessons")
     .select("student_id, lesson_date, period, subject")
     .in("student_id", studentIds)
-    .eq("status", "scheduled")
     .gte("lesson_date", fromDate);
 
   if (error) throw new Error(error.message);
@@ -400,7 +399,6 @@ export async function syncStudentRegularAttendance(
     .from("lessons")
     .select("lesson_date, period, subject")
     .eq("student_id", p.studentId)
-    .eq("status", "scheduled")
     .gte("lesson_date", today);
 
   const occupied = new Set(

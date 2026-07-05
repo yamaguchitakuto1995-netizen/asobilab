@@ -116,7 +116,7 @@ export function AttendanceConfirmDialog({
               id="daily_confirm_title"
               className="text-lg font-semibold text-slate-900"
             >
-              出席確認
+              {lesson.status === "scheduled" ? "出席確認" : "内容を更新"}
             </h2>
             <p className="text-sm text-slate-600 mt-0.5 truncate">
               {studentName} さん · {lesson.subject ?? "科目未設定"}
