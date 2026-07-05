@@ -1,4 +1,4 @@
-import { shiftDate } from "@/lib/date";
+import { formatDateShort, shiftDate, shiftMonth } from "@/lib/date";
 import { formatClock, resolveClassroomPeriodTime } from "@/lib/periodTimes";
 import type { ClassroomPeriodTime } from "@/lib/types";
 
@@ -113,4 +113,107 @@ export function isMakeupSourceSelectable(
   now = new Date()
 ): boolean {
   return isMakeupRegistrationOpen(sourceLessonDate, now);
+}
+
+/** 欠席月の翌々月末（振替先を選べる最遅日） */
+export function makeupTargetMaxDate(sourceLessonDate: string): string {
+  const ym = sourceLessonDate.slice(0, 7);
+  const endYm = shiftMonth(ym, 2);
+  const [y, m] = endYm.split("-").map(Number);
+  const lastDay = new Date(y, m, 0);
+  const mm = String(lastDay.getMonth() + 1).padStart(2, "0");
+  const dd = String(lastDay.getDate()).padStart(2, "0");
+  return `${lastDay.getFullYear()}-${mm}-${dd}`;
+}
+
+/** 振替先の最早日（同月内前振替では欠席月の1日から） */
+export function makeupTargetMinDate(
+  sourceLessonDate: string,
+  today: string
+): string {
+  const sourceMonthStart = `${sourceLessonDate.slice(0, 7)}-01`;
+  const sourceYm = sourceLessonDate.slice(0, 7);
+  const todayYm = today.slice(0, 7);
+
+  if (sourceYm >= todayYm) {
+    return sourceMonthStart;
+  }
+  return today;
+}
+
+export function formatMakeupTargetMaxLabel(sourceLessonDate: string): string {
+  return formatDateShort(makeupTargetMaxDate(sourceLessonDate));
+}
+
+/** 振替先日付が欠席元に対して有効か */
+export function validateMakeupTargetDate(
+  sourceLessonDate: string,
+  targetLessonDate: string,
+  today: string
+): { ok: true } | { ok: false; error: string } {
+  const sourceYm = sourceLessonDate.slice(0, 7);
+  const targetYm = targetLessonDate.slice(0, 7);
+
+  if (targetYm < sourceYm) {
+    return {
+      ok: false,
+      error:
+        "振替先は欠席月より前の月には設定できません。同月内であれば前の日付への振替が可能です。",
+    };
+  }
+
+  const min = makeupTargetMinDate(sourceLessonDate, today);
+  if (targetLessonDate < min) {
+    return {
+      ok: false,
+      error: `振替先の日付は ${formatDateShort(min)} 以降を選んでください。`,
+    };
+  }
+
+  const max = makeupTargetMaxDate(sourceLessonDate);
+  if (targetLessonDate > max) {
+    return {
+      ok: false,
+      error: `振替先は欠席月の翌々月末（${formatMakeupTargetMaxLabel(sourceLessonDate)}）まで選べます。`,
+    };
+  }
+
+  const sameMonthPreMakeup =
+    targetYm === sourceYm && targetLessonDate <= sourceLessonDate;
+  if (targetLessonDate < today && !sameMonthPreMakeup) {
+    return {
+      ok: false,
+      error: "振替先は今日以降の日付を選んでください。",
+    };
+  }
+
+  return { ok: true };
+}
+
+/** 複数欠席元があるときの振替先日付レンジ（共通部分） */
+export function makeupTargetDateRangeForSources(
+  sourceLessonDates: string[],
+  today: string
+): { min: string; max: string } {
+  if (sourceLessonDates.length === 0) {
+    return { min: today, max: shiftDate(today, 120) };
+  }
+  const mins = sourceLessonDates.map((d) => makeupTargetMinDate(d, today));
+  const maxs = sourceLessonDates.map((d) => makeupTargetMaxDate(d));
+  return {
+    min: mins.sort().reverse()[0]!,
+    max: maxs.sort()[0]!,
+  };
+}
+
+/** min〜max の日付配列（YYYY-MM-DD） */
+export function enumerateDatesInclusive(min: string, max: string): string[] {
+  if (min > max) return [];
+  const arr: string[] = [];
+  let d = min;
+  while (d <= max) {
+    arr.push(d);
+    d = shiftDate(d, 1);
+  }
+  return arr;
 }
