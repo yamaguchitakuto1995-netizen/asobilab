@@ -203,6 +203,8 @@ export function DailyLessonStudentRow({
           <PromotionScheduleNotice
             promotionScheduledYm={st?.promotion_scheduled_ym}
             promotionType={st?.promotion_type}
+            subject={lesson.subject}
+            student={st}
             compact
           />
 

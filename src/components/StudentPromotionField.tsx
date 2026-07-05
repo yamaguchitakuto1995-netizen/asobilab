@@ -14,7 +14,7 @@ export function StudentPromotionField({
       <header>
         <p className="text-sm font-semibold text-amber-950">進級予定</p>
         <p className="text-xs text-amber-900/80 mt-1">
-          次のコースへの進級または飛び級の予定月を設定します。コマ表と生徒情報に表示されます。
+          次のコースへの進級または飛び級の予定月を設定します。コマ表に「○年○月から□□へ自動進級／飛び級」と表示されます。
         </p>
       </header>
 

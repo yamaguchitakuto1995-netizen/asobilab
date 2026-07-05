@@ -23,7 +23,7 @@ import {
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
 import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
-import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
+import { StudentPromotionScheduleNotices } from "@/components/PromotionScheduleNotice";
 import { StudentLeavePeriodDisplay } from "@/components/StudentLeavePeriodDisplay";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
@@ -238,9 +238,11 @@ export default async function StudentDetailPage({
         editHref={`/students/${student.id}/edit`}
       />
 
-      <PromotionScheduleNotice
+      <StudentPromotionScheduleNotices
         promotionScheduledYm={student.promotion_scheduled_ym}
         promotionType={student.promotion_type}
+        subjects={student.subjects}
+        student={student}
       />
 
       {student.classroom || (student.subjects && student.subjects.length > 0) ? (
