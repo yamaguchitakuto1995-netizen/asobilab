@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -14,6 +15,9 @@ import {
   lessonTodayTextParts,
 } from "@/lib/todayLessonDisplay";
 import { formatCarryOverMemoDisplay } from "@/lib/studentCarryOverMemo";
+import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
+import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
+import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
 import type { AttendanceStatus, ClassroomPeriodTime } from "@/lib/types";
 import type { DailyLessonItem } from "./DailyLessonCarousel";
 
@@ -49,6 +53,10 @@ export function DailyLessonStudentRow({
     !isAbsent &&
     todayText.trim() !== "" &&
     todayText.trim() !== "—";
+
+  const isProgrammingLesson = lesson.subject === "プログラミング";
+  const showProgLogin =
+    isProgrammingLesson && st && hasProgrammingLoginDisplay(st);
 
   const defaultAttendance: AttendanceStatus =
     lesson.attendance === "makeup" ? "makeup" : "present";
@@ -95,19 +103,34 @@ export function DailyLessonStudentRow({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1 space-y-1">
               <div>
-                <p
-                  className={`font-medium text-sm ${
-                    isAbsent ? "text-slate-500" : "text-slate-900"
-                  }`}
-                >
-                  {st?.name ?? "（削除済み）"}
-                </p>
+                {st?.id ? (
+                  <Link
+                    href={`/students/${st.id}`}
+                    className={`font-medium text-sm hover:underline ${
+                      isAbsent ? "text-slate-500" : "text-brand-700"
+                    }`}
+                  >
+                    {st.name}
+                  </Link>
+                ) : (
+                  <p
+                    className={`font-medium text-sm ${
+                      isAbsent ? "text-slate-500" : "text-slate-900"
+                    }`}
+                  >
+                    {st?.name ?? "（削除済み）"}
+                  </p>
+                )}
                 {st?.name_kana ? (
                   <p className={`text-[11px] ${isAbsent ? "text-slate-400" : "text-slate-500"}`}>
                     {st.name_kana}
                   </p>
                 ) : null}
               </div>
+
+              {showProgLogin ? (
+                <ProgrammingLoginDisplay student={st} compact />
+              ) : null}
               <dl className={`text-[11px] space-y-0.5 ${isAbsent ? "text-slate-500" : "text-slate-600"}`}>
                 <div className="flex gap-1">
                   <dt className="text-slate-400 shrink-0">学年</dt>
@@ -176,6 +199,12 @@ export function DailyLessonStudentRow({
               {quickError}
             </p>
           ) : null}
+
+          <PromotionScheduleNotice
+            promotionScheduledYm={st?.promotion_scheduled_ym}
+            promotionType={st?.promotion_type}
+            compact
+          />
 
           {isScheduled && !isAbsent ? (
             <div className="grid grid-cols-2 gap-2">

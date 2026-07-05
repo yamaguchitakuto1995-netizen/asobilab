@@ -21,6 +21,9 @@ import {
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
+import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
+import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
+import { PromotionScheduleNotice } from "@/components/PromotionScheduleNotice";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
@@ -213,6 +216,26 @@ export default async function StudentDetailPage({
           保護者は <code className="text-xs">/apply</code> で上記2つを入力して振替申請できます。
         </p>
       </section>
+
+      {student.subjects?.includes("プログラミング") &&
+      hasProgrammingLoginDisplay(student) ? (
+        <ProgrammingLoginDisplay student={student} />
+      ) : student.subjects?.includes("プログラミング") ? (
+        <section className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 px-4 py-3 text-sm text-violet-900">
+          スクラッチログイン情報が未設定です。
+          <Link
+            href={`/students/${student.id}/edit`}
+            className="ml-1 font-medium text-brand-700 hover:underline"
+          >
+            編集画面で登録
+          </Link>
+        </section>
+      ) : null}
+
+      <PromotionScheduleNotice
+        promotionScheduledYm={student.promotion_scheduled_ym}
+        promotionType={student.promotion_type}
+      />
 
       {student.classroom || (student.subjects && student.subjects.length > 0) ? (
         <section className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">

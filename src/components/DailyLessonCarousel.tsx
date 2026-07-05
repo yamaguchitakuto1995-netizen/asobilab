@@ -33,6 +33,11 @@ export type DailyLessonItem = Lesson & {
     next_text_programming_text?: string | null;
     persistent_memo?: string | null;
     withdrawal_until_ym?: string | null;
+    scratch_login_id?: string | null;
+    scratch_login_pass?: string | null;
+    minecraft_login?: string | null;
+    promotion_scheduled_ym?: string | null;
+    promotion_type?: "normal" | "skip_grade";
   } | null;
 };
 
