@@ -1,24 +1,82 @@
 import { isValidYearMonth } from "@/lib/studentWithdrawal";
+import {
+  programmingCourseOptionsInOrder,
+  resolveProgrammingNextTextPartsForStudent,
+  resolveRobotNextTextPartsForStudent,
+  robotCourseOptionsInOrder,
+} from "@/lib/courseNextText";
+import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
 
 export const PROMOTION_TYPES = [
-  { value: "normal", label: "進級" },
+  { value: "normal", label: "自動進級" },
   { value: "skip_grade", label: "飛び級" },
 ] as const;
 
 export type PromotionType = (typeof PROMOTION_TYPES)[number]["value"];
 
+export type PromotionStudentFields = {
+  next_text_robot?: string | null;
+  next_text_robot_course?: string | null;
+  next_text_robot_text?: string | null;
+  next_text_programming?: string | null;
+  next_text_programming_course?: string | null;
+  next_text_programming_text?: string | null;
+};
+
+function nextCourseInOrder(
+  current: string,
+  order: readonly string[]
+): string | null {
+  const idx = order.indexOf(current);
+  if (idx === -1 || idx >= order.length - 1) return null;
+  return order[idx + 1] ?? null;
+}
+
+/** 進級先コースの表示名（例: プライマリー → ベーシック） */
+export function resolveNextPromotionCourseDisplay(
+  subject: string | null | undefined,
+  student: PromotionStudentFields | null | undefined
+): string | null {
+  if (!student || !subject) return null;
+
+  if (subject === "ロボット") {
+    const parts = resolveRobotNextTextPartsForStudent(student);
+    const current = parts?.course;
+    if (!current) return null;
+    const next = nextCourseInOrder(current, robotCourseOptionsInOrder());
+    return next ? textbookCourseChipLabel(next) : null;
+  }
+
+  if (subject === "プログラミング") {
+    const parts = resolveProgrammingNextTextPartsForStudent(student);
+    const current = parts?.course;
+    if (!current) return null;
+    const next = nextCourseInOrder(current, programmingCourseOptionsInOrder());
+    return next ? textbookCourseChipLabel(next) : null;
+  }
+
+  return null;
+}
+
 export function formatPromotionScheduleLabel(
   promotionScheduledYm: string | null | undefined,
-  promotionType: PromotionType | string | null | undefined
+  promotionType: PromotionType | string | null | undefined,
+  nextCourseDisplay?: string | null
 ): string | null {
   if (!promotionScheduledYm?.trim()) return null;
   const ym = promotionScheduledYm.trim();
   const year = ym.slice(0, 4);
   const month = Number(ym.slice(5, 7));
   if (!month) return null;
-  const suffix =
-    promotionType === "skip_grade" ? "飛び級予定" : "進級予定";
-  return `${year}年${month}月${suffix}`;
+
+  const action =
+    promotionType === "skip_grade" ? "飛び級" : "自動進級";
+
+  if (nextCourseDisplay?.trim()) {
+    return `${year}年${month}月から${nextCourseDisplay.trim()}へ${action}`;
+  }
+
+  return `${year}年${month}月${action}予定`;
 }
 
 export function readPromotionFromForm(formData: FormData): {
