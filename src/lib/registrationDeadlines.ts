@@ -312,3 +312,44 @@ export function enumerateDatesInclusive(min: string, max: string): string[] {
   }
   return arr;
 }
+
+export type StudentLessonSlot = {
+  lesson_date: string;
+  period: number;
+  subject: string;
+};
+
+/** 生徒が指定日・コマにすでに授業を持っているか（欠席元コマは除外） */
+export function isStudentSlotOccupied(
+  lessons: StudentLessonSlot[],
+  opts: {
+    lessonDate: string;
+    period: number;
+    subject: string;
+    excludeSource?: {
+      lessonDate: string;
+      period: number;
+      subject: string;
+    } | null;
+  }
+): boolean {
+  return lessons.some((l) => {
+    if (l.lesson_date !== opts.lessonDate || l.period !== opts.period) {
+      return false;
+    }
+    const ex = opts.excludeSource;
+    if (
+      ex &&
+      ex.lessonDate === opts.lessonDate &&
+      ex.period === opts.period &&
+      ex.subject === opts.subject
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function studentSlotOccupiedMessage(): string {
+  return "このコマにはすでに授業が登録されているため、振替先に選べません。";
+}
