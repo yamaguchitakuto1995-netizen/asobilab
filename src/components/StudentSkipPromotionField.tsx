@@ -13,8 +13,8 @@ export function StudentSkipPromotionField({
       <header>
         <p className="text-sm font-semibold text-amber-950">飛び級予定（任意）</p>
         <p className="text-xs text-amber-900/80 mt-1 leading-relaxed">
-          通常は設定不要です。次回テキストから「○年○月から□□へ自動進級」が自動表示されます。
-          飛び級のときだけ予定月を指定してください。
+          通常は設定不要です。コース開始月と次回テキストから「○年○月から□□へ自動進級」が自動表示されます。
+          飛び級のときだけ予定月を指定してください。進級後はコース開始月が自動更新され、次の進級予定が出ます。
         </p>
       </header>
 
