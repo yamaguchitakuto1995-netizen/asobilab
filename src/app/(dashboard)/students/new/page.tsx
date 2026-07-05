@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
 import { StudentWithdrawalField } from "@/components/StudentWithdrawalField";
 import { StudentProgrammingLoginField } from "@/components/StudentProgrammingLoginField";
-import { StudentPromotionField } from "@/components/StudentPromotionField";
+import { StudentSkipPromotionField } from "@/components/StudentSkipPromotionField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
@@ -134,7 +134,6 @@ export default async function NewStudentPage({
         />
 
         <StudentProgrammingLoginField />
-        <StudentPromotionField />
 
         <StudentLeaveField />
         <StudentWithdrawalField />

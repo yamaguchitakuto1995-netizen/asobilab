@@ -200,13 +200,7 @@ export function DailyLessonStudentRow({
             </p>
           ) : null}
 
-          <PromotionScheduleNotice
-            promotionScheduledYm={st?.promotion_scheduled_ym}
-            promotionType={st?.promotion_type}
-            subject={lesson.subject}
-            student={st}
-            compact
-          />
+          <PromotionScheduleNotice subject={lesson.subject} student={st} compact />
 
           {isScheduled && !isAbsent ? (
             <div className="grid grid-cols-2 gap-2">

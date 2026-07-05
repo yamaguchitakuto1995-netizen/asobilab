@@ -1,11 +1,21 @@
+import { currentYm, shiftMonth } from "@/lib/date";
 import { isValidYearMonth } from "@/lib/studentWithdrawal";
 import {
+  PROGRAMMING_NEXT_TEXT_OPTIONS,
   programmingCourseOptionsInOrder,
+  parseProgrammingNextTextParts,
+  parseRobotNextTextParts,
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
+  ROBOT_NEXT_TEXT_OPTIONS,
   robotCourseOptionsInOrder,
+  type ProgrammingNextText,
+  type RobotNextText,
 } from "@/lib/courseNextText";
 import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
+
+/** 月2回ペースでコース修了→進級月を見積もる */
+const LESSONS_PER_MONTH = 2;
 
 export const PROMOTION_TYPES = [
   { value: "normal", label: "自動進級" },
@@ -15,6 +25,8 @@ export const PROMOTION_TYPES = [
 export type PromotionType = (typeof PROMOTION_TYPES)[number]["value"];
 
 export type PromotionStudentFields = {
+  promotion_scheduled_ym?: string | null;
+  promotion_type?: PromotionType | string | null;
   next_text_robot?: string | null;
   next_text_robot_course?: string | null;
   next_text_robot_text?: string | null;
@@ -58,6 +70,49 @@ export function resolveNextPromotionCourseDisplay(
   return null;
 }
 
+function remainingLessonsInCourse(
+  subject: string,
+  student: PromotionStudentFields
+): number | null {
+  if (subject === "ロボット") {
+    const parts = resolveRobotNextTextPartsForStudent(student);
+    if (!parts?.full || !parts.course) return null;
+    const inCourse = ROBOT_NEXT_TEXT_OPTIONS.filter((opt) => {
+      const p = parseRobotNextTextParts(opt);
+      return p?.course === parts.course;
+    });
+    const idx = inCourse.indexOf(parts.full as RobotNextText);
+    if (idx === -1) return null;
+    return inCourse.length - idx;
+  }
+
+  if (subject === "プログラミング") {
+    const parts = resolveProgrammingNextTextPartsForStudent(student);
+    if (!parts?.full || !parts.course) return null;
+    const inCourse = PROGRAMMING_NEXT_TEXT_OPTIONS.filter((opt) => {
+      const p = parseProgrammingNextTextParts(opt);
+      return p?.course === parts.course;
+    });
+    const idx = inCourse.indexOf(parts.full as ProgrammingNextText);
+    if (idx === -1) return null;
+    return inCourse.length - idx;
+  }
+
+  return null;
+}
+
+/** カリキュラム上の残り授業数から進級予定月を見積もる */
+export function estimateAutoPromotionScheduledYm(
+  subject: string | null | undefined,
+  student: PromotionStudentFields | null | undefined
+): string | null {
+  if (!student || !subject) return null;
+  const remaining = remainingLessonsInCourse(subject, student);
+  if (remaining == null || remaining <= 0) return null;
+  const months = Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
+  return shiftMonth(currentYm(), months - 1);
+}
+
 export function formatPromotionScheduleLabel(
   promotionScheduledYm: string | null | undefined,
   promotionType: PromotionType | string | null | undefined,
@@ -79,36 +134,51 @@ export function formatPromotionScheduleLabel(
   return `${year}年${month}月${action}予定`;
 }
 
+/** コマ表・生徒情報用の進級予定ラベル（自動進級は常時、飛び級は手動設定時） */
+export function resolvePromotionScheduleLabel(
+  subject: string | null | undefined,
+  student: PromotionStudentFields | null | undefined
+): string | null {
+  const nextCourse = resolveNextPromotionCourseDisplay(subject, student);
+  if (!nextCourse) return null;
+
+  const isSkipGrade =
+    student?.promotion_type === "skip_grade" &&
+    student?.promotion_scheduled_ym?.trim();
+
+  if (isSkipGrade) {
+    return formatPromotionScheduleLabel(
+      student!.promotion_scheduled_ym,
+      "skip_grade",
+      nextCourse
+    );
+  }
+
+  const estimatedYm = estimateAutoPromotionScheduledYm(subject, student);
+  if (!estimatedYm) return null;
+
+  return formatPromotionScheduleLabel(estimatedYm, "normal", nextCourse);
+}
+
+/** 飛び級のみ手動入力（空欄なら自動進級表示） */
 export function readPromotionFromForm(formData: FormData): {
   promotion_scheduled_ym: string | null;
   promotion_type: PromotionType;
   error?: string;
 } {
   const rawYm = String(formData.get("promotion_scheduled_ym") ?? "").trim();
-  const rawType = String(formData.get("promotion_type") ?? "normal").trim();
-
-  let promotion_type: PromotionType = "normal";
-  if (rawType === "skip_grade") {
-    promotion_type = "skip_grade";
-  } else if (rawType !== "normal") {
-    return {
-      promotion_scheduled_ym: null,
-      promotion_type: "normal",
-      error: "進級予定の種別が不正です。",
-    };
-  }
 
   if (!rawYm) {
-    return { promotion_scheduled_ym: null, promotion_type };
+    return { promotion_scheduled_ym: null, promotion_type: "normal" };
   }
 
   if (!isValidYearMonth(rawYm)) {
     return {
       promotion_scheduled_ym: null,
-      promotion_type,
-      error: "進級予定月の形式が不正です（YYYY-MM）。",
+      promotion_type: "normal",
+      error: "飛び級予定月の形式が不正です（YYYY-MM）。",
     };
   }
 
-  return { promotion_scheduled_ym: rawYm, promotion_type };
+  return { promotion_scheduled_ym: rawYm, promotion_type: "skip_grade" };
 }
