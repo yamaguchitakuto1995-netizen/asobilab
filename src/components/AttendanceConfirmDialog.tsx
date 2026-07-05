@@ -48,6 +48,9 @@ export function AttendanceConfirmDialog({
       ""
   );
   const [textMemo, setTextMemo] = useState(lesson.text_memo?.trim() ?? "");
+  const [persistentMemo, setPersistentMemo] = useState(
+    lesson.students?.persistent_memo?.trim() ?? ""
+  );
 
   useEffect(() => setMounted(true), []);
 
@@ -72,7 +75,8 @@ export function AttendanceConfirmDialog({
   useEffect(() => {
     if (!open) return;
     setSubmitError(null);
-  }, [open]);
+    setPersistentMemo(lesson.students?.persistent_memo?.trim() ?? "");
+  }, [open, lesson.students?.persistent_memo]);
 
   if (!open || !mounted) return null;
 
@@ -83,6 +87,7 @@ export function AttendanceConfirmDialog({
     fd.set("attendance", attendance);
     fd.set("textbook", textbook);
     fd.set("text_memo", textMemo);
+    fd.set("persistent_memo", persistentMemo);
     startTransition(async () => {
       const result = await confirmLessonFromDailyBoard(fd);
       if (!result.ok) {
@@ -200,6 +205,22 @@ export function AttendanceConfirmDialog({
               onChange={(e) => setTextMemo(e.target.value)}
               className={inputClass}
               placeholder="どこまで進んだか、次回への申し送りなど"
+            />
+          </Field>
+
+          <Field
+            label="備考（継続）"
+            htmlFor="daily_confirm_persistent_memo"
+            hint="次回以降も表示されます。空にすると継続備考を消去します（退会予定の表示は除く）。"
+          >
+            <textarea
+              id="daily_confirm_persistent_memo"
+              rows={2}
+              maxLength={2000}
+              value={persistentMemo}
+              onChange={(e) => setPersistentMemo(e.target.value)}
+              className={inputClass}
+              placeholder="次回以降も引き継ぐ注意事項など"
             />
           </Field>
 

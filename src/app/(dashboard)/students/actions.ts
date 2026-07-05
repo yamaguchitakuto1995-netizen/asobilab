@@ -42,7 +42,9 @@ import {
 } from "@/lib/studentPortal";
 import { syncEnrollmentLessons } from "@/lib/syncEnrollmentLessons";
 import { applyStudentLeaveEffects } from "@/lib/applyStudentLeave";
+import { applyWithdrawalToScheduledLessons } from "@/lib/applyStudentWithdrawal";
 import { readLeavePeriodFromForm } from "@/lib/studentLeave";
+import { readWithdrawalUntilFromForm } from "@/lib/studentWithdrawal";
 import type { LessonCapacity } from "@/lib/types";
 
 const STUDENTS_BASE = "/students";
@@ -330,6 +332,13 @@ export async function createStudent(formData: FormData) {
     redirect(`/students/new?error=${encodeURIComponent(leavePeriod.error)}`);
   }
 
+  const withdrawalPeriod = readWithdrawalUntilFromForm(formData);
+  if (withdrawalPeriod.error) {
+    redirect(
+      `/students/new?error=${encodeURIComponent(withdrawalPeriod.error)}`
+    );
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -355,6 +364,7 @@ export async function createStudent(formData: FormData) {
       birthday: birthdayResult.value,
       leave_from_ym: leavePeriod.leave_from_ym,
       leave_until_ym: leavePeriod.leave_until_ym,
+      withdrawal_until_ym: withdrawalPeriod.withdrawal_until_ym,
       note: note || null,
       created_by: user.id,
     })
@@ -412,6 +422,19 @@ export async function createStudent(formData: FormData) {
     redirect(
       `/students/${data!.id}?error=${encodeURIComponent(
         `生徒は登録できましたが、休会設定の反映に失敗しました: ${leaveEffects.error}`
+      )}`
+    );
+  }
+
+  const withdrawalEffects = await applyWithdrawalToScheduledLessons(
+    supabase,
+    data!.id,
+    withdrawalPeriod.withdrawal_until_ym
+  );
+  if (withdrawalEffects.error) {
+    redirect(
+      `/students/${data!.id}?error=${encodeURIComponent(
+        `生徒は登録できましたが、退会予定の反映に失敗しました: ${withdrawalEffects.error}`
       )}`
     );
   }
@@ -521,6 +544,11 @@ export async function updateStudent(formData: FormData) {
     redirect(`${editPath}?error=${encodeURIComponent(leavePeriod.error)}`);
   }
 
+  const withdrawalPeriod = readWithdrawalUntilFromForm(formData);
+  if (withdrawalPeriod.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(withdrawalPeriod.error)}`);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -546,6 +574,7 @@ export async function updateStudent(formData: FormData) {
       birthday: birthdayResult.value,
       leave_from_ym: leavePeriod.leave_from_ym,
       leave_until_ym: leavePeriod.leave_until_ym,
+      withdrawal_until_ym: withdrawalPeriod.withdrawal_until_ym,
       note: note || null,
     })
     .eq("id", id);
@@ -597,6 +626,19 @@ export async function updateStudent(formData: FormData) {
     redirect(
       `/students/${id}?error=${encodeURIComponent(
         `生徒情報は保存できましたが、休会設定の反映に失敗しました: ${leaveEffects.error}`
+      )}`
+    );
+  }
+
+  const withdrawalEffects = await applyWithdrawalToScheduledLessons(
+    supabase,
+    id,
+    withdrawalPeriod.withdrawal_until_ym
+  );
+  if (withdrawalEffects.error) {
+    redirect(
+      `/students/${id}?error=${encodeURIComponent(
+        `生徒情報は保存できましたが、退会予定の反映に失敗しました: ${withdrawalEffects.error}`
       )}`
     );
   }

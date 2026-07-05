@@ -31,6 +31,8 @@ export type DailyLessonItem = Lesson & {
     next_text_robot_text?: string | null;
     next_text_programming_course?: string | null;
     next_text_programming_text?: string | null;
+    persistent_memo?: string | null;
+    withdrawal_until_ym?: string | null;
   } | null;
 };
 

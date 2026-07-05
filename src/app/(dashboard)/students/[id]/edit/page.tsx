@@ -4,6 +4,7 @@ import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
+import { StudentWithdrawalField } from "@/components/StudentWithdrawalField";
 import { StudentNextTextFormSection } from "@/components/StudentNextTextFormSection";
 import { StudentSiblingField } from "@/components/StudentSiblingField";
 import { fetchClassrooms } from "@/lib/classrooms";
@@ -231,6 +232,7 @@ export default async function EditStudentPage({
           defaultLeaveFromYm={student.leave_from_ym}
           defaultLeaveUntilYm={student.leave_until_ym}
         />
+        <StudentWithdrawalField defaultValue={student.withdrawal_until_ym} />
 
         <Field label="メモ" htmlFor="note" hint="連絡先や担当科目など、任意のメモ">
           <textarea

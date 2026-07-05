@@ -19,6 +19,7 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
+import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { createClient } from "@/lib/supabase/server";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
@@ -40,6 +41,8 @@ type LessonWithStudent = Lesson & {
     next_text_robot_text?: string | null;
     next_text_programming_course?: string | null;
     next_text_programming_text?: string | null;
+    persistent_memo?: string | null;
+    withdrawal_until_ym?: string | null;
   } | null;
 };
 
@@ -59,9 +62,8 @@ export default async function DashboardHomePage({
 
   const [
     { count: studentCount },
-    { data: dayLessons },
-    { data: recent },
-    { data: upcoming },
+    { data: dayLessonsRaw },
+    { data: recentMemoRecords },
     periodTimes,
     classrooms,
   ] = await Promise.all([
@@ -69,7 +71,7 @@ export default async function DashboardHomePage({
     supabase
       .from("lessons")
       .select(
-        "*, students ( id, name, name_kana, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
+        "*, students ( id, name, name_kana, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text, persistent_memo, withdrawal_until_ym )"
       )
       .eq("lesson_date", selectedDate)
       .order("period", { ascending: true, nullsFirst: false })
@@ -82,23 +84,24 @@ export default async function DashboardHomePage({
         "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
       )
       .eq("status", "recorded")
+      .eq("registered_via_detail", true)
+      .not("text_memo", "is", null)
       .order("lesson_date", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(5)
-      .returns<LessonWithStudent[]>(),
-    supabase
-      .from("lessons")
-      .select(
-        "*, students ( id, name, grade, classroom, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text )"
-      )
-      .eq("status", "scheduled")
-      .gt("lesson_date", today)
-      .order("lesson_date", { ascending: true })
-      .limit(5)
+      .limit(15)
       .returns<LessonWithStudent[]>(),
     fetchClassroomPeriodTimes(supabase),
     fetchClassrooms(supabase),
   ]);
+
+  const dayLessons = (dayLessonsRaw ?? []).filter((lesson) => {
+    const withdrawalYm = lesson.students?.withdrawal_until_ym ?? null;
+    return !isLessonAfterWithdrawal(lesson.lesson_date, withdrawalYm);
+  });
+
+  const memoRecords = (recentMemoRecords ?? []).filter(
+    (lesson) => lesson.text_memo?.trim()
+  );
 
   const dayPresent =
     dayLessons?.filter((l) => l.status === "recorded" && l.attendance === "present").length ?? 0;
@@ -123,7 +126,7 @@ export default async function DashboardHomePage({
     <div className="space-y-8">
       <PageHeader
         title="ホーム"
-        description="日毎のコマ表と最近の記録、今後の予定を確認できます。"
+        description="日毎のコマ表と、備考入力ありの最近の記録を確認できます。"
         actions={
           <div className="flex flex-wrap items-center gap-2 justify-end">
             <Link
@@ -178,28 +181,10 @@ export default async function DashboardHomePage({
       </section>
 
       <section>
-        <h2 className="text-base font-semibold mb-3">今後の予定</h2>
-        {upcoming && upcoming.length > 0 ? (
-          <ul className="bg-white border border-brand-200 rounded-2xl divide-y divide-brand-100 overflow-hidden">
-            {upcoming.map((l) => (
-              <LessonRow
-                key={l.id}
-                lesson={l}
-                showDate
-                classroomPeriodTimes={periodTimes}
-              />
-            ))}
-          </ul>
-        ) : (
-          <EmptyCard message="今後の予定はまだありません。" />
-        )}
-      </section>
-
-      <section>
-        <h2 className="text-base font-semibold mb-3">最近の記録</h2>
-        {recent && recent.length > 0 ? (
+        <h2 className="text-base font-semibold mb-3">最近の備考有り記録</h2>
+        {memoRecords.length > 0 ? (
           <ul className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
-            {recent.map((l) => (
+            {memoRecords.map((l) => (
               <LessonRow
                 key={l.id}
                 lesson={l}
@@ -209,7 +194,7 @@ export default async function DashboardHomePage({
             ))}
           </ul>
         ) : (
-          <EmptyCard message="まだ授業記録がありません。" />
+          <EmptyCard message="備考入力ありの記録はまだありません。" />
         )}
       </section>
     </div>

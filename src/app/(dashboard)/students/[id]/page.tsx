@@ -20,6 +20,7 @@ import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
@@ -104,6 +105,10 @@ export default async function StudentDetailPage({
     fetchClassroomPeriodTimes(supabase),
     fetchSiblingSummaries(supabase, id, student.sibling_group_id),
   ]);
+
+  const upcomingVisible = (upcoming ?? []).filter(
+    (l) => !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
+  );
 
   // 出席率は記録済みのみで集計
   const recorded =
@@ -338,9 +343,9 @@ export default async function StudentDetailPage({
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold flex items-center gap-2">
             今後の予定
-            {upcoming && upcoming.length > 0 ? (
+            {upcomingVisible.length > 0 ? (
               <span className="text-xs font-normal rounded-full bg-brand-100 text-brand-800 px-2 py-0.5">
-                {upcoming.length}件
+                {upcomingVisible.length}件
               </span>
             ) : null}
           </h2>
@@ -351,9 +356,9 @@ export default async function StudentDetailPage({
             ＋ 予定を追加
           </Link>
         </div>
-        {upcoming && upcoming.length > 0 ? (
+        {upcomingVisible.length > 0 ? (
           <ul className="bg-white border border-brand-200 rounded-2xl divide-y divide-brand-100 overflow-hidden">
-            {upcoming.map((l) => {
+            {upcomingVisible.map((l) => {
               const canEdit =
                 user !== null && (l.teacher_id === user.id || isAdmin);
               const slotRow =
@@ -537,7 +542,11 @@ export default async function StudentDetailPage({
 
       <AttendanceCalendar
         ym={ym}
-        lessons={allLessons ?? []}
+        lessons={(allLessons ?? []).filter(
+          (l) =>
+            l.status !== "scheduled" ||
+            !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
+        )}
         baseHref={calendarBase}
       />
 
