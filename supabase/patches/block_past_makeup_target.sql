@@ -16,13 +16,15 @@ as $assert_target$
 declare
   v_now_jst    timestamp;
   v_today_jst  date;
+  v_min_date   date;
   v_start_time time;
 begin
   v_now_jst := now() at time zone 'Asia/Tokyo';
   v_today_jst := v_now_jst::date;
+  v_min_date := v_today_jst + interval '3 days';
 
-  if p_lesson_date < v_today_jst then
-    raise exception '振替先の授業はすでに終了しているため、登録できません。';
+  if p_lesson_date < v_min_date then
+    raise exception '振替先は今日から3日後以降（% 以降）の授業のみ選べます。', to_char(v_min_date, 'MM/DD');
   end if;
 
   if p_lesson_date > v_today_jst then
@@ -115,8 +117,8 @@ begin
     raise exception '欠席コマと振替コマが同じです。';
   end if;
 
-  if p_lesson_date < v_today_jst then
-    raise exception '振替先は今日以降の日付を選んでください。';
+  if p_lesson_date < v_today_jst + interval '3 days' then
+    raise exception '振替先は今日から3日後以降（% 以降）の授業のみ選べます。', to_char(v_today_jst + interval '3 days', 'MM/DD');
   end if;
 
   select * into v_student from public.students where id = p_student_id;

@@ -14,6 +14,7 @@ import {
   canBookMakeupTarget,
   canRegisterAbsence,
   enumerateDatesInclusive,
+  formatEarliestMakeupTargetLabel,
   formatMakeupDeadlineLabel,
   formatMakeupTargetMaxLabel,
   isMakeupSourceSelectable,
@@ -939,8 +940,9 @@ export function AvailabilityPicker({
           </p>
           {sourceLessonDates.length > 0 ? (
             <p className="text-xs text-slate-500 mb-2 leading-relaxed">
-              同月内であれば欠席日より前の日付も選べます。振替先は欠席月の翌々月末（
-              {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）が上限です。
+              振替先は今日から3日後以降（{formatEarliestMakeupTargetLabel(today)}{" "}
+              以降）の授業枠のみ選べます。同月内であれば欠席日より前の日付も可。上限は欠席月の翌々月末（
+              {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）です。
             </p>
           ) : null}
           <label className="block mb-3">

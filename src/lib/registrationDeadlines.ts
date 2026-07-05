@@ -126,13 +126,23 @@ export function makeupTargetMaxDate(sourceLessonDate: string): string {
   return `${lastDay.getFullYear()}-${mm}-${dd}`;
 }
 
-/** 振替先の最早日（欠席月の1日以降かつ今日以降の遅い方） */
+/** 振替先として選べる最早日（今日から3日後） */
+export function earliestMakeupTargetDate(today: string): string {
+  return shiftDate(today, MAKEUP_REGISTRATION_DAYS_BEFORE);
+}
+
+export function formatEarliestMakeupTargetLabel(today: string): string {
+  return formatDateShort(earliestMakeupTargetDate(today));
+}
+
+/** 振替先の最早日（欠席月の1日以降かつ今日から3日後以降の遅い方） */
 export function makeupTargetMinDate(
   sourceLessonDate: string,
   today: string
 ): string {
   const sourceMonthStart = `${sourceLessonDate.slice(0, 7)}-01`;
-  return sourceMonthStart > today ? sourceMonthStart : today;
+  const leadTimeMin = earliestMakeupTargetDate(today);
+  return sourceMonthStart > leadTimeMin ? sourceMonthStart : leadTimeMin;
 }
 
 export function formatMakeupTargetMaxLabel(sourceLessonDate: string): string {
@@ -160,7 +170,7 @@ export function validateMakeupTargetDate(
   if (targetLessonDate < min) {
     return {
       ok: false,
-      error: `振替先の日付は ${formatDateShort(min)} 以降を選んでください。`,
+      error: `振替先は今日から${MAKEUP_REGISTRATION_DAYS_BEFORE}日後以降（${formatDateShort(min)} 以降）の授業を選んでください。`,
     };
   }
 
@@ -172,17 +182,10 @@ export function validateMakeupTargetDate(
     };
   }
 
-  if (targetLessonDate < today) {
-    return {
-      ok: false,
-      error: "振替先は今日以降の日付を選んでください。",
-    };
-  }
-
   return { ok: true };
 }
 
-/** 振替先コマがまだ予約可能か（当日は開始時刻まで） */
+/** 振替先コマがまだ予約可能か（3日後以降・当日は開始時刻まで） */
 export function canBookMakeupTarget(
   opts: {
     lessonDate: string;
@@ -194,11 +197,12 @@ export function canBookMakeupTarget(
   now = new Date()
 ): { ok: true } | { ok: false; error: string } {
   const today = todayJstIso(now);
+  const minDate = earliestMakeupTargetDate(today);
 
-  if (opts.lessonDate < today) {
+  if (opts.lessonDate < minDate) {
     return {
       ok: false,
-      error: "振替先の授業はすでに終了しているため、登録できません。",
+      error: `振替先は今日から${MAKEUP_REGISTRATION_DAYS_BEFORE}日後以降（${formatDateShort(minDate)} 以降）の授業のみ選べます。`,
     };
   }
 
@@ -234,7 +238,7 @@ export function makeupTargetDateRangeForSources(
   today: string
 ): { min: string; max: string } {
   if (sourceLessonDates.length === 0) {
-    return { min: today, max: shiftDate(today, 120) };
+    return { min: earliestMakeupTargetDate(today), max: shiftDate(today, 120) };
   }
   const mins = sourceLessonDates.map((d) => makeupTargetMinDate(d, today));
   const maxs = sourceLessonDates.map((d) => makeupTargetMaxDate(d));

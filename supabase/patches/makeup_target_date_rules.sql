@@ -61,8 +61,8 @@ begin
     raise exception '欠席コマと振替コマが同じです。';
   end if;
 
-  if p_lesson_date < v_today_jst then
-    raise exception '振替先は今日以降の日付を選んでください。';
+  if p_lesson_date < v_today_jst + interval '3 days' then
+    raise exception '振替先は今日から3日後以降（% 以降）の授業のみ選べます。', to_char(v_today_jst + interval '3 days', 'MM/DD');
   end if;
 
   select * into v_student from public.students where id = p_student_id;
