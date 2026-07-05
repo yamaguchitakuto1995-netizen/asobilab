@@ -722,6 +722,13 @@ alter table public.students add column if not exists enrollment_prog_capacity_id
 
 alter table public.students add column if not exists sibling_group_id uuid;
 
+alter table public.students add column if not exists portal_id text;
+alter table public.students add column if not exists birthday date;
+
+create unique index if not exists students_portal_id_unique
+  on public.students (portal_id)
+  where portal_id is not null;
+
 alter table public.students add column if not exists name_kana text;
 
 create index if not exists students_sibling_group_id_idx
@@ -880,11 +887,47 @@ $get_makeup$;
 revoke all on function public.get_makeup_availability(date) from public;
 grant execute on function public.get_makeup_availability(date) to anon, authenticated;
 
--- (b) 保護者が子供を本人確認するための限定ルックアップ
+-- (b) 保護者が子供を本人確認するための限定ルックアップ（生徒ID + 誕生日）
+create or replace function public.verify_makeup_session_access(
+  p_portal_id  text,
+  p_birthday   date,
+  p_student_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with primary_student as (
+    select id, sibling_group_id
+      from public.students
+     where trim(portal_id) = trim(p_portal_id)
+       and birthday = p_birthday
+       and portal_id is not null
+       and birthday is not null
+     limit 1
+  )
+  select exists (
+    select 1 from primary_student p where p.id = p_student_id
+  )
+  or exists (
+    select 1
+      from primary_student p
+      join public.students s
+        on s.sibling_group_id = p.sibling_group_id
+       and s.id = p_student_id
+     where p.sibling_group_id is not null
+       and s.id <> p.id
+  );
+$$;
+
+revoke all on function public.verify_makeup_session_access(text, date, uuid) from public;
+grant execute on function public.verify_makeup_session_access(text, date, uuid) to anon, authenticated;
+
 create or replace function public.find_student_for_makeup(
-  p_name      text,
-  p_classroom text,
-  p_grade     text
+  p_portal_id text,
+  p_birthday  date
 )
 returns table (
   id         uuid,
@@ -905,21 +948,21 @@ as $find_student$
     s.grade::text,
     s.subjects
   from public.students s
-  where lower(trim(s.name)) = lower(trim(p_name))
-    and s.classroom         = p_classroom
-    and s.grade::text       = p_grade
+  where trim(s.portal_id) = trim(p_portal_id)
+    and s.birthday = p_birthday
+    and s.portal_id is not null
+    and s.birthday is not null
   limit 5
 $find_student$;
 
-revoke all on function public.find_student_for_makeup(text, text, text) from public;
-grant execute on function public.find_student_for_makeup(text, text, text) to anon, authenticated;
+revoke all on function public.find_student_for_makeup(text, date) from public;
+grant execute on function public.find_student_for_makeup(text, date) to anon, authenticated;
 
 -- 振替フォーム: 本人確認済み生徒の兄弟一覧（匿名可）
 create or replace function public.list_siblings_for_makeup(
   p_student_id uuid,
-  p_name       text,
-  p_classroom  text,
-  p_grade      text
+  p_portal_id  text,
+  p_birthday   date
 )
 returns table (
   id         uuid,
@@ -944,24 +987,22 @@ as $list_siblings$
     on s2.sibling_group_id = s1.sibling_group_id
    and s2.id <> s1.id
   where s1.id = p_student_id
-    and lower(trim(s1.name)) = lower(trim(p_name))
-    and s1.classroom = p_classroom
-    and s1.grade::text = p_grade
+    and trim(s1.portal_id) = trim(p_portal_id)
+    and s1.birthday = p_birthday
     and s1.sibling_group_id is not null
     and s2.classroom is not null
     and s2.grade is not null
   order by s2.name;
 $list_siblings$;
 
-revoke all on function public.list_siblings_for_makeup(uuid, text, text, text) from public;
-grant execute on function public.list_siblings_for_makeup(uuid, text, text, text) to anon, authenticated;
+revoke all on function public.list_siblings_for_makeup(uuid, text, date) from public;
+grant execute on function public.list_siblings_for_makeup(uuid, text, date) to anon, authenticated;
 
 -- 保護者申請: 欠席にする元の授業を一覧（予定のうち日付・コマ・教科が揃った行）
 create or replace function public.list_scheduled_lessons_for_makeup(
   p_student_id uuid,
-  p_name       text,
-  p_classroom  text,
-  p_grade      text,
+  p_portal_id  text,
+  p_birthday   date,
   p_from_date  date default current_date
 )
 returns table (
@@ -985,11 +1026,8 @@ as $list_sched$
     l.attendance,
     l.lesson_classroom
   from public.lessons l
-  join public.students s on s.id = l.student_id
   where l.student_id = p_student_id
-    and lower(trim(s.name)) = lower(trim(p_name))
-    and s.classroom = p_classroom
-    and s.grade::text = p_grade
+    and public.verify_makeup_session_access(p_portal_id, p_birthday, p_student_id)
     and l.status = 'scheduled'
     and l.lesson_date >= p_from_date
     and l.period is not null
@@ -998,8 +1036,8 @@ as $list_sched$
   order by l.lesson_date, l.period;
 $list_sched$;
 
-revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) from public;
-grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, text, text, date) to anon, authenticated;
+revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) from public;
+grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) to anon, authenticated;
 
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);

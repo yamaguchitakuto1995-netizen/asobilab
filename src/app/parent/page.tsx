@@ -29,11 +29,11 @@ type LessonRow = Lesson & {
   students: Pick<Student, "id" | "name" | "grade" | "classroom"> | null;
 };
 
-function applyUrlForStudent(s: Pick<Student, "name" | "classroom" | "grade">) {
+function applyUrlForStudent(s: Pick<Student, "portal_id" | "birthday">) {
+  if (!s.portal_id?.trim() || !s.birthday) return "/apply";
   const params = new URLSearchParams({
-    name: s.name,
-    classroom: s.classroom ?? "",
-    grade: s.grade,
+    portal_id: s.portal_id.trim(),
+    birthday: s.birthday,
   });
   return `/apply?${params.toString()}`;
 }
@@ -76,7 +76,7 @@ export default async function ParentHomePage() {
   const { data: students } = await supabase
     .from("students")
     .select(
-      "id, name, grade, classroom, subjects, sibling_group_id, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
+      "id, name, grade, classroom, portal_id, birthday, subjects, sibling_group_id, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
     )
     .in("id", studentIds)
     .returns<
@@ -86,6 +86,8 @@ export default async function ParentHomePage() {
         | "name"
         | "grade"
         | "classroom"
+        | "portal_id"
+        | "birthday"
         | "subjects"
         | "sibling_group_id"
         | "next_text_robot"

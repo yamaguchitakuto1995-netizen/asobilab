@@ -36,6 +36,10 @@ import {
   parseStudentsCsv,
   resolveStudentCsvSlots,
 } from "@/lib/studentCsvImport";
+import {
+  readBirthdayFromForm,
+  readPortalIdFromForm,
+} from "@/lib/studentPortal";
 import { syncEnrollmentLessons } from "@/lib/syncEnrollmentLessons";
 import type { LessonCapacity } from "@/lib/types";
 
@@ -225,6 +229,8 @@ export async function createStudent(formData: FormData) {
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
+  const portalIdResult = readPortalIdFromForm(formData);
+  const birthdayResult = readBirthdayFromForm(formData);
 
   const supabase = await createClient();
   let classrooms: ClassroomRecord[];
@@ -242,6 +248,16 @@ export async function createStudent(formData: FormData) {
   if (!name) {
     redirect(
       `/students/new?error=${encodeURIComponent("名前を入力してください。")}`
+    );
+  }
+  if (portalIdResult.error) {
+    redirect(
+      `/students/new?error=${encodeURIComponent(portalIdResult.error)}`
+    );
+  }
+  if (birthdayResult.error) {
+    redirect(
+      `/students/new?error=${encodeURIComponent(birthdayResult.error)}`
     );
   }
   if (!GRADE_LEVELS.includes(gradeRaw as GradeLevel)) {
@@ -328,6 +344,8 @@ export async function createStudent(formData: FormData) {
       next_text_programming_text: nextProg.text,
       enrollment_robot_capacity_id: robotCap.value,
       enrollment_prog_capacity_id: progCap.value,
+      portal_id: portalIdResult.value,
+      birthday: birthdayResult.value,
       note: note || null,
       created_by: user.id,
     })
@@ -381,6 +399,8 @@ export async function updateStudent(formData: FormData) {
   const gradeRaw = String(formData.get("grade") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const subjects = readSubjects(formData);
+  const portalIdResult = readPortalIdFromForm(formData);
+  const birthdayResult = readBirthdayFromForm(formData);
 
   if (!id) redirect("/students");
 
@@ -401,6 +421,12 @@ export async function updateStudent(formData: FormData) {
 
   if (!name) {
     redirect(`${editPath}?error=${encodeURIComponent("名前を入力してください。")}`);
+  }
+  if (portalIdResult.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(portalIdResult.error)}`);
+  }
+  if (birthdayResult.error) {
+    redirect(`${editPath}?error=${encodeURIComponent(birthdayResult.error)}`);
   }
   if (!GRADE_LEVELS.includes(gradeRaw as GradeLevel)) {
     redirect(`${editPath}?error=${encodeURIComponent("学年を選択してください。")}`);
@@ -482,6 +508,8 @@ export async function updateStudent(formData: FormData) {
       next_text_programming_text: nextProg.text,
       enrollment_robot_capacity_id: robotCap.value,
       enrollment_prog_capacity_id: progCap.value,
+      portal_id: portalIdResult.value,
+      birthday: birthdayResult.value,
       note: note || null,
     })
     .eq("id", id);

@@ -2,26 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { Field, inputClass } from "@/components/Field";
-import { GRADE_LEVELS, type ClassroomPeriodTime, type ClassroomRecord } from "@/lib/types";
 import { AvailabilityPicker } from "./AvailabilityPicker";
 import { SiblingParticipantPicker } from "./SiblingParticipantPicker";
 import { lookupStudent, type FoundStudent } from "./actions";
 
 type Props = {
-  periodTimes?: ClassroomPeriodTime[];
-  classrooms?: ClassroomRecord[];
-  initialName?: string;
-  initialClassroom?: string;
-  initialGrade?: string;
+  periodTimes?: import("@/lib/types").ClassroomPeriodTime[];
+  initialPortalId?: string;
+  initialBirthday?: string;
 };
 
 /** 保護者の振替申請フロー全体を管理する Client Component */
 export function MakeupApplyFlow({
   periodTimes = [],
-  classrooms = [],
-  initialName = "",
-  initialClassroom = "",
-  initialGrade = "",
+  initialPortalId = "",
+  initialBirthday = "",
 }: Props) {
   const [student, setStudent] = useState<FoundStudent | null>(null);
   const [siblings, setSiblings] = useState<FoundStudent[]>([]);
@@ -29,20 +24,16 @@ export function MakeupApplyFlow({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // 入力保持 (再表示時の利便性)
-  const [name, setName] = useState(initialName);
-  const [classroom, setClassroom] = useState(initialClassroom);
-  const [grade, setGrade] = useState(initialGrade);
+  const [portalId, setPortalId] = useState(initialPortalId);
+  const [birthday, setBirthday] = useState(initialBirthday);
 
   function handleLookup(formData: FormData) {
     const input = {
-      name: String(formData.get("name") ?? ""),
-      classroom: String(formData.get("classroom") ?? ""),
-      grade: String(formData.get("grade") ?? ""),
+      portalId: String(formData.get("portal_id") ?? ""),
+      birthday: String(formData.get("birthday") ?? ""),
     };
-    setName(input.name);
-    setClassroom(input.classroom);
-    setGrade(input.grade);
+    setPortalId(input.portalId);
+    setBirthday(input.birthday);
     setError(null);
     startTransition(async () => {
       try {
@@ -68,6 +59,8 @@ export function MakeupApplyFlow({
     return (
       <AvailabilityPicker
         students={participants}
+        portalId={portalId}
+        birthday={birthday}
         periodTimes={periodTimes}
         onBack={() => {
           setParticipants(null);
@@ -102,6 +95,8 @@ export function MakeupApplyFlow({
     return (
       <AvailabilityPicker
         students={[student]}
+        portalId={portalId}
+        birthday={birthday}
         periodTimes={periodTimes}
         onBack={() => {
           setStudent(null);
@@ -121,9 +116,9 @@ export function MakeupApplyFlow({
     <div className="space-y-5">
       <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
         <div>
-          <h1 className="text-lg font-semibold">お子様の情報をご入力ください</h1>
+          <h1 className="text-lg font-semibold">ログイン</h1>
           <p className="text-xs text-slate-500 mt-1">
-            ご登録のお名前・所属教室・学年が一致する場合のみ、振替申請にお進みいただけます。
+            教室からお渡しした<strong>生徒ID</strong>と<strong>お子様の誕生日</strong>を入力してください。
           </p>
         </div>
 
@@ -134,56 +129,36 @@ export function MakeupApplyFlow({
           }}
           className="space-y-4"
         >
-          <Field label="お子様のお名前" htmlFor="name" required hint="登録時のお名前 (姓名のあいだの空白も含めて)">
+          <Field
+            label="生徒ID"
+            htmlFor="portal_id"
+            required
+            hint="教室が発行した番号（半角英数字）"
+          >
             <input
-              id="name"
-              name="name"
+              id="portal_id"
+              name="portal_id"
               type="text"
               required
-              maxLength={80}
-              defaultValue={name}
+              maxLength={20}
+              pattern="[0-9A-Za-z\-]{1,20}"
+              defaultValue={portalId}
               className={inputClass}
-              placeholder="例) 山田 太郎"
+              placeholder="例: 10001"
               autoComplete="off"
+              inputMode="text"
             />
           </Field>
 
-          <Field label="所属教室" htmlFor="classroom" required>
-            <select
-              id="classroom"
-              name="classroom"
+          <Field label="お子様の誕生日" htmlFor="birthday" required>
+            <input
+              id="birthday"
+              name="birthday"
+              type="date"
               required
-              defaultValue={classroom}
+              defaultValue={birthday}
               className={inputClass}
-            >
-              <option value="" disabled>
-                選択してください
-              </option>
-              {classrooms.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="学年" htmlFor="grade" required>
-            <select
-              id="grade"
-              name="grade"
-              required
-              defaultValue={grade}
-              className={inputClass}
-            >
-              <option value="" disabled>
-                選択してください
-              </option>
-              {GRADE_LEVELS.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
 
           {error ? (
@@ -206,6 +181,9 @@ export function MakeupApplyFlow({
         <p className="font-semibold text-slate-700">ご利用にあたって</p>
         <ul className="list-disc list-inside space-y-1">
           <li>
+            生徒ID・誕生日が分からない場合は、所属教室までお問い合わせください。
+          </li>
+          <li>
             手続きが完了すると、その内容はその場で予定に反映されます（教室からの承認を経る流れではありません）。
           </li>
           <li>「欠席のみ」で先に欠席登録、「振替のみ」で後から振替先を選べます。「まとめて」は従来どおり一度に登録できます。</li>
@@ -214,7 +192,6 @@ export function MakeupApplyFlow({
           <li>振替先の日付は、今日からおおよそ 4 ヶ月（120 日）先までお選びいただけます。</li>
           <li>空き状況は他の方の申請でリアルタイムに変動します。</li>
           <li>満員のコマは灰色で表示されます。</li>
-          <li>ご不明な点は所属教室までお問い合わせください。</li>
         </ul>
       </div>
     </div>
