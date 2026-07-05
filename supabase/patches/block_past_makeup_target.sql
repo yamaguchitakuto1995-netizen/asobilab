@@ -156,10 +156,14 @@ begin
      where student_id  = p_student_id
        and lesson_date = p_lesson_date
        and period      = p_period
-       and subject     = p_subject
        and status      = 'scheduled'
+       and not (
+         lesson_date = p_source_lesson_date
+         and period = p_source_period
+         and subject is not distinct from p_source_subject
+       )
   ) then
-    raise exception 'すでに同じコマで申請済みです。';
+    raise exception 'このコマにはすでに授業が登録されているため、振替先に選べません。';
   end if;
 
   select count(*)::bigint

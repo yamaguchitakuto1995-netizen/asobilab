@@ -9,8 +9,10 @@ import {
   canRegisterAbsence,
   isMakeupRegistrationOpen,
   isPendingAbsenceMakeupOpen,
+  isStudentSlotOccupied,
   makeupRegistrationClosedMessage,
   pendingAbsenceMakeupClosedMessage,
+  studentSlotOccupiedMessage,
   todayJstIso,
   validateMakeupTargetDate,
   canBookMakeupTarget,
@@ -600,6 +602,21 @@ export async function bookMakeupLesson(input: {
     }
   );
   if (!targetTimeCheck.ok) return targetTimeCheck;
+  if (scheduled.ok) {
+    const targetTaken = isStudentSlotOccupied(scheduled.lessons, {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      excludeSource: {
+        lessonDate: input.sourceLessonDate,
+        period: input.sourcePeriod,
+        subject: input.sourceSubject,
+      },
+    });
+    if (targetTaken) {
+      return { ok: false, error: studentSlotOccupiedMessage() };
+    }
+  }
   if (sourceStillScheduled) {
     const absenceCheck = canRegisterAbsence({
       lessonDate: input.sourceLessonDate,
@@ -769,6 +786,21 @@ async function validateMakeupBooking(
     }
   );
   if (!targetTimeCheck.ok) return targetTimeCheck;
+  if (scheduled.ok) {
+    const targetTaken = isStudentSlotOccupied(scheduled.lessons, {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+      excludeSource: {
+        lessonDate: input.sourceLessonDate,
+        period: input.sourcePeriod,
+        subject: input.sourceSubject,
+      },
+    });
+    if (targetTaken) {
+      return { ok: false, error: studentSlotOccupiedMessage() };
+    }
+  }
   if (sourceStillScheduled) {
     const absenceCheck = canRegisterAbsence({
       lessonDate: input.sourceLessonDate,

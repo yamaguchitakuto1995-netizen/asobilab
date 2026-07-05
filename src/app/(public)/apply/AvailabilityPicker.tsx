@@ -20,9 +20,11 @@ import {
   formatPendingAbsenceMakeupDeadlineLabel,
   isMakeupRegistrationOpen,
   isPendingAbsenceMakeupOpen,
+  isStudentSlotOccupied,
   makeupRegistrationClosedMessage,
   makeupTargetDateRangeForSources,
   pendingAbsenceMakeupClosedMessage,
+  studentSlotOccupiedMessage,
   todayJstIso,
 } from "@/lib/registrationDeadlines";
 import {
@@ -414,6 +416,28 @@ export function AvailabilityPicker({
     });
     if (!bookable.ok) {
       setSubmitError(bookable.error);
+      return;
+    }
+    const studentLessons = [
+      ...(suggestionsByStudent[studentId] ?? []),
+      ...(pendingByStudent[studentId] ?? []),
+    ];
+    const source = sources[studentId];
+    if (
+      isStudentSlotOccupied(studentLessons, {
+        lessonDate: selectedDate,
+        period: slot.period,
+        subject: slot.subject,
+        excludeSource: source
+          ? {
+              lessonDate: source.lessonDate,
+              period: source.period,
+              subject: source.subject,
+            }
+          : null,
+      })
+    ) {
+      setSubmitError(studentSlotOccupiedMessage());
       return;
     }
     setDestByStudent((prev) => ({ ...prev, [studentId]: slot }));
@@ -952,7 +976,7 @@ export function AvailabilityPicker({
           {sourceLessonDates.length > 0 ? (
             <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               振替先も授業日の3日前 23:59 までに申請できます（現在選べる最早日:{" "}
-              {formatEarliestMakeupTargetLabel()}）。同月内であれば欠席日より前の日付も可。上限は欠席月の翌々月末（
+              {formatEarliestMakeupTargetLabel()}）。同月内であれば欠席日より前の日付も可（その日に別コマで授業があっても、空いているコマなら選べます）。上限は欠席月の翌々月末（
               {formatMakeupTargetMaxLabel(sourceLessonDates[0]!)} まで）です。
             </p>
           ) : null}
@@ -1054,6 +1078,26 @@ export function AvailabilityPicker({
                       <ul className="space-y-2">
                         {visibleSlots.map((slot) => {
                           const isFull = slot.available <= 0;
+                          const studentLessons = [
+                            ...(suggestionsByStudent[s.id] ?? []),
+                            ...(pendingByStudent[s.id] ?? []),
+                          ];
+                          const source = sources[s.id];
+                          const studentOccupied = isStudentSlotOccupied(
+                            studentLessons,
+                            {
+                              lessonDate: selectedDate,
+                              period: slot.period,
+                              subject: slot.subject,
+                              excludeSource: source
+                                ? {
+                                    lessonDate: source.lessonDate,
+                                    period: source.period,
+                                    subject: source.subject,
+                                  }
+                                : null,
+                            }
+                          );
                           const isPicked =
                             pickedDest?.classroom === slot.classroom &&
                             pickedDest?.period === slot.period &&
@@ -1067,6 +1111,7 @@ export function AvailabilityPicker({
                           });
                           const disabled =
                             isFull ||
+                            studentOccupied ||
                             !bookable.ok ||
                             submitting ||
                             confirmOpen;
@@ -1103,12 +1148,18 @@ export function AvailabilityPicker({
                                 </div>
                                 <span
                                   className={`shrink-0 text-sm font-bold rounded-lg px-3 py-1.5 ${
-                                    isFull
-                                      ? "bg-rose-100 text-rose-700"
-                                      : "bg-emerald-100 text-emerald-700"
+                                    studentOccupied
+                                      ? "bg-slate-200 text-slate-600"
+                                      : isFull
+                                        ? "bg-rose-100 text-rose-700"
+                                        : "bg-emerald-100 text-emerald-700"
                                   }`}
                                 >
-                                  {isFull ? "満員" : `空き${slot.available}`}
+                                  {studentOccupied
+                                    ? "授業あり"
+                                    : isFull
+                                      ? "満員"
+                                      : `空き${slot.available}`}
                                 </span>
                               </button>
                             </li>
