@@ -18,6 +18,7 @@ import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
+import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
 import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +64,8 @@ export default async function DashboardHomePage({
   const isToday = selectedDate === today;
 
   const supabase = await createClient();
+
+  await applyAnnualGradePromotionIfNeeded(supabase);
 
   const [
     { count: studentCount },

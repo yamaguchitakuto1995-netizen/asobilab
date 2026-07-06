@@ -717,6 +717,7 @@ alter table public.students add column if not exists name_kana text;
 alter table public.students add column if not exists leave_from_ym text;
 alter table public.students add column if not exists leave_until_ym text;
 alter table public.students add column if not exists persistent_memo text;
+alter table public.students add column if not exists grade_promoted_through_ym text;
 alter table public.students add column if not exists withdrawal_until_ym text;
 
 do $$ begin

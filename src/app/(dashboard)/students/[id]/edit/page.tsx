@@ -241,13 +241,19 @@ export default async function EditStudentPage({
         />
         <StudentWithdrawalField defaultValue={student.withdrawal_until_ym} />
 
-        <Field label="メモ" htmlFor="note" hint="連絡先や担当科目など、任意のメモ">
+        <Field
+          label="備考（継続）"
+          htmlFor="persistent_memo"
+          hint="トップの当日ボードにも表示されます（例: タブレット有り）"
+        >
           <textarea
-            id="note"
-            name="note"
+            id="persistent_memo"
+            name="persistent_memo"
             rows={3}
             maxLength={500}
-            defaultValue={student.note ?? ""}
+            defaultValue={
+              student.persistent_memo?.trim() || student.note?.trim() || ""
+            }
             className={inputClass}
           />
         </Field>

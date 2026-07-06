@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { StudentListWithBulkDelete } from "@/components/StudentListWithBulkDelete";
 import { getCurrentUser } from "@/lib/auth";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
+import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
 import { createClient } from "@/lib/supabase/server";
 import { STUDENT_CSV_HEADER } from "@/lib/studentCsvImport";
 import { type Student } from "@/lib/types";
@@ -32,6 +33,7 @@ export default async function StudentsPage({
     bulk_deleted,
   } = await searchParams;
   const supabase = await createClient();
+  await applyAnnualGradePromotionIfNeeded(supabase);
   const classrooms = await fetchClassrooms(supabase);
 
   const isUnassigned = classroom === "__none__";

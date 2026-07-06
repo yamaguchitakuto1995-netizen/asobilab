@@ -220,6 +220,8 @@ export type Student = {
   leave_until_ym?: string | null;
   /** 継続備考（備考入力あり登録でのみ更新・次回以降も表示） */
   persistent_memo?: string | null;
+  /** 学年自動更新済みの学年開始月（YYYY-MM、4月） */
+  grade_promoted_through_ym?: string | null;
   /** 退会予定月 YYYY-MM（この月まで在籍） */
   withdrawal_until_ym?: string | null;
   /** スクラッチログインID（プログラミング受講時） */
