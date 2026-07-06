@@ -397,6 +397,7 @@ export async function createStudent(formData: FormData) {
       course_start_robot_ym: courseStart.course_start_robot_ym,
       course_start_programming_ym: courseStart.course_start_programming_ym,
       persistent_memo: persistent_memo || null,
+      note: null,
       grade_promoted_through_ym: gradePromotedThroughYm,
       created_by: user.id,
     })
@@ -630,6 +631,7 @@ export async function updateStudent(formData: FormData) {
       course_start_robot_ym: courseStart.course_start_robot_ym,
       course_start_programming_ym: courseStart.course_start_programming_ym,
       persistent_memo: persistent_memo || null,
+      note: null,
     })
     .eq("id", id);
 
@@ -912,7 +914,10 @@ export async function updateStudentPersistentMemo(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("students")
-    .update({ persistent_memo: persistent_memo || null })
+    .update({
+      persistent_memo: persistent_memo || null,
+      note: null,
+    })
     .eq("id", studentId);
 
   const base = `/students/${studentId}`;
@@ -923,6 +928,6 @@ export async function updateStudentPersistentMemo(formData: FormData) {
   }
 
   revalidatePath(base);
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   redirect(`${base}?memo_saved=1`);
 }
