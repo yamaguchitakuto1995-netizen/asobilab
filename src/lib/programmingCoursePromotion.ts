@@ -1,4 +1,4 @@
-import { shiftMonth } from "@/lib/date";
+import { currentYm, shiftMonth } from "@/lib/date";
 import { resolveCourseStartYm } from "@/lib/studentCourseStart";
 import {
   parseProgrammingNextTextParts,
@@ -121,8 +121,8 @@ export function programmingMonthsUntilPromotionFromCourseStart(
 export function estimateProgrammingAutoPromotionScheduledYm(
   student: ProgrammingPromotionStudentFields
 ): string | null {
-  const courseStartYm = resolveCourseStartYm("プログラミング", student);
-  if (!courseStartYm) return null;
+  const courseStartYm =
+    resolveCourseStartYm("プログラミング", student) ?? currentYm();
 
   const months = programmingMonthsUntilPromotionFromCourseStart(student);
   if (months == null || months <= 0) return null;

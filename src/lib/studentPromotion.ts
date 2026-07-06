@@ -1,4 +1,5 @@
 import { currentYm, shiftMonth } from "@/lib/date";
+import { todayJstIso } from "@/lib/registrationDeadlines";
 import { resolveCourseStartYm } from "@/lib/studentCourseStart";
 import { isValidYearMonth } from "@/lib/studentWithdrawal";
 import {
@@ -184,11 +185,16 @@ export type PromotionScheduleInfo = {
   highlight: boolean;
 };
 
+/** 進級予定の強調判定・表示に使う現在月（JST） */
+export function promotionNowYm(now = new Date()): string {
+  return todayJstIso(now).slice(0, 7);
+}
+
 /** 進級予定バナーを薄オレンジで強調するか */
 export function isPromotionScheduleHighlighted(
   promotionScheduledYm: string,
   promotionType: PromotionType | string | null | undefined,
-  nowYm: string = currentYm()
+  nowYm: string = promotionNowYm()
 ): boolean {
   const ym = promotionScheduledYm.trim();
   if (!ym) return false;
@@ -202,7 +208,7 @@ export function isPromotionScheduleHighlighted(
 export function resolvePromotionScheduleInfo(
   subject: string | null | undefined,
   student: PromotionStudentFields | null | undefined,
-  nowYm: string = currentYm()
+  nowYm: string = promotionNowYm()
 ): PromotionScheduleInfo | null {
   const nextCourse = resolveNextPromotionCourseDisplay(subject, student);
   if (!nextCourse) return null;

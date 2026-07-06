@@ -1,4 +1,4 @@
-import { shiftMonth } from "@/lib/date";
+import { currentYm, shiftMonth } from "@/lib/date";
 import { resolveCourseStartYm } from "@/lib/studentCourseStart";
 import {
   parseRobotNextTextParts,
@@ -131,8 +131,8 @@ export function robotMonthsUntilPromotionFromCourseStart(
 export function estimateRobotAutoPromotionScheduledYm(
   student: RobotPromotionStudentFields
 ): string | null {
-  const courseStartYm = resolveCourseStartYm("ロボット", student);
-  if (!courseStartYm) return null;
+  const courseStartYm =
+    resolveCourseStartYm("ロボット", student) ?? currentYm();
 
   const months = robotMonthsUntilPromotionFromCourseStart(student);
   if (months == null || months <= 0) return null;
