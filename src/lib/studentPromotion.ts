@@ -14,6 +14,10 @@ import {
   type RobotNextText,
 } from "@/lib/courseNextText";
 import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
+import {
+  estimateRobotAutoPromotionScheduledYm,
+  robotRemainingMonthsInCourse,
+} from "@/lib/robotCoursePromotion";
 
 /** 月2回ペースでコース修了→進級月を見積もる */
 const LESSONS_PER_MONTH = 2;
@@ -110,6 +114,11 @@ export function estimateMonthsUntilCourseEnd(
   student: PromotionStudentFields | null | undefined
 ): number | null {
   if (!student || !subject) return null;
+
+  if (subject === "ロボット") {
+    return robotRemainingMonthsInCourse(student);
+  }
+
   const remaining = remainingLessonsInCourse(subject, student);
   if (remaining == null || remaining <= 0) return null;
   return Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
@@ -121,6 +130,11 @@ export function estimateAutoPromotionScheduledYm(
   student: PromotionStudentFields | null | undefined
 ): string | null {
   if (!student || !subject) return null;
+
+  if (subject === "ロボット") {
+    return estimateRobotAutoPromotionScheduledYm(student);
+  }
+
   const months = estimateMonthsUntilCourseEnd(subject, student);
   if (months == null) return null;
 
