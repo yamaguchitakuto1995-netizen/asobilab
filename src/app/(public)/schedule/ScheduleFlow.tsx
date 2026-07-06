@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { Field, inputClass } from "@/components/Field";
+import { BirthdayMmddField } from "@/components/BirthdayMmddField";
 import { ParentLessonScheduleList } from "@/components/ParentLessonScheduleList";
 import {
   applyUrlWithSession,
@@ -223,16 +224,7 @@ export function ScheduleFlow({
             />
           </Field>
 
-          <Field label="お子様の誕生日" htmlFor="birthday" required>
-            <input
-              id="birthday"
-              name="birthday"
-              type="date"
-              required
-              defaultValue={birthday}
-              className={inputClass}
-            />
-          </Field>
+          <BirthdayMmddField defaultValue={birthday} />
 
           {error ? (
             <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">

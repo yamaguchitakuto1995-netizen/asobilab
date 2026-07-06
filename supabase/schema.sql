@@ -724,7 +724,15 @@ alter table public.students add column if not exists enrollment_prog_capacity_id
 alter table public.students add column if not exists sibling_group_id uuid;
 
 alter table public.students add column if not exists portal_id text;
-alter table public.students add column if not exists birthday date;
+alter table public.students add column if not exists birthday text;
+
+do $$ begin
+  alter table public.students add constraint students_birthday_mmdd_check
+    check (
+      birthday is null
+      or birthday ~ '^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$'
+    );
+exception when duplicate_object then null; end $$;
 
 create unique index if not exists students_portal_id_unique
   on public.students (portal_id)
@@ -958,7 +966,7 @@ grant execute on function public.get_makeup_availability(date) to anon, authenti
 -- (b) 保護者が子供を本人確認するための限定ルックアップ（生徒ID + 誕生日）
 create or replace function public.verify_makeup_session_access(
   p_portal_id  text,
-  p_birthday   date,
+  p_birthday   text,
   p_student_id uuid
 )
 returns boolean
@@ -990,12 +998,12 @@ as $$
   );
 $$;
 
-revoke all on function public.verify_makeup_session_access(text, date, uuid) from public;
-grant execute on function public.verify_makeup_session_access(text, date, uuid) to anon, authenticated;
+revoke all on function public.verify_makeup_session_access(text, text, uuid) from public;
+grant execute on function public.verify_makeup_session_access(text, text, uuid) to anon, authenticated;
 
 create or replace function public.find_student_for_makeup(
   p_portal_id text,
-  p_birthday  date
+  p_birthday  text
 )
 returns table (
   id         uuid,
@@ -1023,14 +1031,14 @@ as $find_student$
   limit 5
 $find_student$;
 
-revoke all on function public.find_student_for_makeup(text, date) from public;
-grant execute on function public.find_student_for_makeup(text, date) to anon, authenticated;
+revoke all on function public.find_student_for_makeup(text, text) from public;
+grant execute on function public.find_student_for_makeup(text, text) to anon, authenticated;
 
 -- 振替フォーム: 本人確認済み生徒の兄弟一覧（匿名可）
 create or replace function public.list_siblings_for_makeup(
   p_student_id uuid,
   p_portal_id  text,
-  p_birthday   date
+  p_birthday   text
 )
 returns table (
   id         uuid,
@@ -1063,14 +1071,14 @@ as $list_siblings$
   order by s2.name;
 $list_siblings$;
 
-revoke all on function public.list_siblings_for_makeup(uuid, text, date) from public;
-grant execute on function public.list_siblings_for_makeup(uuid, text, date) to anon, authenticated;
+revoke all on function public.list_siblings_for_makeup(uuid, text, text) from public;
+grant execute on function public.list_siblings_for_makeup(uuid, text, text) to anon, authenticated;
 
 -- 保護者申請: 欠席にする元の授業を一覧（予定のうち日付・コマ・教科が揃った行）
 create or replace function public.list_scheduled_lessons_for_makeup(
   p_student_id uuid,
   p_portal_id  text,
-  p_birthday   date,
+  p_birthday   text,
   p_from_date  date default current_date
 )
 returns table (
@@ -1104,14 +1112,14 @@ as $list_sched$
   order by l.lesson_date, l.period;
 $list_sched$;
 
-revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) from public;
-grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, date, date) to anon, authenticated;
+revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, date) from public;
+grant execute on function public.list_scheduled_lessons_for_makeup(uuid, text, text, date) to anon, authenticated;
 
 -- 保護者ポータル: 授業予定一覧（出席・振替・欠席すべて）
 create or replace function public.list_student_schedule_for_portal(
   p_student_id uuid,
   p_portal_id  text,
-  p_birthday   date,
+  p_birthday   text,
   p_from_date  date default current_date,
   p_to_date    date default (current_date + interval '120 days')
 )
@@ -1152,8 +1160,8 @@ as $list_schedule$
   order by l.lesson_date, l.period;
 $list_schedule$;
 
-revoke all on function public.list_student_schedule_for_portal(uuid, text, date, date, date) from public;
-grant execute on function public.list_student_schedule_for_portal(uuid, text, date, date, date) to anon, authenticated;
+revoke all on function public.list_student_schedule_for_portal(uuid, text, text, date, date) from public;
+grant execute on function public.list_student_schedule_for_portal(uuid, text, text, date, date) to anon, authenticated;
 
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, text);
 drop function if exists public.book_makeup_lesson(uuid, date, smallint, text, date, smallint, text, text);
