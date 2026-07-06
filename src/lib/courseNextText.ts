@@ -54,7 +54,7 @@ function expandTwoLapSuThenStd(tier: string, std: string[]): string[] {
   ];
 }
 
-/** 1周目: SU1,SU2 + 標準12単元、2周目: 標準12単元のみ（アドバンス） */
+/** 1周目: SU1,SU2 + 2か月1冊の単元、2周目: 単元のみ（アドバンス） */
 function expandTwoLapSuThenAdv(
   tier: string,
   advUnits: readonly string[]
@@ -77,8 +77,19 @@ const R_BASIC = "ベーシック（2周）";
 const R_MIDDLE = "ミドル（2周）";
 const R_ADV = "アドバンス（2周）";
 
-/** アドバンスも他コース同様 各月 1-1, 1-2 … 12-1, 12-2 */
-const R_ADV_UNITS = standard12Pairs();
+/**
+ * アドバンス教材単元（偶数月+奇数月＝1冊）。
+ * 例: 2・3-1〜4 は2月・3月分、4・5-1〜2 は4月・5月分。
+ * SU1/SU2 は expandTwoLapSuThenAdv が 1周目先頭に付与。
+ */
+export const R_ADV_UNITS = [
+  "2・3-1",
+  "2・3-2",
+  "2・3-3",
+  "2・3-4",
+  "4・5-1",
+  "4・5-2",
+] as const;
 
 function buildRobotFlat(): string[] {
   const std = standard12Pairs();
