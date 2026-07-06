@@ -54,7 +54,7 @@ function expandTwoLapSuThenStd(tier: string, std: string[]): string[] {
   ];
 }
 
-/** 1周目: SU1,SU2 + advUnits、2周目: advUnits のみ（アドバンス専用並び） */
+/** 1周目: SU1,SU2 + 標準12単元、2周目: 標準12単元のみ（アドバンス） */
 function expandTwoLapSuThenAdv(
   tier: string,
   advUnits: readonly string[]
@@ -77,32 +77,8 @@ const R_BASIC = "ベーシック（2周）";
 const R_MIDDLE = "ミドル（2周）";
 const R_ADV = "アドバンス（2周）";
 
-const R_ADV_UNITS = [
-  "1-3",
-  "1-4",
-  "2-1",
-  "2-2",
-  "3-3",
-  "3-4",
-  "4-1",
-  "4-2",
-  "5-3",
-  "5-4",
-  "6-1",
-  "6-2",
-  "7-3",
-  "7-4",
-  "8-1",
-  "8-2",
-  "9-3",
-  "9-4",
-  "10-1",
-  "10-2",
-  "11-3",
-  "11-4",
-  "12-1",
-  "12-2",
-] as const;
+/** アドバンスも他コース同様 各月 1-1, 1-2 … 12-1, 12-2 */
+const R_ADV_UNITS = standard12Pairs();
 
 function buildRobotFlat(): string[] {
   const std = standard12Pairs();
@@ -292,7 +268,7 @@ export function robotNextTextOptgroups(): NextTextOptgroup[] {
       options: expandTierLap(R_MIDDLE, LAP2, std),
     },
     {
-      label: `⑤ ${R_ADV} — ${LAP1}（進級時 SU あり・専用单元）`,
+      label: `⑤ ${R_ADV} — ${LAP1}（進級時 SU あり）`,
       options: expandTierLap(R_ADV, LAP1, ["SU1", "SU2", ...R_ADV_UNITS]),
     },
     {

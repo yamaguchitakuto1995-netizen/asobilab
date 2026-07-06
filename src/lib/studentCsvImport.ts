@@ -203,24 +203,6 @@ function resolveRobotNextTextFromCsv(
     }
   }
 
-  const monthUnit = unit.match(/^(\d+)-(\d+)$/);
-  if (monthUnit && course === "アドバンス（2周）") {
-    const month = Number(monthUnit[1]);
-    const lesson = Number(monthUnit[2]);
-    const opts = ROBOT_NEXT_TEXT_OPTIONS.filter(
-      (o) => parseRobotNextTextParts(o)?.course === course
-    );
-    const idx = Math.max(
-      0,
-      Math.min((month - 1) * 2 + (lesson - 1), opts.length - 1)
-    );
-    const opt = opts[idx];
-    if (opt) {
-      const parts = parseRobotNextTextParts(opt)!;
-      return { combined: opt, course: parts.course, text: parts.text };
-    }
-  }
-
   return {
     combined: null,
     course: null,
