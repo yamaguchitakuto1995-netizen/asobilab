@@ -771,6 +771,19 @@ function importFail(msg: string): never {
   redirect(`${STUDENTS_BASE}?error=${encodeURIComponent(msg)}`);
 }
 
+function formatImportDbError(
+  line: number,
+  message: string,
+  payload: { next_text_robot?: string | null }
+): string {
+  let msg = `${line}行目: ${message}`;
+  if (message.includes("students_next_text_robot_check")) {
+    const robot = payload.next_text_robot ?? "（未設定）";
+    msg += ` ロボット_テキスト名「${robot}」がDBの許可リストにありません。Supabaseで supabase/patches/students_next_text_robot.sql を実行してから再インポートしてください。`;
+  }
+  return msg;
+}
+
 /** CSV 一括取り込み（新規・更新）。レギュラー出席コマは第1/3・第2/4 週グループ */
 export async function importStudentsCsv(formData: FormData) {
   const user = await getCurrentUser();
@@ -832,7 +845,7 @@ export async function importStudentsCsv(formData: FormData) {
         .update(payload)
         .eq("id", row.student_id);
 
-      if (error) importFail(`${row.line}行目: ${error.message}`);
+      if (error) importFail(formatImportDbError(row.line, error.message, payload));
 
       const sync = await syncEnrollmentLessons(supabase, {
         studentId: row.student_id,
@@ -853,7 +866,7 @@ export async function importStudentsCsv(formData: FormData) {
         .select("id")
         .single();
 
-      if (error) importFail(`${row.line}行目: ${error.message}`);
+      if (error) importFail(formatImportDbError(row.line, error.message, payload));
 
       const sync = await syncEnrollmentLessons(supabase, {
         studentId: data!.id,

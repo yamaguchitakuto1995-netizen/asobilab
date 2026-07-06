@@ -122,6 +122,10 @@ function buildPositionalColumnIndexes(offset: number) {
   return shifted as ReturnType<typeof buildColumnIndexes>;
 }
 
+function normalizeUnitMiddleDot(text: string): string {
+  return text.replace(/(\d+)[･·.](\d+)/g, "$1・$2");
+}
+
 function normalizeRobotCourseName(raw: string): string {
   const t = raw.trim();
   if (t === "アドバンス") return "アドバンス（2周）";
@@ -129,16 +133,22 @@ function normalizeRobotCourseName(raw: string): string {
 }
 
 function normalizeRobotTextForCourse(course: string, text: string): string {
-  const t = text.trim();
+  let t = normalizeUnitMiddleDot(text.trim());
   if (!t) return t;
   const c = normalizeRobotCourseName(course);
-  if (TWO_LAP_ROBOT_COURSES.has(c) && !t.includes("周目") && /^\d+-\d+$/.test(t)) {
+  if (!TWO_LAP_ROBOT_COURSES.has(c) || t.includes("周目")) return t;
+  if (/^\d+-\d+$/.test(t) || /^\d+・\d+-\d+$/.test(t)) {
     return `1周目 / ${t}`;
   }
   return t;
 }
 
-const DEFAULT_CSV_UNIT = "7-1";
+function defaultRobotTextForCourse(course: string): string | null {
+  const c = normalizeRobotCourseName(course);
+  if (c === "アドバンス（2周）") return "1周目 / 2・3-1";
+  if (TWO_LAP_ROBOT_COURSES.has(c)) return "1周目 / 7-1";
+  return "1-1";
+}
 
 function readCourseTextCells(
   cells: string[],
@@ -147,7 +157,10 @@ function readCourseTextCells(
 ): { course: string; text: string } {
   const course = readOptionalCell(cells, iCourse).trim();
   let text = readOptionalCell(cells, iText).trim();
-  if (course && !text) text = DEFAULT_CSV_UNIT;
+  if (course && !text) {
+    const fallback = defaultRobotTextForCourse(course);
+    if (fallback) text = fallback;
+  }
   return { course, text };
 }
 
@@ -194,20 +207,28 @@ function resolveRobotNextTextFromCsv(
     return { combined: built, course: parts.course, text: parts.text };
   }
 
-  const unit = text.replace(/^\d+周目\s*\/\s*/, "").trim();
+  const unitOnly = text.replace(/^\d+周目\s*\/\s*/, "").trim();
   for (const opt of ROBOT_NEXT_TEXT_OPTIONS) {
     const parts = parseRobotNextTextParts(opt);
     if (parts?.course !== course) continue;
-    if (parts.text === text || parts.text.endsWith(unit) || opt.endsWith(unit)) {
+    if (parts.text === text) {
+      return { combined: opt, course: parts.course, text: parts.text };
+    }
+    const optUnit = parts.text.replace(/^\d+周目\s*\/\s*/, "").trim();
+    if (optUnit === unitOnly) {
       return { combined: opt, course: parts.course, text: parts.text };
     }
   }
 
+  const hint =
+    course === "アドバンス（2周）"
+      ? "（例: 1周目 / 2・3-1、1周目 / 6・7-1、2周目 / 2・3-1）"
+      : "";
   return {
     combined: null,
     course: null,
     text: null,
-    error: `${line}行目: ロボットのコース・テキスト名の組み合わせが不正です（${course} / ${text}）。`,
+    error: `${line}行目: ロボットのコース・テキスト名の組み合わせが不正です（${course} / ${text}）${hint}。`,
   };
 }
 
