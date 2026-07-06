@@ -54,7 +54,7 @@ function expandTwoLapSuThenStd(tier: string, std: string[]): string[] {
   ];
 }
 
-/** 1周目: SU1,SU2 + advUnits、2周目: advUnits のみ（アドバンス専用並び） */
+/** 1周目: SU1,SU2 + 2か月1冊の単元、2周目: 単元のみ（アドバンス） */
 function expandTwoLapSuThenAdv(
   tier: string,
   advUnits: readonly string[]
@@ -77,31 +77,24 @@ const R_BASIC = "ベーシック（2周）";
 const R_MIDDLE = "ミドル（2周）";
 const R_ADV = "アドバンス（2周）";
 
-const R_ADV_UNITS = [
-  "1-3",
-  "1-4",
-  "2-1",
-  "2-2",
-  "3-3",
-  "3-4",
-  "4-1",
-  "4-2",
-  "5-3",
-  "5-4",
-  "6-1",
-  "6-2",
-  "7-3",
-  "7-4",
-  "8-1",
-  "8-2",
-  "9-3",
-  "9-4",
-  "10-1",
-  "10-2",
-  "11-3",
-  "11-4",
-  "12-1",
-  "12-2",
+/**
+ * アドバンス教材単元（偶数月+奇数月＝1冊）。12・1-1 の次が 2周目。
+ * SU1/SU2 は expandTwoLapSuThenAdv が 1周目先頭に付与。
+ */
+export const R_ADV_UNITS = [
+  "2・3-1",
+  "2・3-2",
+  "2・3-3",
+  "2・3-4",
+  "4・5-1",
+  "4・5-2",
+  "6・7-1",
+  "6・7-2",
+  "6・7-3",
+  "6・7-4",
+  "8・9-1",
+  "10・11-1",
+  "12・1-1",
 ] as const;
 
 function buildRobotFlat(): string[] {
@@ -292,7 +285,7 @@ export function robotNextTextOptgroups(): NextTextOptgroup[] {
       options: expandTierLap(R_MIDDLE, LAP2, std),
     },
     {
-      label: `⑤ ${R_ADV} — ${LAP1}（進級時 SU あり・専用单元）`,
+      label: `⑤ ${R_ADV} — ${LAP1}（進級時 SU あり）`,
       options: expandTierLap(R_ADV, LAP1, ["SU1", "SU2", ...R_ADV_UNITS]),
     },
     {

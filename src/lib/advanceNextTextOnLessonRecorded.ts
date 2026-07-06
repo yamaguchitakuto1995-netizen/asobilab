@@ -9,7 +9,12 @@ import {
   resolveRobotNextTextPartsForStudent,
   robotNextTextStudentColumnsFromCombined,
 } from "@/lib/courseNextText";
+import {
+  advanceSuRestMonthAfterEvenSu,
+  isAdvanceRobotSu2Combined,
+} from "@/lib/advanceRobotSuLeave";
 import { updateCourseStartOnAutoPromotion } from "@/lib/applyStudentPromotion";
+import { applyLeaveToScheduledLessons } from "@/lib/applyStudentLeave";
 import { lessonYearMonth } from "@/lib/studentLeave";
 
 type StudentNextRow = {
@@ -66,6 +71,26 @@ export async function advanceStudentNextTextAfterLessonRecorded(
       .from("students")
       .update(robotNextTextStudentColumnsFromCombined(next))
       .eq("id", studentId);
+
+    if (
+      lessonDate?.trim() &&
+      isAdvanceRobotSu2Combined(current)
+    ) {
+      const restYm = advanceSuRestMonthAfterEvenSu(lessonDate.trim());
+      if (restYm) {
+        await supabase
+          .from("students")
+          .update({
+            leave_from_ym: restYm,
+            leave_until_ym: restYm,
+          })
+          .eq("id", studentId);
+        await applyLeaveToScheduledLessons(supabase, studentId, {
+          leave_from_ym: restYm,
+          leave_until_ym: restYm,
+        });
+      }
+    }
 
     if (
       promotionYm &&
