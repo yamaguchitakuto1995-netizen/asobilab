@@ -1,4 +1,5 @@
 import { currentYm, shiftMonth } from "@/lib/date";
+import { todayJstIso } from "@/lib/registrationDeadlines";
 import { resolveCourseStartYm } from "@/lib/studentCourseStart";
 import { isValidYearMonth } from "@/lib/studentWithdrawal";
 import {
@@ -14,6 +15,10 @@ import {
   type RobotNextText,
 } from "@/lib/courseNextText";
 import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
+import {
+  estimateProgrammingAutoPromotionScheduledYm,
+  programmingRemainingMonthsInCourse,
+} from "@/lib/programmingCoursePromotion";
 import {
   estimateRobotAutoPromotionScheduledYm,
   robotRemainingMonthsInCourse,
@@ -119,6 +124,10 @@ export function estimateMonthsUntilCourseEnd(
     return robotRemainingMonthsInCourse(student);
   }
 
+  if (subject === "プログラミング") {
+    return programmingRemainingMonthsInCourse(student);
+  }
+
   const remaining = remainingLessonsInCourse(subject, student);
   if (remaining == null || remaining <= 0) return null;
   return Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
@@ -133,6 +142,10 @@ export function estimateAutoPromotionScheduledYm(
 
   if (subject === "ロボット") {
     return estimateRobotAutoPromotionScheduledYm(student);
+  }
+
+  if (subject === "プログラミング") {
+    return estimateProgrammingAutoPromotionScheduledYm(student);
   }
 
   const months = estimateMonthsUntilCourseEnd(subject, student);
@@ -172,11 +185,16 @@ export type PromotionScheduleInfo = {
   highlight: boolean;
 };
 
+/** 進級予定の強調判定・表示に使う現在月（JST） */
+export function promotionNowYm(now = new Date()): string {
+  return todayJstIso(now).slice(0, 7);
+}
+
 /** 進級予定バナーを薄オレンジで強調するか */
 export function isPromotionScheduleHighlighted(
   promotionScheduledYm: string,
   promotionType: PromotionType | string | null | undefined,
-  nowYm: string = currentYm()
+  nowYm: string = promotionNowYm()
 ): boolean {
   const ym = promotionScheduledYm.trim();
   if (!ym) return false;
@@ -190,7 +208,7 @@ export function isPromotionScheduleHighlighted(
 export function resolvePromotionScheduleInfo(
   subject: string | null | undefined,
   student: PromotionStudentFields | null | undefined,
-  nowYm: string = currentYm()
+  nowYm: string = promotionNowYm()
 ): PromotionScheduleInfo | null {
   const nextCourse = resolveNextPromotionCourseDisplay(subject, student);
   if (!nextCourse) return null;

@@ -38,6 +38,8 @@ export type DailyLessonItem = Lesson & {
     minecraft_login?: string | null;
     promotion_scheduled_ym?: string | null;
     promotion_type?: "normal" | "skip_grade";
+    course_start_robot_ym?: string | null;
+    course_start_programming_ym?: string | null;
     leave_from_ym?: string | null;
     leave_until_ym?: string | null;
   } | null;
