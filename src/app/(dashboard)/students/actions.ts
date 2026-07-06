@@ -35,6 +35,7 @@ import {
 import {
   parseStudentsCsv,
   resolveStudentCsvSlots,
+  studentCsvRowToPayload,
 } from "@/lib/studentCsvImport";
 import {
   readBirthdayFromForm,
@@ -707,6 +708,11 @@ export async function updateStudent(formData: FormData) {
 }
 
 export async function deleteStudent(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.accountRole !== "staff") {
+    redirect("/login");
+  }
+
   const id = String(formData.get("id") ?? "");
   if (!id) redirect("/students");
 
@@ -722,6 +728,43 @@ export async function deleteStudent(formData: FormData) {
   revalidatePath("/students");
   revalidatePath("/");
   redirect("/students");
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** 一覧で選択した生徒を一括削除 */
+export async function deleteStudentsBulk(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.accountRole !== "staff") {
+    redirect("/login");
+  }
+
+  const ids = formData
+    .getAll("ids")
+    .map((v) => String(v).trim())
+    .filter((id) => UUID_RE.test(id));
+
+  if (ids.length === 0) {
+    redirect(
+      `${STUDENTS_BASE}?error=${encodeURIComponent("削除する生徒を選択してください。")}`
+    );
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("students").delete().in("id", ids);
+
+  if (error) {
+    redirect(
+      `${STUDENTS_BASE}?error=${encodeURIComponent(error.message)}`
+    );
+  }
+
+  revalidatePath(STUDENTS_BASE);
+  revalidatePath("/");
+  redirect(
+    `${STUDENTS_BASE}?bulk_deleted=${encodeURIComponent(String(ids.length))}`
+  );
 }
 
 function importFail(msg: string): never {
@@ -771,15 +814,7 @@ export async function importStudentsCsv(formData: FormData) {
     const slots = resolveStudentCsvSlots(row, capacities);
     if (slots.error) importFail(`${row.line}行目: ${slots.error}`);
 
-    const payload = {
-      name: row.name,
-      grade: row.grade,
-      classroom: row.classroom,
-      subjects: row.subjects,
-      enrollment_robot_capacity_id: slots.robotCapacityId,
-      enrollment_prog_capacity_id: slots.progCapacityId,
-      note: row.note,
-    };
+    const payload = studentCsvRowToPayload(row, slots);
 
     if (row.student_id) {
       const { data: existing } = await supabase
