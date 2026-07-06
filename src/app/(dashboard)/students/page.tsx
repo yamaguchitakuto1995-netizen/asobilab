@@ -234,7 +234,7 @@ export default async function StudentsPage({
         <div className="text-xs text-slate-600 leading-relaxed space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
           <p>
             <span className="font-semibold text-slate-700">手順:</span>{" "}
-            ヘッダー行を含む CSV を貼り付けて「取り込む」。{" "}
+            ヘッダー行を含む CSV を貼り付けて「取り込む」（ヘッダーなしのスプレッドシート形式でも可）。{" "}
             <code className="text-[11px] bg-white px-1 rounded border border-slate-200">
               student_id
             </code>{" "}
