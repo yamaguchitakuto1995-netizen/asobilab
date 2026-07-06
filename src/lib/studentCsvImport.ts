@@ -15,6 +15,9 @@ import {
   buildRobotNextTextFromParts,
   isProgrammingNextText,
   isRobotNextText,
+  parseRobotNextTextParts,
+  ROBOT_NEXT_TEXT_OPTIONS,
+  TWO_LAP_ROBOT_COURSES,
 } from "@/lib/courseNextText";
 import {
   normalizeBirthdayMmdd,
@@ -82,6 +85,190 @@ function headerIndex(header: string[], names: string[]): number {
     if (i >= 0) return i;
   }
   return -1;
+}
+
+function isCsvHeaderRow(cells: string[]): boolean {
+  const lower = cells.map((c) => c.toLowerCase());
+  return (
+    lower.some((c) => c === "氏名" || c === "name" || c === "student_id") ||
+    lower.some((c) => c.includes("ロボット_週グループ"))
+  );
+}
+
+/** スプレッドシート貼り付けで先頭に空列が付く場合のオフセット */
+function detectLeadingOffset(cells: string[]): number {
+  for (const offset of [0, 1, 2]) {
+    const grade = normalizePasteCell(cells[offset + 3] ?? "");
+    const subjectCell = normalizePasteCell(cells[offset + 5] ?? "");
+    const hasSubject = parseSubjectsCell(subjectCell).length > 0;
+    if (
+      (GRADE_LEVELS as readonly string[]).includes(grade as GradeLevel) &&
+      hasSubject
+    ) {
+      return offset;
+    }
+  }
+  return 0;
+}
+
+function buildPositionalColumnIndexes(offset: number) {
+  const base = buildColumnIndexes(
+    STUDENT_CSV_HEADER.split(",").map((s) => s.toLowerCase())
+  );
+  const shifted = { ...base } as Record<string, number>;
+  for (const key of Object.keys(shifted)) {
+    if (shifted[key] >= 0) shifted[key] += offset;
+  }
+  return shifted as ReturnType<typeof buildColumnIndexes>;
+}
+
+function normalizeRobotCourseName(raw: string): string {
+  const t = raw.trim();
+  if (t === "アドバンス") return "アドバンス（2周）";
+  return t;
+}
+
+function normalizeRobotTextForCourse(course: string, text: string): string {
+  const t = text.trim();
+  if (!t) return t;
+  const c = normalizeRobotCourseName(course);
+  if (TWO_LAP_ROBOT_COURSES.has(c) && !t.includes("周目") && /^\d+-\d+$/.test(t)) {
+    return `1周目 / ${t}`;
+  }
+  return t;
+}
+
+const DEFAULT_CSV_UNIT = "7-1";
+
+function readCourseTextCells(
+  cells: string[],
+  iCourse: number,
+  iText: number
+): { course: string; text: string } {
+  const course = readOptionalCell(cells, iCourse).trim();
+  let text = readOptionalCell(cells, iText).trim();
+  if (course && !text) text = DEFAULT_CSV_UNIT;
+  return { course, text };
+}
+
+function inferSubjectsFromRow(
+  initial: CourseSubject[],
+  robotSlot: RegularSlotParts | null,
+  progSlot: RegularSlotParts | null,
+  robotCourse: string,
+  progCourse: string
+): CourseSubject[] {
+  const set = new Set<CourseSubject>(initial);
+  if (robotSlot || robotCourse.trim()) set.add("ロボット");
+  if (progSlot || progCourse.trim()) set.add("プログラミング");
+  return [...set];
+}
+
+function resolveRobotNextTextFromCsv(
+  courseRaw: string,
+  textRaw: string,
+  line: number
+): {
+  combined: string | null;
+  course: string | null;
+  text: string | null;
+  error?: string;
+} {
+  const course = normalizeRobotCourseName(courseRaw);
+  const text = normalizeRobotTextForCourse(course, textRaw);
+  if (!course && !text) {
+    return { combined: null, course: null, text: null };
+  }
+  if (!course || !text) {
+    return {
+      combined: null,
+      course: null,
+      text: null,
+      error: `${line}行目: ロボットのコースとテキスト名は両方指定してください。`,
+    };
+  }
+
+  const built = buildRobotNextTextFromParts(course, text);
+  if (isRobotNextText(built)) {
+    const parts = parseRobotNextTextParts(built)!;
+    return { combined: built, course: parts.course, text: parts.text };
+  }
+
+  const unit = text.replace(/^\d+周目\s*\/\s*/, "").trim();
+  for (const opt of ROBOT_NEXT_TEXT_OPTIONS) {
+    const parts = parseRobotNextTextParts(opt);
+    if (parts?.course !== course) continue;
+    if (parts.text === text || parts.text.endsWith(unit) || opt.endsWith(unit)) {
+      return { combined: opt, course: parts.course, text: parts.text };
+    }
+  }
+
+  const monthUnit = unit.match(/^(\d+)-(\d+)$/);
+  if (monthUnit && course === "アドバンス（2周）") {
+    const month = Number(monthUnit[1]);
+    const lesson = Number(monthUnit[2]);
+    const opts = ROBOT_NEXT_TEXT_OPTIONS.filter(
+      (o) => parseRobotNextTextParts(o)?.course === course
+    );
+    const idx = Math.max(
+      0,
+      Math.min((month - 1) * 2 + (lesson - 1), opts.length - 1)
+    );
+    const opt = opts[idx];
+    if (opt) {
+      const parts = parseRobotNextTextParts(opt)!;
+      return { combined: opt, course: parts.course, text: parts.text };
+    }
+  }
+
+  return {
+    combined: null,
+    course: null,
+    text: null,
+    error: `${line}行目: ロボットのコース・テキスト名の組み合わせが不正です（${course} / ${text}）。`,
+  };
+}
+
+function preprocessCsvLines(raw: string): string[] {
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+  const merged: string[] = [];
+
+  for (const line of lines) {
+    const cleaned = line.replace(/^"+|"+$/g, "").trim();
+    if (!cleaned) continue;
+
+    const cells = splitTableRow(cleaned);
+    const nonEmpty = cells.filter((c) => c.trim()).length;
+
+    if (merged.length > 0 && nonEmpty < 5) {
+      const prev = merged[merged.length - 1]!;
+      merged[merged.length - 1] = prev + cleaned.replace(/^,/, ",");
+      continue;
+    }
+
+    merged.push(cleaned);
+  }
+
+  return merged;
+}
+
+function swapMisplacedCourseStartYm(
+  subjects: CourseSubject[],
+  robot: { value: string | null },
+  prog: { value: string | null }
+): void {
+  const robotOnly =
+    subjects.includes("ロボット") && !subjects.includes("プログラミング");
+  const progOnly =
+    subjects.includes("プログラミング") && !subjects.includes("ロボット");
+  if (robotOnly && !robot.value && prog.value) {
+    robot.value = prog.value;
+    prog.value = null;
+  }
+  if (progOnly && !prog.value && robot.value) {
+    prog.value = robot.value;
+    robot.value = null;
+  }
 }
 
 function readOptionalCell(cells: string[], index: number): string {
@@ -193,7 +380,7 @@ function parseDataRow(
     readOptionalCell(cells, cols.iNameKana).trim() || null;
   const gradeRaw = normalizePasteCell(cells[cols.iGrade] ?? "");
   const classroom = normalizePasteCell(cells[cols.iClass] ?? "");
-  const subjects = parseSubjectsCell(cells[cols.iSubj] ?? "");
+  const initialSubjects = parseSubjectsCell(cells[cols.iSubj] ?? "");
   const note =
     cols.iNote >= 0 ? normalizePasteCell(cells[cols.iNote] ?? "") || null : null;
   const persistent_memo =
@@ -240,18 +427,6 @@ function parseDataRow(
   if (!isKnownClassroom(classroom, classrooms)) {
     return { error: `${line}行目: 教室「${classroom}」が不正です。` };
   }
-  if (subjects.length === 0) {
-    return { error: `${line}行目: 教科が空または不正です。` };
-  }
-
-  const invalidSubj = subjects.filter(
-    (s) => !classroomSubjects(classroom, classrooms).includes(s)
-  );
-  if (invalidSubj.length > 0) {
-    return {
-      error: `${line}行目: ${classroom} では「${invalidSubj.join("・")}」を開講していません。`,
-    };
-  }
 
   const robot = readOptionalSlot(
     cells,
@@ -272,6 +447,38 @@ function parseDataRow(
     line
   );
   if (prog.error) return { error: prog.error };
+
+  const robotCourseText = readCourseTextCells(
+    cells,
+    cols.iRobotCourse,
+    cols.iRobotText
+  );
+  const progCourseText = readCourseTextCells(
+    cells,
+    cols.iProgCourse,
+    cols.iProgText
+  );
+
+  const subjects = inferSubjectsFromRow(
+    initialSubjects,
+    robot.slot,
+    prog.slot,
+    robotCourseText.course,
+    progCourseText.course
+  );
+
+  if (subjects.length === 0) {
+    return { error: `${line}行目: 教科が空または不正です。` };
+  }
+
+  const invalidSubj = subjects.filter(
+    (s) => !classroomSubjects(classroom, classrooms).includes(s)
+  );
+  if (invalidSubj.length > 0) {
+    return {
+      error: `${line}行目: ${classroom} では「${invalidSubj.join("・")}」を開講していません。`,
+    };
+  }
 
   if (subjects.includes("ロボット") && !robot.slot) {
     return {
@@ -294,19 +501,21 @@ function parseDataRow(
     };
   }
 
-  const robotNext = readNextTextPair(
-    readOptionalCell(cells, cols.iRobotCourse),
-    readOptionalCell(cells, cols.iRobotText),
-    "ロボット",
-    line,
-    buildRobotNextTextFromParts,
-    isRobotNextText
+  const robotCourseRaw = normalizeRobotCourseName(robotCourseText.course);
+  const robotTextRaw = normalizeRobotTextForCourse(
+    robotCourseRaw,
+    robotCourseText.text
+  );
+  const robotNext = resolveRobotNextTextFromCsv(
+    robotCourseRaw,
+    robotTextRaw,
+    line
   );
   if (robotNext.error) return { error: robotNext.error };
 
   const progNext = readNextTextPair(
-    readOptionalCell(cells, cols.iProgCourse),
-    readOptionalCell(cells, cols.iProgText),
+    progCourseText.course,
+    progCourseText.text,
     "プログラミング",
     line,
     buildProgrammingNextTextFromParts,
@@ -348,6 +557,8 @@ function parseDataRow(
     line
   );
   if (courseStartProg.error) return { error: courseStartProg.error };
+
+  swapMisplacedCourseStartYm(subjects, courseStartRobot, courseStartProg);
 
   if (subjects.includes("ロボット") && !courseStartRobot.value) {
     return {
@@ -569,26 +780,57 @@ export function parseStudentsCsv(
   const text = raw.replace(/^\uFEFF/, "").trim();
   if (!text) return { ok: false, error: "CSV を貼り付けてください。" };
 
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) {
-    return { ok: false, error: "ヘッダー行とデータ行が必要です。" };
+  const lines = preprocessCsvLines(text);
+  if (lines.length < 1) {
+    return { ok: false, error: "データ行がありません。" };
   }
 
-  const header = splitTableRow(lines[0]).map((s) => s.toLowerCase());
-  const cols = buildColumnIndexes(header);
+  const firstCells = splitTableRow(lines[0]);
+  const hasHeader = isCsvHeaderRow(firstCells);
+  let cols: ReturnType<typeof buildColumnIndexes>;
+  let dataStartLine = 1;
 
-  if (cols.iName < 0 || cols.iGrade < 0 || cols.iClass < 0 || cols.iSubj < 0) {
-    return {
-      ok: false,
-      error:
-        "必須列: 氏名(name), 学年(grade), 教室(classroom), 教科(subjects)。レギュラーコマ列も必要です。",
-    };
+  if (hasHeader) {
+    if (lines.length < 2) {
+      return { ok: false, error: "ヘッダー行の下にデータ行が必要です。" };
+    }
+    const header = firstCells.map((s) => s.toLowerCase());
+    cols = buildColumnIndexes(header);
+    if (cols.iName < 0 || cols.iGrade < 0 || cols.iClass < 0 || cols.iSubj < 0) {
+      return {
+        ok: false,
+        error:
+          "必須列: 氏名(name), 学年(grade), 教室(classroom), 教科(subjects)。レギュラーコマ列も必要です。",
+      };
+    }
+  } else {
+    const offset = detectLeadingOffset(firstCells);
+    if (
+      offset === 0 &&
+      !(GRADE_LEVELS as readonly string[]).includes(
+        normalizePasteCell(firstCells[3] ?? "") as GradeLevel
+      )
+    ) {
+      return {
+        ok: false,
+        error: `1行目にヘッダー行がありません。先頭に次の行を追加してから貼り付けてください:\n${STUDENT_CSV_HEADER}`,
+      };
+    }
+    cols = buildPositionalColumnIndexes(offset);
+    dataStartLine = 0;
   }
 
   const parsed: StudentCsvParsedRow[] = [];
 
-  for (let r = 1; r < lines.length; r++) {
-    const result = parseDataRow(splitTableRow(lines[r]), r + 1, cols, classrooms);
+  for (let r = dataStartLine; r < lines.length; r++) {
+    const cells = splitTableRow(lines[r]);
+    const nonEmpty = cells.filter((c) => c.trim()).length;
+    if (nonEmpty < 5) continue;
+
+    const nameProbe = normalizePasteCell(cells[cols.iName] ?? "").trim();
+    if (!nameProbe) continue;
+
+    const result = parseDataRow(cells, r + 1, cols, classrooms);
     if ("error" in result) {
       return { ok: false, error: result.error };
     }
