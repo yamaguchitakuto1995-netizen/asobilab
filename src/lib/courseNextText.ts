@@ -78,8 +78,7 @@ const R_MIDDLE = "ミドル（2周）";
 const R_ADV = "アドバンス（2周）";
 
 /**
- * アドバンス教材単元（偶数月+奇数月＝1冊）。
- * 例: 2・3-1〜4 は2月・3月分、4・5-1〜2 は4月・5月分。
+ * アドバンス教材単元（偶数月+奇数月＝1冊）。12・1-1 の次が 2周目。
  * SU1/SU2 は expandTwoLapSuThenAdv が 1周目先頭に付与。
  */
 export const R_ADV_UNITS = [
@@ -89,6 +88,13 @@ export const R_ADV_UNITS = [
   "2・3-4",
   "4・5-1",
   "4・5-2",
+  "6・7-1",
+  "6・7-2",
+  "6・7-3",
+  "6・7-4",
+  "8・9-1",
+  "10・11-1",
+  "12・1-1",
 ] as const;
 
 function buildRobotFlat(): string[] {
