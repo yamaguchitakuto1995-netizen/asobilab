@@ -23,6 +23,7 @@ import {
   isProgrammingNextText,
   isRobotNextText,
 } from "@/lib/courseNextText";
+import { schoolYearStartYm } from "@/lib/annualGradePromotion";
 import {
   applySiblingGroup,
   readSiblingFormInput,
@@ -236,7 +237,7 @@ export async function createStudent(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const nameKana = String(formData.get("name_kana") ?? "").trim();
   const gradeRaw = String(formData.get("grade") ?? "");
-  const note = String(formData.get("note") ?? "").trim();
+  const persistent_memo = String(formData.get("persistent_memo") ?? "").trim();
   const subjects = readSubjects(formData);
   const portalIdResult = readPortalIdFromForm(formData);
   const birthdayResult = readBirthdayFromForm(formData);
@@ -252,6 +253,9 @@ export async function createStudent(formData: FormData) {
       )}`
     );
   }
+  const gradePromotedThroughYm = schoolYearStartYm(
+    new Date().toISOString().slice(0, 10)
+  );
   const classroomResult = readClassroom(formData, classrooms);
 
   if (!name) {
@@ -392,7 +396,8 @@ export async function createStudent(formData: FormData) {
       promotion_type: promotion.promotion_type,
       course_start_robot_ym: courseStart.course_start_robot_ym,
       course_start_programming_ym: courseStart.course_start_programming_ym,
-      note: note || null,
+      persistent_memo: persistent_memo || null,
+      grade_promoted_through_ym: gradePromotedThroughYm,
       created_by: user.id,
     })
     .select("id")
@@ -476,7 +481,7 @@ export async function updateStudent(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const nameKana = String(formData.get("name_kana") ?? "").trim();
   const gradeRaw = String(formData.get("grade") ?? "");
-  const note = String(formData.get("note") ?? "").trim();
+  const persistent_memo = String(formData.get("persistent_memo") ?? "").trim();
   const subjects = readSubjects(formData);
   const portalIdResult = readPortalIdFromForm(formData);
   const birthdayResult = readBirthdayFromForm(formData);
@@ -624,7 +629,7 @@ export async function updateStudent(formData: FormData) {
       promotion_type: promotion.promotion_type,
       course_start_robot_ym: courseStart.course_start_robot_ym,
       course_start_programming_ym: courseStart.course_start_programming_ym,
-      note: note || null,
+      persistent_memo: persistent_memo || null,
     })
     .eq("id", id);
 
@@ -891,4 +896,33 @@ export async function importStudentsCsv(formData: FormData) {
   if (updated > 0) params.set("csv_updated", String(updated));
   const qs = params.toString();
   redirect(qs ? `${STUDENTS_BASE}?${qs}` : STUDENTS_BASE);
+}
+
+export async function updateStudentPersistentMemo(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.accountRole !== "staff") {
+    redirect("/login");
+  }
+
+  const studentId = String(formData.get("student_id") ?? "").trim();
+  const persistent_memo = String(formData.get("persistent_memo") ?? "").trim();
+
+  if (!studentId) redirect("/students");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("students")
+    .update({ persistent_memo: persistent_memo || null })
+    .eq("id", studentId);
+
+  const base = `/students/${studentId}`;
+  if (error) {
+    redirect(
+      `${base}?error=${encodeURIComponent(`備考（継続）の保存に失敗: ${error.message}`)}`
+    );
+  }
+
+  revalidatePath(base);
+  revalidatePath("/");
+  redirect(`${base}?memo_saved=1`);
 }

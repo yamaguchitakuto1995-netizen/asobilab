@@ -5,6 +5,7 @@ import { shiftMonth, ymLabel } from "@/lib/date";
 const WEEK_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
 type CalendarLesson = {
+  id: string;
   lesson_date: string;
   attendance: AttendanceStatus;
   status: LessonStatus;
@@ -12,6 +13,7 @@ type CalendarLesson = {
 
 type Props = {
   ym: string;
+  studentId: string;
   lessons: CalendarLesson[];
   baseHref: string;
 };
@@ -32,7 +34,14 @@ const SCHEDULED_BG: Record<AttendanceStatus, string> = {
   on_leave: "bg-slate-100 text-slate-600 border-2 border-dashed border-slate-400",
 };
 
-export function AttendanceCalendar({ ym, lessons, baseHref }: Props) {
+function lessonHref(studentId: string, lesson: CalendarLesson): string {
+  if (lesson.status === "recorded") {
+    return `/students/${studentId}/lessons/${lesson.id}/edit`;
+  }
+  return `/students/${studentId}/lessons/new?date=${lesson.lesson_date}`;
+}
+
+export function AttendanceCalendar({ ym, studentId, lessons, baseHref }: Props) {
   const [yStr, mStr] = ym.split("-");
   const year = Number(yStr);
   const month = Number(mStr);
@@ -41,26 +50,30 @@ export function AttendanceCalendar({ ym, lessons, baseHref }: Props) {
   const startOffset = first.getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const byDate = new Map<string, { status: LessonStatus; attendance: AttendanceStatus }>();
+  const byDate = new Map<string, CalendarLesson>();
   for (const l of lessons) {
     if (!l.lesson_date.startsWith(ym)) continue;
-    // 同日に複数あれば、recorded を優先
     const existing = byDate.get(l.lesson_date);
     if (!existing || (existing.status === "scheduled" && l.status === "recorded")) {
-      byDate.set(l.lesson_date, { status: l.status, attendance: l.attendance });
+      byDate.set(l.lesson_date, l);
     }
   }
 
   const cells: Array<{
     day: number | null;
-    info: { status: LessonStatus; attendance: AttendanceStatus } | null;
+    dateIso: string | null;
+    lesson: CalendarLesson | null;
   }> = [];
-  for (let i = 0; i < startOffset; i++) cells.push({ day: null, info: null });
+  for (let i = 0; i < startOffset; i++) {
+    cells.push({ day: null, dateIso: null, lesson: null });
+  }
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${ym}-${`${d}`.padStart(2, "0")}`;
-    cells.push({ day: d, info: byDate.get(ds) ?? null });
+    cells.push({ day: d, dateIso: ds, lesson: byDate.get(ds) ?? null });
   }
-  while (cells.length % 7 !== 0) cells.push({ day: null, info: null });
+  while (cells.length % 7 !== 0) {
+    cells.push({ day: null, dateIso: null, lesson: null });
+  }
 
   const prevYm = shiftMonth(ym, -1);
   const nextYm = shiftMonth(ym, +1);
@@ -69,7 +82,12 @@ export function AttendanceCalendar({ ym, lessons, baseHref }: Props) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold">出欠カレンダー</h3>
+        <div>
+          <h3 className="text-sm font-semibold">出欠カレンダー</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            日付をタップして出席登録・編集（過去日も可）
+          </p>
+        </div>
         <div className="flex items-center gap-1">
           <Link
             href={`${baseHref}${sep}ym=${prevYm}`}
@@ -99,31 +117,38 @@ export function AttendanceCalendar({ ym, lessons, baseHref }: Props) {
 
       <div className="grid grid-cols-7 gap-1">
         {cells.map((c, idx) => {
-          if (c.day === null) {
+          if (c.day === null || !c.dateIso) {
             return <div key={idx} className="aspect-square" />;
           }
-          if (c.info) {
+
+          const newHref = `/students/${studentId}/lessons/new?date=${c.dateIso}`;
+
+          if (c.lesson) {
             const cls =
-              c.info.status === "scheduled"
-                ? SCHEDULED_BG[c.info.attendance]
-                : RECORDED_BG[c.info.attendance];
+              c.lesson.status === "scheduled"
+                ? SCHEDULED_BG[c.lesson.attendance]
+                : RECORDED_BG[c.lesson.attendance];
             return (
-              <div
+              <Link
                 key={idx}
-                className={`aspect-square flex items-center justify-center rounded-md text-xs font-semibold ${cls}`}
-                title={`${c.info.status === "scheduled" ? "予定: " : ""}${c.info.attendance}`}
+                href={lessonHref(studentId, c.lesson)}
+                className={`aspect-square flex items-center justify-center rounded-md text-xs font-semibold hover:opacity-90 ${cls}`}
+                title={`${c.lesson.status === "scheduled" ? "予定: " : ""}${c.lesson.attendance}（タップで編集）`}
               >
                 {c.day}
-              </div>
+              </Link>
             );
           }
+
           return (
-            <div
+            <Link
               key={idx}
-              className="aspect-square flex items-center justify-center rounded-md text-xs text-slate-500 bg-slate-50"
+              href={newHref}
+              className="aspect-square flex items-center justify-center rounded-md text-xs text-slate-500 bg-slate-50 hover:bg-brand-50 hover:text-brand-700"
+              title="この日の出席を登録"
             >
               {c.day}
-            </div>
+            </Link>
           );
         })}
       </div>

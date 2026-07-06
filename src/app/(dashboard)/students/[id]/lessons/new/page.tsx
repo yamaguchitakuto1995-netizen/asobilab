@@ -7,10 +7,11 @@ import { fetchClassrooms } from "@/lib/classrooms";
 import { fetchClassroomPeriodTimes } from "@/lib/periodTimes";
 import { createClient } from "@/lib/supabase/server";
 import type { Student } from "@/lib/types";
+import { isValidDate } from "@/lib/date";
 import { createLesson } from "./actions";
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ error?: string }>;
+type SearchParams = Promise<{ error?: string; date?: string }>;
 
 export default async function NewLessonPage({
   params,
@@ -20,7 +21,7 @@ export default async function NewLessonPage({
   searchParams: SearchParams;
 }) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, date } = await searchParams;
   const supabase = await createClient();
 
   const [{ data: student }, periodTimes, classrooms] = await Promise.all([
@@ -87,6 +88,10 @@ export default async function NewLessonPage({
         studentId={student.id}
         cancelHref={`/students/${student.id}`}
         action={createLesson}
+        defaultValues={{
+          lessonDate: date && isValidDate(date) ? date : undefined,
+          status: "recorded",
+        }}
         studentSubjects={student.subjects ?? []}
         studentClassroom={student.classroom}
         classrooms={classrooms}

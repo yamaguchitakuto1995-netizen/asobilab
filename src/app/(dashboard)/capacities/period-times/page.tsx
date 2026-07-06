@@ -15,6 +15,7 @@ import {
   importPeriodTimesCsv,
   resyncScheduledLessonsFromPeriodTimes,
 } from "./actions";
+import { deleteClassroom } from "./classrooms/actions";
 
 type SearchParams = Promise<{
   error?: string;
@@ -194,12 +195,21 @@ export default async function PeriodTimesPage({
                   ) : null}
                 </div>
                 {user.isAdmin ? (
-                  <Link
-                    href={`/capacities/period-times/classrooms/${c.id}/edit`}
-                    className="text-sm text-brand-600 hover:underline shrink-0"
-                  >
-                    編集
-                  </Link>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Link
+                      href={`/capacities/period-times/classrooms/${c.id}/edit`}
+                      className="text-sm text-brand-600 hover:underline"
+                    >
+                      編集
+                    </Link>
+                    <ConfirmDeleteForm
+                      action={deleteClassroom}
+                      message={`「${c.name}」を削除します。生徒・振替枠・コマ時刻・授業記録がない場合のみ削除できます。`}
+                      buttonClassName="text-sm text-rose-600 hover:underline disabled:opacity-50"
+                    >
+                      <input type="hidden" name="id" value={c.id} />
+                    </ConfirmDeleteForm>
+                  </div>
                 ) : null}
               </li>
             ))}

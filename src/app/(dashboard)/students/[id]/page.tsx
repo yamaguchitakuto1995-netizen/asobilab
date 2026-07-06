@@ -5,6 +5,7 @@ import { AttendanceCalendar } from "@/components/AttendanceCalendar";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { ConfirmDeleteForm } from "@/components/ConfirmDeleteForm";
 import { PageHeader } from "@/components/PageHeader";
+import { StudentPersistentMemoForm } from "@/components/StudentPersistentMemoForm";
 import { StudentTextInfoSection } from "@/components/StudentTextInfo";
 import { SubjectChip } from "@/components/SubjectChip";
 import { getCurrentUser } from "@/lib/auth";
@@ -28,6 +29,7 @@ import { StudentPromotionScheduleNotices } from "@/components/PromotionScheduleN
 import { StudentCourseStartDisplay } from "@/components/StudentCourseStartDisplay";
 import { StudentLeavePeriodDisplay } from "@/components/StudentLeavePeriodDisplay";
 import { applyDueSkipPromotionIfNeeded } from "@/lib/applyStudentPromotion";
+import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
@@ -44,6 +46,7 @@ type SearchParams = Promise<{
   subject?: string;
   ym?: string;
   error?: string;
+  memo_saved?: string;
 }>;
 
 export default async function StudentDetailPage({
@@ -59,10 +62,12 @@ export default async function StudentDetailPage({
     subject = "",
     ym = currentYm(),
     error: errorMsg,
+    memo_saved: memoSaved,
   } = await searchParams;
   const supabase = await createClient();
   const user = await getCurrentUser();
 
+  await applyAnnualGradePromotionIfNeeded(supabase);
   await applyDueSkipPromotionIfNeeded(supabase, id);
 
   const { data: student } = await supabase
@@ -99,9 +104,11 @@ export default async function StudentDetailPage({
   ] = await Promise.all([
     supabase
       .from("lessons")
-      .select("lesson_date, attendance, subject, status")
+      .select("id, lesson_date, attendance, subject, status")
       .eq("student_id", id)
-      .returns<Pick<Lesson, "lesson_date" | "attendance" | "subject" | "status">[]>(),
+      .returns<
+        Pick<Lesson, "id" | "lesson_date" | "attendance" | "subject" | "status">[]
+      >(),
     listQuery.returns<Lesson[]>(),
     supabase
       .from("lessons")
@@ -371,12 +378,13 @@ export default async function StudentDetailPage({
         editHref={`${baseHref}/edit`}
       />
 
-      {student.note ? (
-        <section className="bg-white border border-slate-200 rounded-2xl p-4">
-          <h2 className="text-sm font-semibold text-slate-700 mb-1">メモ</h2>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{student.note}</p>
-        </section>
-      ) : null}
+      <StudentPersistentMemoForm
+        studentId={student.id}
+        defaultValue={
+          student.persistent_memo?.trim() || student.note?.trim() || ""
+        }
+        saved={memoSaved === "1"}
+      />
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="授業数" value={`${total}`} unit="件" />
@@ -589,6 +597,7 @@ export default async function StudentDetailPage({
 
       <AttendanceCalendar
         ym={ym}
+        studentId={student.id}
         lessons={(allLessons ?? []).filter(
           (l) =>
             l.status !== "scheduled" ||

@@ -129,13 +129,13 @@ export default async function NewStudentPage({
         <StudentWithdrawalField />
 
         <Field
-          label="メモ"
-          htmlFor="note"
-          hint="連絡先や担当科目など、任意のメモ"
+          label="備考（継続）"
+          htmlFor="persistent_memo"
+          hint="トップの当日ボードにも表示されます（例: タブレット有り）"
         >
           <textarea
-            id="note"
-            name="note"
+            id="persistent_memo"
+            name="persistent_memo"
             rows={3}
             maxLength={500}
             className={inputClass}
