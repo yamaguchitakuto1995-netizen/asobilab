@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClassroomSubjectsField } from "@/components/ClassroomSubjectsField";
+import { BirthdayMmddField } from "@/components/BirthdayMmddField";
 import { Field, inputClass } from "@/components/Field";
 import { PageHeader } from "@/components/PageHeader";
 import { StudentLeaveField } from "@/components/StudentLeaveField";
@@ -164,21 +165,7 @@ export default async function EditStudentPage({
           />
         </Field>
 
-        <Field
-          label="誕生日"
-          htmlFor="birthday"
-          required
-          hint="保護者の振替申請フォームで本人確認に使います"
-        >
-          <input
-            id="birthday"
-            name="birthday"
-            type="date"
-            required
-            defaultValue={student.birthday ?? ""}
-            className={inputClass}
-          />
-        </Field>
+        <BirthdayMmddField defaultValue={student.birthday} />
 
         <Field label="学年" htmlFor="grade" required>
           <select

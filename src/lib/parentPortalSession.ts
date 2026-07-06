@@ -1,3 +1,5 @@
+import { normalizeBirthdayMmdd } from "@/lib/birthdayMmdd";
+
 const STORAGE_KEY = "asobilab_parent_portal_v1";
 
 export type ParentPortalSession = {
@@ -12,7 +14,9 @@ export function readParentPortalSession(): ParentPortalSession | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ParentPortalSession;
     if (!parsed.portalId?.trim() || !parsed.birthday?.trim()) return null;
-    return { portalId: parsed.portalId.trim(), birthday: parsed.birthday.trim() };
+    const birthday = normalizeBirthdayMmdd(parsed.birthday);
+    if (!birthday) return null;
+    return { portalId: parsed.portalId.trim(), birthday };
   } catch {
     return null;
   }
@@ -20,11 +24,13 @@ export function readParentPortalSession(): ParentPortalSession | null {
 
 export function writeParentPortalSession(session: ParentPortalSession): void {
   if (typeof window === "undefined") return;
+  const birthday = normalizeBirthdayMmdd(session.birthday);
+  if (!birthday) return;
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       portalId: session.portalId.trim(),
-      birthday: session.birthday.trim(),
+      birthday,
     })
   );
 }

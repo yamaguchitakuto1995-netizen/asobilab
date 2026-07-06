@@ -20,6 +20,7 @@ import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import { formatBirthdayMmddJa } from "@/lib/birthdayMmdd";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { hasProgrammingLoginDisplay } from "@/lib/studentProgrammingLogin";
 import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
@@ -210,15 +211,22 @@ export default async function StudentDetailPage({
               <span className="text-rose-700 font-sans font-normal">未設定（編集画面で登録）</span>
             )}
           </dd>
-          <dt className="text-sky-800">誕生日</dt>
-          <dd className="font-medium">
-            {student.birthday ? student.birthday : (
-              <span className="text-rose-700 font-normal">未設定（編集画面で登録）</span>
+          <dt className="text-sky-800">誕生日（月日）</dt>
+          <dd className="font-medium font-mono">
+            {student.birthday ? (
+              <>
+                {student.birthday}
+                <span className="font-sans text-sky-800/80 text-xs ml-2">
+                  （{formatBirthdayMmddJa(student.birthday)}）
+                </span>
+              </>
+            ) : (
+              <span className="text-rose-700 font-sans font-normal">未設定（編集画面で登録）</span>
             )}
           </dd>
         </dl>
         <p className="text-xs text-sky-800/80 mt-2">
-          保護者は <code className="text-xs">/apply</code> で上記2つを入力して振替申請できます。
+          保護者は <code className="text-xs">/apply</code> で生徒IDと誕生日（月日4桁）を入力して振替申請できます。
         </p>
       </section>
 

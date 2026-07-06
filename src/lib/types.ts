@@ -212,7 +212,7 @@ export type Student = {
   sibling_group_id?: string | null;
   /** 保護者向け振替フォーム用の生徒ID（教室が発行） */
   portal_id?: string | null;
-  /** 保護者向け振替フォーム用の本人確認（誕生日・YYYY-MM-DD） */
+  /** 保護者向け振替フォーム用の本人確認（月日4桁 MMDD。例: 0327） */
   birthday?: string | null;
   /** 休会開始月 YYYY-MM */
   leave_from_ym?: string | null;

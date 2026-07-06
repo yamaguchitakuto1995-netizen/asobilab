@@ -1,7 +1,11 @@
-/** 保護者向け振替フォーム用の生徒ID・誕生日 */
+/** 保護者向け振替フォーム用の生徒ID・誕生日（月日4桁） */
+
+import {
+  isValidBirthdayMmdd,
+  normalizeBirthdayMmdd,
+} from "@/lib/birthdayMmdd";
 
 const PORTAL_ID_PATTERN = /^[0-9A-Za-z\-]{1,20}$/;
-const BIRTHDAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function readPortalIdFromForm(formData: FormData): {
   value: string;
@@ -26,12 +30,16 @@ export function readBirthdayFromForm(formData: FormData): {
 } {
   const raw = String(formData.get("birthday") ?? "").trim();
   if (!raw) {
-    return { value: null, error: "誕生日を入力してください。" };
+    return { value: null, error: "誕生日（月日）を入力してください。" };
   }
-  if (!BIRTHDAY_PATTERN.test(raw)) {
-    return { value: null, error: "誕生日の形式が不正です。" };
+  const normalized = normalizeBirthdayMmdd(raw);
+  if (!normalized) {
+    return {
+      value: null,
+      error: "誕生日は月日4桁で入力してください（例: 3月27日→0327）。",
+    };
   }
-  return { value: raw };
+  return { value: normalized };
 }
 
 export function readPortalIdFromInput(raw: string): {
@@ -57,10 +65,16 @@ export function readBirthdayFromInput(raw: string): {
 } {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { value: null, error: "誕生日を入力してください。" };
+    return { value: null, error: "誕生日（月日）を入力してください。" };
   }
-  if (!BIRTHDAY_PATTERN.test(trimmed)) {
-    return { value: null, error: "誕生日の形式が不正です。" };
+  const normalized = normalizeBirthdayMmdd(trimmed);
+  if (!normalized) {
+    return {
+      value: null,
+      error: "誕生日は月日4桁で入力してください（例: 3月27日→0327）。",
+    };
   }
-  return { value: trimmed };
+  return { value: normalized };
 }
+
+export { isValidBirthdayMmdd, normalizeBirthdayMmdd };
