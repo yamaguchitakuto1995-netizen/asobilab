@@ -15,6 +15,10 @@ import {
 } from "@/lib/courseNextText";
 import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
 import {
+  estimateProgrammingAutoPromotionScheduledYm,
+  programmingRemainingMonthsInCourse,
+} from "@/lib/programmingCoursePromotion";
+import {
   estimateRobotAutoPromotionScheduledYm,
   robotRemainingMonthsInCourse,
 } from "@/lib/robotCoursePromotion";
@@ -119,6 +123,10 @@ export function estimateMonthsUntilCourseEnd(
     return robotRemainingMonthsInCourse(student);
   }
 
+  if (subject === "プログラミング") {
+    return programmingRemainingMonthsInCourse(student);
+  }
+
   const remaining = remainingLessonsInCourse(subject, student);
   if (remaining == null || remaining <= 0) return null;
   return Math.max(1, Math.ceil(remaining / LESSONS_PER_MONTH));
@@ -133,6 +141,10 @@ export function estimateAutoPromotionScheduledYm(
 
   if (subject === "ロボット") {
     return estimateRobotAutoPromotionScheduledYm(student);
+  }
+
+  if (subject === "プログラミング") {
+    return estimateProgrammingAutoPromotionScheduledYm(student);
   }
 
   const months = estimateMonthsUntilCourseEnd(subject, student);
