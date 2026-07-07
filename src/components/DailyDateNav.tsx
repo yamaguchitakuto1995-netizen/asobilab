@@ -2,15 +2,15 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { shiftDate, todayIso } from "@/lib/date";
+import { formatDateLong, shiftDate, todayIso } from "@/lib/date";
 
 type Props = {
   date: string;
 };
 
 /**
- * ?date=YYYY-MM-DD で日付を切り替えるナビゲーションバー。
- * 前日 / 今日 / 翌日 ボタンと <input type="date"> を提供。
+ * ?date=YYYY-MM-DD で日付を切り替えるナビゲーション（前日 / 翌日 / 今日）。
+ * 日付選択は左のカレンダーを使用。
  */
 export function DailyDateNav({ date }: Props) {
   const router = useRouter();
@@ -20,7 +20,7 @@ export function DailyDateNav({ date }: Props) {
   const today = todayIso();
 
   function navigate(next: string) {
-    const sp = new URLSearchParams(params);
+    const sp = new URLSearchParams(params.toString());
     if (next === today) {
       sp.delete("date");
     } else {
@@ -48,14 +48,9 @@ export function DailyDateNav({ date }: Props) {
       >
         ← 前日
       </button>
-      <input
-        type="date"
-        value={date}
-        onChange={(e) => {
-          if (e.target.value) navigate(e.target.value);
-        }}
-        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-      />
+      <span className="text-sm font-semibold text-slate-800 px-1 min-w-[9rem] text-center">
+        {formatDateLong(date)}
+      </span>
       <button
         type="button"
         onClick={() => navigate(next)}
