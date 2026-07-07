@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdminDashboardReminders } from "@/components/AdminDashboardReminders";
 import { AttendanceBadge } from "@/components/AttendanceBadge";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
 import { DailyLessonBoard } from "@/components/DailyLessonBoard";
@@ -20,7 +21,9 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
+import { buildNextMonthPromotionPreview } from "@/lib/dashboardPromotionPreview";
 import { getCurrentUser } from "@/lib/auth";
+import { listUnacknowledgedMakeupExpiryReminders } from "@/lib/makeupExpiryReminders";
 import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
 import { ensureScheduledLessonsForDate } from "@/lib/regularAttendanceSync";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
@@ -59,7 +62,7 @@ type LessonWithStudent = Lesson & {
   } | null;
 };
 
-type SearchParams = Promise<{ date?: string; cal_ym?: string }>;
+type SearchParams = Promise<{ date?: string; cal_ym?: string; error?: string }>;
 
 export default async function DashboardHomePage({
   searchParams,
@@ -69,6 +72,7 @@ export default async function DashboardHomePage({
   const sp = await searchParams;
   const today = todayIso();
   const selectedDate = isValidDate(sp.date) ? sp.date : today;
+  const errorMsg = sp.error;
   const isToday = selectedDate === today;
   const calYm =
     sp.cal_ym && /^\d{4}-\d{2}$/.test(sp.cal_ym)
@@ -77,6 +81,7 @@ export default async function DashboardHomePage({
 
   const supabase = await createClient();
   const user = await getCurrentUser();
+  const isAdmin = user?.isAdmin ?? false;
 
   await applyAnnualGradePromotionIfNeeded(supabase);
 
@@ -93,6 +98,7 @@ export default async function DashboardHomePage({
     { data: monthLessonRows },
     periodTimes,
     classrooms,
+    adminAlerts,
   ] = await Promise.all([
     supabase
       .from("lessons")
@@ -123,7 +129,28 @@ export default async function DashboardHomePage({
       .lte("lesson_date", monthEnd),
     fetchClassroomPeriodTimes(supabase),
     fetchClassrooms(supabase),
+    isAdmin
+      ? Promise.all([
+          listUnacknowledgedMakeupExpiryReminders(supabase).catch(() => []),
+          supabase
+            .from("students")
+            .select(
+              "id, name, subjects, promotion_scheduled_ym, promotion_type, course_start_robot_ym, course_start_programming_ym, next_text_robot, next_text_robot_course, next_text_robot_text, next_text_programming, next_text_programming_course, next_text_programming_text"
+            )
+            .order("name", { ascending: true }),
+        ]).then(([makeupReminders, studentsResult]) => ({
+          makeupReminders,
+          promotionPreview: buildNextMonthPromotionPreview(
+            studentsResult.data ?? []
+          ),
+        }))
+      : Promise.resolve(null),
   ]);
+
+  const makeupReminders = adminAlerts?.makeupReminders ?? [];
+  const promotionPreview =
+    adminAlerts?.promotionPreview ??
+    buildNextMonthPromotionPreview([]);
 
   const dayLessons = (dayLessonsRaw ?? []).filter((lesson) => {
     const withdrawalYm = lesson.students?.withdrawal_until_ym ?? null;
@@ -203,6 +230,20 @@ export default async function DashboardHomePage({
         title="ホーム"
         description="日毎のコマ表と、備考入力ありの最近の記録を確認できます。"
       />
+
+      {errorMsg ? (
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+          {decodeURIComponent(errorMsg)}
+        </p>
+      ) : null}
+
+      {isAdmin ? (
+        <AdminDashboardReminders
+          makeupReminders={makeupReminders}
+          promotionPreview={promotionPreview}
+          returnDate={selectedDate !== today ? selectedDate : undefined}
+        />
+      ) : null}
 
       <section className="grid lg:grid-cols-[minmax(0,280px)_1fr] gap-4 items-start">
         <DashboardDateCalendar

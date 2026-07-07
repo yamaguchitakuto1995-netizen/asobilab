@@ -1546,6 +1546,30 @@ create policy "psl: parent read own"
 grant select, insert, delete on public.parent_student_links to authenticated;
 
 -- ------------------------------------------------------------
+-- 7.5) makeup_expiry_acknowledgments（振替失効リマインドの対応済み）
+-- ------------------------------------------------------------
+create table if not exists public.makeup_expiry_acknowledgments (
+  lesson_id        uuid primary key references public.lessons(id) on delete cascade,
+  acknowledged_by  uuid not null references auth.users(id) on delete restrict,
+  acknowledged_at  timestamptz not null default now()
+);
+
+create index if not exists makeup_expiry_ack_student_idx
+  on public.makeup_expiry_acknowledgments (acknowledged_at desc);
+
+alter table public.makeup_expiry_acknowledgments enable row level security;
+
+drop policy if exists "makeup_expiry_ack: admin all" on public.makeup_expiry_acknowledgments;
+
+create policy "makeup_expiry_ack: admin all"
+  on public.makeup_expiry_acknowledgments for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+grant select, insert, delete on public.makeup_expiry_acknowledgments to authenticated;
+
+-- ------------------------------------------------------------
 -- 8) Realtime
 --    保護者フォームで lessons の変更をリアルタイム反映させるため、
 --    lessons を supabase_realtime publication に追加。
