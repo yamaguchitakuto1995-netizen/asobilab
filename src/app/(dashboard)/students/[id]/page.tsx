@@ -44,7 +44,11 @@ import {
   type Student,
 } from "@/lib/types";
 import { deleteStudent } from "../actions";
-import { deleteLesson, markLessonRecorded } from "./lessons/actions";
+import {
+  deleteLesson,
+  markLessonMakeupEligibleAbsent,
+  markLessonRecorded,
+} from "./lessons/actions";
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{
@@ -52,6 +56,7 @@ type SearchParams = Promise<{
   subject?: string;
   ym?: string;
   error?: string;
+  info?: string;
   memo_saved?: string;
 }>;
 
@@ -68,6 +73,7 @@ export default async function StudentDetailPage({
     subject = "",
     ym = currentYm(),
     error: errorMsg,
+    info: infoMsg,
     memo_saved: memoSaved,
   } = await searchParams;
   const supabase = await createClient();
@@ -105,6 +111,7 @@ export default async function StudentDetailPage({
     { data: allLessons },
     { data: filteredHistory },
     { data: upcoming },
+    { data: pastMakeupEligible },
     periodTimes,
     siblingSummaries,
   ] = await Promise.all([
@@ -124,12 +131,30 @@ export default async function StudentDetailPage({
       .gte("lesson_date", today)
       .order("lesson_date", { ascending: true })
       .returns<Lesson[]>(),
+    supabase
+      .from("lessons")
+      .select("*")
+      .eq("student_id", id)
+      .eq("status", "scheduled")
+      .eq("attendance", "absent")
+      .lt("lesson_date", today)
+      .not("period", "is", null)
+      .not("subject", "is", null)
+      .order("lesson_date", { ascending: false })
+      .order("period", { ascending: true })
+      .returns<Lesson[]>(),
     fetchClassroomPeriodTimes(supabase),
     fetchSiblingSummaries(supabase, id, student.sibling_group_id),
   ]);
 
   const upcomingVisible = hideAbsencesWithMakeupRegistered(
     (upcoming ?? []).filter(
+      (l) => !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
+    )
+  );
+
+  const pastMakeupEligibleVisible = hideAbsencesWithMakeupRegistered(
+    (pastMakeupEligible ?? []).filter(
       (l) => !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
     )
   );
@@ -216,6 +241,12 @@ export default async function StudentDetailPage({
       {errorMsg ? (
         <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
           {decodeURIComponent(errorMsg)}
+        </p>
+      ) : null}
+
+      {infoMsg ? (
+        <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+          {decodeURIComponent(infoMsg)}
         </p>
       ) : null}
 
@@ -435,6 +466,14 @@ export default async function StudentDetailPage({
             ) : null}
             {isAdmin ? (
             <Link
+              href={`/students/${student.id}/lessons/backfill-absent`}
+              className="text-xs text-amber-700 hover:underline"
+            >
+              ＋ 過去の欠席（振替可能）を登録
+            </Link>
+            ) : null}
+            {isAdmin ? (
+            <Link
               href={`/students/${student.id}/lessons/new`}
               className="text-xs text-brand-600 hover:underline"
             >
@@ -529,6 +568,85 @@ export default async function StudentDetailPage({
           </div>
         )}
       </section>
+
+      {isAdmin && pastMakeupEligibleVisible.length > 0 ? (
+        <section>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              欠席（振替可能）— 過去分
+              <span className="text-xs font-normal rounded-full bg-amber-100 text-amber-900 px-2 py-0.5">
+                {pastMakeupEligibleVisible.length}件
+              </span>
+            </h2>
+            <Link
+              href={`/students/${student.id}/lessons/backfill-absent`}
+              className="text-xs text-amber-700 hover:underline"
+            >
+              ＋ 手動で追加
+            </Link>
+          </div>
+          <ul className="bg-white border border-amber-200 rounded-2xl divide-y divide-amber-100 overflow-hidden">
+            {pastMakeupEligibleVisible.map((l) => {
+              const slotRow =
+                l.period && periodTimes.length
+                  ? resolveClassroomPeriodTime(periodTimes, {
+                      classroom: effectiveLessonClassroom(l, student.classroom),
+                      lessonDate: l.lesson_date,
+                      period: l.period,
+                      subject: l.subject,
+                    })
+                  : null;
+              return (
+                <li key={l.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">
+                          {formatDateLong(l.lesson_date)}
+                        </p>
+                        <span className="text-xs text-slate-600 font-medium">
+                          {periodLabel(l.period)}
+                          {slotRow
+                            ? ` · ${formatTimeRange(slotRow.start_time, slotRow.end_time)}`
+                            : ""}
+                        </span>
+                        <SubjectChip subject={l.subject} />
+                        <ClassroomBadge
+                          classroom={effectiveLessonClassroom(l, student.classroom)}
+                          size="sm"
+                        />
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-amber-100 text-amber-900 ring-amber-600/20">
+                          {SCHEDULED_ATTENDANCE_LABEL.absent}
+                        </span>
+                      </div>
+                      {l.text_memo ? (
+                        <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">
+                          {l.text_memo}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <Link
+                        href={`/students/${student.id}/lessons/${l.id}/edit`}
+                        className="text-xs text-brand-600 hover:text-brand-700 hover:underline"
+                      >
+                        編集
+                      </Link>
+                      <ConfirmDeleteForm
+                        action={deleteLesson}
+                        message={`${formatDateLong(l.lesson_date)} の欠席（振替可能）を削除します。よろしいですか？`}
+                      >
+                        <input type="hidden" name="student_id" value={student.id} />
+                        <input type="hidden" name="lesson_id" value={l.id} />
+                      </ConfirmDeleteForm>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {subjectsAvailable.length > 0 ? (
         <section className="bg-white border border-slate-200 rounded-2xl p-4">
@@ -720,6 +838,21 @@ export default async function StudentDetailPage({
                     </div>
                     {canEdit ? (
                       <div className="flex flex-col gap-1 shrink-0">
+                        {l.attendance === "absent" &&
+                        l.period != null &&
+                        l.subject ? (
+                          <form action={markLessonMakeupEligibleAbsent}>
+                            <input type="hidden" name="student_id" value={student.id} />
+                            <input type="hidden" name="lesson_id" value={l.id} />
+                            <button
+                              type="submit"
+                              className="text-xs rounded-md bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 text-left"
+                              title="振替申請の対象になるようステータスを変更します"
+                            >
+                              欠席（振替可能）にする
+                            </button>
+                          </form>
+                        ) : null}
                         <Link
                           href={`/students/${student.id}/lessons/${l.id}/edit`}
                           className="text-xs text-brand-600 hover:text-brand-700 hover:underline"

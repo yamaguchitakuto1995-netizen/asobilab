@@ -128,7 +128,7 @@ export function portalScheduleAttendanceLabel(
   lesson: PortalScheduleLesson
 ): string {
   if (lesson.attendance === "on_leave") return "休会中";
-  if (lesson.attendance === "absent") return "欠席予定 要振替登録";
+  if (lesson.attendance === "absent") return "欠席（振替可能） 要振替登録";
   if (lesson.attendance === "present") return "出席予定";
   if (lesson.attendance === "makeup") return "振替予定";
   return "—";

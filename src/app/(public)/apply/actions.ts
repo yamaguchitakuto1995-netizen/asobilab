@@ -11,6 +11,7 @@ import {
   isPendingAbsenceMakeupOpen,
   isStudentSlotOccupied,
   isSameMakeupSourceAndTarget,
+  makeupPendingAbsenceFromDate,
   makeupRegistrationClosedMessage,
   pendingAbsenceMakeupClosedMessage,
   sameMakeupSourceAndTargetMessage,
@@ -341,12 +342,15 @@ export async function listPendingAbsencesForMakeup(input: {
     p_student_id: input.studentId,
     p_portal_id: portalIdResult.value,
     p_birthday: birthdayResult.value,
+    p_from_date: makeupPendingAbsenceFromDate(),
   });
 
   if (error) return { ok: false, error: error.message };
 
   const lessons = filterLessonsBySubjects(
-    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[]),
+    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[]).filter(
+      (l) => isPendingAbsenceMakeupOpen(l.lesson_date)
+    ),
     input.subjects
   );
   return { ok: true, lessons };
