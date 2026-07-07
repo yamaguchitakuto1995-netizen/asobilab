@@ -1,7 +1,7 @@
 -- 管理者権限の復旧（1 アカウント分）
 -- Supabase ダッシュボード → SQL Editor に貼り付けて Run
 --
--- 対象: human.asobilab@gmail.com（旧: yamaguchi.takuto1995@gmail.com）
+-- 対象: human.asobilab@gmail.com
 -- 1) 古い DB 用に account_role 列が無ければ追加（schema.sql と同趣旨）
 -- 2) 管理者 + 職員として更新
 

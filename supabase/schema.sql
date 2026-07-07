@@ -97,7 +97,7 @@ set search_path = public
 as $$
 declare
   admin_emails text[] := array[
-    'yamaguchi.takuto1995@gmail.com'
+    'human.asobilab@gmail.com'
   ];
 begin
   insert into public.teacher_profiles (id, email, is_admin)
@@ -124,7 +124,7 @@ select
   u.id,
   u.email,
   u.email = any (array[
-    'yamaguchi.takuto1995@gmail.com'
+    'human.asobilab@gmail.com'
   ]::text[])
 from auth.users u
 on conflict (id) do update
