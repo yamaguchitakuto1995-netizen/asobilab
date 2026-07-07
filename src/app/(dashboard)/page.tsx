@@ -84,14 +84,12 @@ export default async function DashboardHomePage({
   const monthEnd = `${calYm}-31`;
 
   const [
-    { count: studentCount },
     { data: dayLessonsRaw },
     { data: recentMemoRecords },
     { data: monthLessonRows },
     periodTimes,
     classrooms,
   ] = await Promise.all([
-    supabase.from("students").select("*", { count: "exact", head: true }),
     supabase
       .from("lessons")
       .select(
@@ -132,13 +130,6 @@ export default async function DashboardHomePage({
     (lesson) => lesson.text_memo?.trim()
   );
 
-  const dayPresent =
-    dayLessons?.filter((l) => l.status === "recorded" && l.attendance === "present").length ?? 0;
-  const dayAbsent =
-    dayLessons?.filter((l) => l.status === "recorded" && l.attendance === "absent").length ?? 0;
-  const dayScheduled =
-    dayLessons?.filter((l) => l.status === "scheduled").length ?? 0;
-
   const previousMemos = await fetchPreviousLessonMemos(
     supabase,
     (dayLessons ?? []).map((l) => ({
@@ -160,42 +151,7 @@ export default async function DashboardHomePage({
       <PageHeader
         title="ホーム"
         description="日毎のコマ表と、備考入力ありの最近の記録を確認できます。"
-        actions={
-          <div className="flex flex-wrap items-center gap-2 justify-end">
-            <Link
-              href="/capacities"
-              className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-2"
-            >
-              教室・振替の設定
-            </Link>
-            <Link
-              href="/students"
-              className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
-            >
-              生徒を見る
-            </Link>
-          </div>
-        }
       />
-
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="登録生徒数" value={studentCount ?? 0} unit="人" />
-        <StatCard
-          label={isToday ? "本日の予定" : `${formatDateShort(selectedDate)} 予定`}
-          value={dayScheduled}
-          unit="件"
-        />
-        <StatCard
-          label={isToday ? "本日(出席)" : `${formatDateShort(selectedDate)} 出席`}
-          value={dayPresent}
-          unit="件"
-        />
-        <StatCard
-          label={isToday ? "本日(欠席)" : `${formatDateShort(selectedDate)} 欠席`}
-          value={dayAbsent}
-          unit="件"
-        />
-      </section>
 
       <section className="grid lg:grid-cols-[minmax(0,280px)_1fr] gap-4 items-start">
         <DashboardDateCalendar
@@ -237,26 +193,6 @@ export default async function DashboardHomePage({
           <EmptyCard message="備考入力ありの記録はまだありません。" />
         )}
       </section>
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: number;
-  unit: string;
-}) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-2xl font-bold mt-1">
-        {value}
-        <span className="text-sm font-normal text-slate-500 ml-1">{unit}</span>
-      </p>
     </div>
   );
 }
