@@ -134,11 +134,11 @@ export function DashboardDateCalendar({
               disabled={isPending}
               aria-current={isSelected ? "date" : undefined}
               aria-pressed={isSelected}
-              className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-semibold relative transition-all ${
+              className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-bold relative transition-all ${
                 isSelected
-                  ? "bg-brand-600 text-white shadow-md ring-2 ring-brand-700 ring-offset-2 scale-[1.06] z-[1]"
+                  ? "bg-brand-900 text-white shadow-lg ring-[3px] ring-slate-900 ring-offset-2 scale-[1.08] z-[1]"
                   : isLoading
-                    ? "bg-brand-100 text-brand-800 ring-2 ring-brand-400 animate-pulse"
+                    ? "bg-brand-200 text-brand-950 ring-2 ring-brand-800 animate-pulse font-bold"
                     : isToday
                       ? "bg-white text-brand-800 ring-2 ring-brand-300 hover:bg-brand-50"
                       : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:ring-1 hover:ring-slate-300"
@@ -169,7 +169,7 @@ export function DashboardDateCalendar({
           過去に授業あり
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-brand-600 ring-2 ring-brand-700 ring-offset-1" />
+          <span className="inline-block w-3.5 h-3.5 rounded bg-brand-900 ring-[2px] ring-brand-950 ring-offset-1" />
           選択中
         </span>
       </div>
