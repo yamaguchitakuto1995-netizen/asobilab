@@ -26,6 +26,7 @@ type Props = {
   period: number | null;
   previousMemo: string | null;
   classroomPeriodTimes: ClassroomPeriodTime[];
+  plannedText?: string;
 };
 
 export function DailyLessonStudentRow({
@@ -34,6 +35,7 @@ export function DailyLessonStudentRow({
   period: _period,
   previousMemo,
   classroomPeriodTimes: _classroomPeriodTimes,
+  plannedText,
 }: Props) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,8 +52,8 @@ export function DailyLessonStudentRow({
     [lesson, st]
   );
 
-  const todayText = lessonTodayTextLabel(lesson, st);
-  const todayTextParts = lessonTodayTextParts(lesson, st);
+  const todayText = lessonTodayTextLabel(lesson, st, plannedText);
+  const todayTextParts = lessonTodayTextParts(lesson, st, plannedText);
   const attendanceLabel = dailyAttendanceStatusLabel(lessonForDisplay);
   const carryOverMemo = st ? formatCarryOverMemoDisplay(st) : null;
   const isAbsent = isDailyAbsentLesson(lessonForDisplay);

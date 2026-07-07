@@ -116,13 +116,16 @@ export function dailyAttendanceStatusLabel(
   return lessonAttendanceDisplayLabel(lesson);
 }
 
-/** 本日のテキスト（記録済みは textbook、予定は次回テキストから推定） */
+/** 本日のテキスト（記録済みは textbook、予定は受講予定テキスト） */
 export function lessonTodayTextLabel(
   lesson: Pick<Lesson, "textbook" | "subject" | "status">,
-  student: StudentTextFields | null | undefined
+  student: StudentTextFields | null | undefined,
+  plannedTextOverride?: string | null
 ): string {
   const tb = lesson.textbook?.trim();
   if (tb) return tb;
+
+  if (plannedTextOverride?.trim()) return plannedTextOverride.trim();
 
   if (!student || !lesson.subject) return "—";
 
@@ -150,9 +153,10 @@ export function lessonTodayTextLabel(
 /** 本日のテキストをコース（チップ用）と詳細に分解 */
 export function lessonTodayTextParts(
   lesson: Pick<Lesson, "textbook" | "subject" | "status">,
-  student: StudentTextFields | null | undefined
+  student: StudentTextFields | null | undefined,
+  plannedTextOverride?: string | null
 ): LessonTodayTextParts {
-  const full = lessonTodayTextLabel(lesson, student);
+  const full = lessonTodayTextLabel(lesson, student, plannedTextOverride);
   const subject = lesson.subject ?? "";
   const { course, detail } = parseTodayTextParts(full, subject);
   return { course, detail, full };

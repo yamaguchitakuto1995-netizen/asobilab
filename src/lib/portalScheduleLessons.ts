@@ -1,5 +1,7 @@
+import { formatDateLong } from "@/lib/date";
 import {
   effectiveLessonClassroom,
+  periodLabel,
   type AttendanceStatus,
   type ClassroomPeriodTime,
 } from "@/lib/types";
@@ -11,8 +13,8 @@ import {
 export type PortalScheduleLesson = {
   id: string;
   lesson_date: string;
-  period: number;
-  subject: string;
+  period: number | null;
+  subject: string | null;
   attendance: AttendanceStatus;
   lesson_classroom?: string | null;
   source_lesson_date?: string | null;
@@ -22,10 +24,10 @@ export type PortalScheduleLesson = {
 
 function lessonSlotKey(input: {
   lesson_date: string;
-  period: number;
-  subject: string;
+  period: number | null;
+  subject: string | null;
 }): string {
-  return `${input.lesson_date}|${input.period}|${input.subject}`;
+  return `${input.lesson_date}|${input.period}|${input.subject ?? ""}`;
 }
 
 /** 振替先が参照する元欠席のキー（DB の coalesce と同じ） */
@@ -33,7 +35,7 @@ function absenceSourceKey(lesson: PortalScheduleLesson): string {
   return lessonSlotKey({
     lesson_date: lesson.source_lesson_date ?? lesson.lesson_date,
     period: lesson.source_period ?? lesson.period,
-    subject: lesson.source_subject ?? lesson.subject,
+    subject: lesson.source_subject ?? lesson.subject ?? "",
   });
 }
 
@@ -66,6 +68,8 @@ export function isPortalScheduleLessonVisible(
     return isPendingAbsenceMakeupOpen(lesson.lesson_date, opts.now);
   }
 
+  if (lesson.period == null || !lesson.subject) return false;
+
   const venue = effectiveLessonClassroom(lesson, opts.studentClassroom);
   return canRegisterAbsence(
     {
@@ -79,6 +83,22 @@ export function isPortalScheduleLessonVisible(
   ).ok;
 }
 
+/** 振替登録済みの欠席予定を一覧から除く（保護者・職員の今後の予定用） */
+export function hideAbsencesWithMakeupRegistered<T extends PortalScheduleLesson>(
+  lessons: T[]
+): T[] {
+  const covered = makeupSourceKeys(lessons);
+  return lessons.filter((lesson) => {
+    if (
+      lesson.attendance === "absent" &&
+      covered.has(absenceSourceKey(lesson))
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 /** 振替登録済みの欠席予定を除き、締切を過ぎた授業も除いた一覧 */
 export function visiblePortalScheduleLessons(
   lessons: PortalScheduleLesson[],
@@ -88,16 +108,20 @@ export function visiblePortalScheduleLessons(
     now?: Date;
   }
 ): PortalScheduleLesson[] {
-  const covered = makeupSourceKeys(lessons);
-  return lessons.filter((lesson) => {
-    if (
-      lesson.attendance === "absent" &&
-      covered.has(absenceSourceKey(lesson))
-    ) {
-      return false;
-    }
-    return isPortalScheduleLessonVisible(lesson, opts);
-  });
+  return hideAbsencesWithMakeupRegistered(lessons).filter((lesson) =>
+    isPortalScheduleLessonVisible(lesson, opts)
+  );
+}
+
+/** 振替元の表示（振替先の行の下に表示） */
+export function formatMakeupSourceLine(
+  lesson: Pick<
+    PortalScheduleLesson,
+    "source_lesson_date" | "source_period" | "source_subject"
+  >
+): string | null {
+  if (!lesson.source_lesson_date || lesson.source_period == null) return null;
+  return `振替：${formatDateLong(lesson.source_lesson_date)} ${periodLabel(lesson.source_period)} からの振替`;
 }
 
 export function portalScheduleAttendanceLabel(

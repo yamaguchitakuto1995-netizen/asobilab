@@ -24,6 +24,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
 import { ensureScheduledLessonsForDate } from "@/lib/regularAttendanceSync";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
+import {
+  buildPlannedTextByLessonId,
+  groupUpcomingScheduledByStudent,
+} from "@/lib/plannedLessonText";
 import { createClient } from "@/lib/supabase/server";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
@@ -146,6 +150,39 @@ export default async function DashboardHomePage({
     (monthLessonRows ?? []).map((r) => r.lesson_date as string)
   );
 
+  const studentIds = [
+    ...new Set((dayLessons ?? []).map((l) => l.student_id)),
+  ];
+  let plannedTextByLessonId: Record<string, string> = {};
+  if (studentIds.length > 0) {
+    const { data: upcomingScheduled } = await supabase
+      .from("lessons")
+      .select("id, student_id, lesson_date, period, subject, attendance, status")
+      .in("student_id", studentIds)
+      .eq("status", "scheduled")
+      .gte("lesson_date", today)
+      .order("lesson_date", { ascending: true })
+      .order("period", { ascending: true });
+
+    const upcomingByStudent = groupUpcomingScheduledByStudent(
+      upcomingScheduled ?? []
+    );
+    plannedTextByLessonId = buildPlannedTextByLessonId(
+      (dayLessons ?? []).map((l) => ({
+        id: l.id,
+        student_id: l.student_id,
+        lesson_date: l.lesson_date,
+        period: l.period,
+        subject: l.subject,
+        status: l.status,
+        attendance: l.attendance,
+        textbook: l.textbook,
+        students: l.students,
+      })),
+      upcomingByStudent
+    );
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -172,6 +209,7 @@ export default async function DashboardHomePage({
             classroomPeriodTimes={periodTimes}
             previousMemos={previousMemos}
             classroomOrderNames={classroomNames(classrooms)}
+            plannedTextByLessonId={plannedTextByLessonId}
           />
         </div>
       </section>

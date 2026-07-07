@@ -10,6 +10,7 @@ import {
   type ClassroomPeriodTime,
 } from "@/lib/types";
 import {
+  formatMakeupSourceLine,
   portalScheduleAttendanceLabel,
   visiblePortalScheduleLessons,
   type PortalScheduleLesson,
@@ -93,13 +94,9 @@ export function ParentLessonScheduleList({
                   </span>
                 ) : null}
               </div>
-              {isMakeup && lesson.source_lesson_date ? (
+              {isMakeup ? (
                 <p className="text-xs text-sky-900">
-                  元の欠席: {formatDateShort(lesson.source_lesson_date)}
-                  {lesson.source_period != null
-                    ? ` ${lesson.source_period}コマ目`
-                    : ""}
-                  {lesson.source_subject ? `（${lesson.source_subject}）` : ""}
+                  {formatMakeupSourceLine(lesson)}
                 </p>
               ) : null}
             </div>

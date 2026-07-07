@@ -4,7 +4,11 @@ import { PageHeader } from "@/components/PageHeader";
 import { getCurrentUser } from "@/lib/auth";
 import { phoneLastFour } from "@/lib/access";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createInstructor, removeInstructor } from "./actions";
+import {
+  createInstructor,
+  removeInstructor,
+  updateInstructor,
+} from "./actions";
 
 type SearchParams = Promise<{ error?: string; message?: string }>;
 
@@ -102,29 +106,71 @@ export default async function InstructorsSettingsPage({
           登録済み講師
         </h2>
         {(instructors ?? []).length > 0 ? (
-          <ul className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
+          <ul className="space-y-3">
             {(instructors ?? []).map((row) => (
               <li
                 key={row.id}
-                className="px-4 py-3 flex items-start justify-between gap-3"
+                className="bg-white border border-slate-200 rounded-2xl p-4"
               >
-                <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{row.email}</p>
-                  {row.display_name ? (
-                    <p className="text-xs text-slate-600">{row.display_name}</p>
-                  ) : null}
-                  <p className="text-xs text-slate-500 mt-1">
-                    電話下4桁:{" "}
-                    {row.phone ? phoneLastFour(row.phone) : "未設定"}
-                  </p>
-                </div>
-                <ConfirmDeleteForm
-                  action={removeInstructor}
-                  message={`${row.email} の講師権限を削除します。よろしいですか？`}
-                  buttonLabel="削除"
-                >
+                <form action={updateInstructor} className="space-y-3">
                   <input type="hidden" name="user_id" value={row.id} />
-                </ConfirmDeleteForm>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        メールアドレス
+                      </label>
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        defaultValue={row.email}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        電話番号
+                      </label>
+                      <input
+                        name="phone"
+                        type="tel"
+                        required
+                        defaultValue={row.phone ?? ""}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        ログイン下4桁:{" "}
+                        {row.phone ? phoneLastFour(row.phone) : "未設定"}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        表示名（任意）
+                      </label>
+                      <input
+                        name="display_name"
+                        type="text"
+                        defaultValue={row.display_name ?? ""}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-brand-300 bg-brand-50 hover:bg-brand-100 text-brand-800 text-sm font-medium px-3 py-1.5"
+                  >
+                    保存
+                  </button>
+                </form>
+                <div className="flex justify-end mt-2">
+                  <ConfirmDeleteForm
+                    action={removeInstructor}
+                    message={`${row.email} の講師権限を削除します。よろしいですか？`}
+                    buttonLabel="削除"
+                  >
+                    <input type="hidden" name="user_id" value={row.id} />
+                  </ConfirmDeleteForm>
+                </div>
               </li>
             ))}
           </ul>

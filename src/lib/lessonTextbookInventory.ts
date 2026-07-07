@@ -21,6 +21,7 @@ export type LessonLikeForInventory = {
   attendance?: string | null;
   subject: string | null;
   textbook: string | null;
+  plannedText?: string | null;
   students: (StudentTextFields & { id?: string }) | null;
 };
 
@@ -40,6 +41,7 @@ export function lessonTextbookInventoryLabel(
   lesson: LessonLikeForInventory
 ): string {
   const tb = lesson.textbook?.trim();
+  const planned = lesson.plannedText?.trim();
   const st = lesson.students;
   const subj = lesson.subject?.trim() || "";
 
@@ -47,6 +49,12 @@ export function lessonTextbookInventoryLabel(
     const fromCombined = subj ? inventoryLabelFromCombined(tb, subj) : null;
     if (fromCombined) return fromCombined;
     return tb;
+  }
+
+  if (planned) {
+    const fromCombined = subj ? inventoryLabelFromCombined(planned, subj) : null;
+    if (fromCombined) return fromCombined;
+    return planned;
   }
 
   if (subj === "ロボット" && st) {

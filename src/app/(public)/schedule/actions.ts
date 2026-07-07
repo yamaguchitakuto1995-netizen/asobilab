@@ -96,8 +96,8 @@ export async function listStudentScheduleForPortal(input: {
   }));
 
   if (input.subjects?.length) {
-    lessons = lessons.filter((l) =>
-      studentEnrollsInSubject(input.subjects!, l.subject)
+    lessons = lessons.filter(
+      (l) => l.subject && studentEnrollsInSubject(input.subjects!, l.subject)
     );
   }
 
