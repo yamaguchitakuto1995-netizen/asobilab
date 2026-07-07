@@ -23,6 +23,7 @@ describe("buildNextMonthPromotionPreview", () => {
     expect(preview.entries[0]).toMatchObject({
       studentName: "山田太郎",
       subject: "ロボット",
+      courseLabel: "9月からミドル",
       promotionKindLabel: "飛び級進級",
     });
     expect(preview.entries[1]).toMatchObject({
