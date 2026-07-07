@@ -64,21 +64,33 @@ export function makeupTargetBookingClosedMessage(
   return `振替先の授業は授業日の${MAKEUP_REGISTRATION_DAYS_BEFORE}日前（${formatMakeupDeadlineLabel(targetLessonDate)}）までに申請してください。`;
 }
 
-/** 欠席済み授業への振替登録がまだ可能か（翌々月末 23:59 まで） */
+/** 欠席済み授業の振替登録締切日（翌々月末の3日前 23:59） */
+export function pendingAbsenceMakeupRegistrationDeadlineDate(
+  sourceLessonDate: string
+): string {
+  return shiftDate(
+    makeupTargetMaxDate(sourceLessonDate),
+    -MAKEUP_REGISTRATION_DAYS_BEFORE
+  );
+}
+
+/** 欠席済み授業への振替登録がまだ可能か（翌々月末の3日前 23:59 まで） */
 export function isPendingAbsenceMakeupOpen(
   sourceLessonDate: string,
   now = new Date()
 ): boolean {
-  const maxDate = makeupTargetMaxDate(sourceLessonDate);
-  const deadlineMs = jstDateTimeToMs(maxDate, "23:59:59");
+  const deadlineDate = pendingAbsenceMakeupRegistrationDeadlineDate(
+    sourceLessonDate
+  );
+  const deadlineMs = jstDateTimeToMs(deadlineDate, "23:59:59");
   return now.getTime() <= deadlineMs;
 }
 
 export function formatPendingAbsenceMakeupDeadlineLabel(
   sourceLessonDate: string
 ): string {
-  const max = makeupTargetMaxDate(sourceLessonDate);
-  const date = new Date(`${max}T00:00:00`);
+  const d = pendingAbsenceMakeupRegistrationDeadlineDate(sourceLessonDate);
+  const date = new Date(`${d}T00:00:00`);
   const w = ["日", "月", "火", "水", "木", "金", "土"][date.getDay()];
   return `${date.getMonth() + 1}/${date.getDate()}(${w}) 23:59`;
 }
@@ -86,7 +98,9 @@ export function formatPendingAbsenceMakeupDeadlineLabel(
 export function pendingAbsenceMakeupClosedMessage(
   sourceLessonDate: string
 ): string {
-  return `振替登録は欠席月の翌々月末（${formatPendingAbsenceMakeupDeadlineLabel(sourceLessonDate)}）までです。`;
+  const max = makeupTargetMaxDate(sourceLessonDate);
+  const maxLabel = formatDateShort(max);
+  return `振替登録は欠席月の翌々月末（${maxLabel}）の${MAKEUP_REGISTRATION_DAYS_BEFORE}日前（${formatPendingAbsenceMakeupDeadlineLabel(sourceLessonDate)}）までです。`;
 }
 
 export function canRegisterAbsence(

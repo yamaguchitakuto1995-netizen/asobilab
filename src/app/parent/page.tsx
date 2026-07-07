@@ -28,6 +28,7 @@ import {
   formatMakeupSourceLine,
   hideAbsencesWithMakeupRegistered,
 } from "@/lib/portalScheduleLessons";
+import { isPendingAbsenceMakeupOpen } from "@/lib/registrationDeadlines";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 
 type LessonRow = Lesson & {
@@ -108,7 +109,8 @@ export default async function ParentHomePage() {
   const today = todayIso();
   const end = shiftDate(today, MAKEUP_TARGET_MAX_DAYS_AHEAD);
 
-  const [{ data: lessons }, periodTimes, siblingLists] = await Promise.all([
+  const [{ data: lessons }, { data: pastPendingAbsences }, periodTimes, siblingLists] =
+    await Promise.all([
     supabase
       .from("lessons")
       .select("*, students ( id, name, grade, classroom )")
@@ -118,6 +120,17 @@ export default async function ParentHomePage() {
       .lte("lesson_date", end)
       .order("lesson_date", { ascending: true })
       .order("period", { ascending: true, nullsFirst: false })
+      .returns<LessonRow[]>(),
+    supabase
+      .from("lessons")
+      .select("*, students ( id, name, grade, classroom )")
+      .in("student_id", studentIds)
+      .eq("status", "scheduled")
+      .eq("attendance", "absent")
+      .lt("lesson_date", today)
+      .not("period", "is", null)
+      .not("subject", "is", null)
+      .order("lesson_date", { ascending: false })
       .returns<LessonRow[]>(),
     fetchClassroomPeriodTimes(supabase),
     Promise.all(
@@ -145,6 +158,18 @@ export default async function ParentHomePage() {
     }
     const arr = lessonsByStudent.get(lesson.student_id);
     if (arr) arr.push(lesson);
+  }
+  for (const lesson of pastPendingAbsences ?? []) {
+    if (!isPendingAbsenceMakeupOpen(lesson.lesson_date)) continue;
+    const student = byStudent.get(lesson.student_id);
+    if (
+      student &&
+      isLessonAfterWithdrawal(lesson.lesson_date, student.withdrawal_until_ym)
+    ) {
+      continue;
+    }
+    const arr = lessonsByStudent.get(lesson.student_id);
+    if (arr && !arr.some((l) => l.id === lesson.id)) arr.push(lesson);
   }
 
   return (
