@@ -166,6 +166,80 @@ async function loadOccupiedLessonKeys(
   );
 }
 
+async function loadOccupiedLessonKeysForDate(
+  supabase: SupabaseClient,
+  studentIds: string[],
+  lessonDate: string
+): Promise<Set<string>> {
+  if (studentIds.length === 0) return new Set();
+
+  const { data, error } = await supabase
+    .from("lessons")
+    .select("student_id, lesson_date, period, subject")
+    .in("student_id", studentIds)
+    .eq("lesson_date", lessonDate);
+
+  if (error) throw new Error(error.message);
+
+  return new Set(
+    (data ?? []).map((r) =>
+      lessonKey(
+        r.student_id,
+        r.lesson_date,
+        r.period ?? 0,
+        r.subject ?? ""
+      )
+    )
+  );
+}
+
+async function buildScheduledLessonRows(
+  supabase: SupabaseClient,
+  slots: PeriodTimeSlot[],
+  teacherIdFallback: string,
+  occupied: Set<string>
+): Promise<LessonInsert[]> {
+  if (slots.length === 0) return [];
+
+  const classrooms = [...new Set(slots.map((pt) => pt.classroom))];
+  const students = await loadStudentsForClassrooms(supabase, classrooms);
+  if (students.length === 0) return [];
+
+  const capsById = await loadCapacitiesForStudents(supabase, students);
+  await mergePeriodTimeOccurrencesIntoCapacities(supabase, slots, capsById);
+
+  const rows: LessonInsert[] = [];
+
+  for (const pt of slots) {
+    for (const student of students) {
+      const matches = matchingEnrollmentsForPeriodTime(pt, student, capsById);
+      for (const { subject, capacity } of matches) {
+        if (isLessonAfterWithdrawal(pt.lesson_date, student.withdrawal_until_ym)) {
+          continue;
+        }
+        const key = lessonKey(student.id, pt.lesson_date, capacity.period, subject);
+        if (occupied.has(key)) continue;
+        occupied.add(key);
+        rows.push({
+          student_id: student.id,
+          teacher_id: teacherIdFallback,
+          lesson_date: pt.lesson_date,
+          period: capacity.period,
+          attendance: attendanceForScheduledEnrollment(pt.lesson_date, student),
+          subject,
+          status: "scheduled",
+          created_from_enrollment: true,
+          textbook: null,
+          text_memo: null,
+          lesson_classroom: null,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
 async function insertLessonRows(
   supabase: SupabaseClient,
   rows: LessonInsert[]
@@ -260,49 +334,62 @@ export async function createScheduledLessonsForPeriodTimes(
   try {
     const classrooms = [...new Set(futureSlots.map((pt) => pt.classroom))];
     const students = await loadStudentsForClassrooms(supabase, classrooms);
-    if (students.length === 0) {
-      return { created: 0, error: null };
-    }
-
-    const capsById = await loadCapacitiesForStudents(supabase, students);
-    await mergePeriodTimeOccurrencesIntoCapacities(
+    const occupied = await loadOccupiedLessonKeys(
+      supabase,
+      students.map((s) => s.id),
+      today
+    );
+    const rows = await buildScheduledLessonRows(
       supabase,
       futureSlots,
-      capsById
+      teacherIdFallback,
+      occupied
     );
-    const studentIds = students.map((s) => s.id);
-    const occupied = await loadOccupiedLessonKeys(supabase, studentIds, today);
+    await insertLessonRows(supabase, rows);
+    return { created: rows.length, error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "出席予定の作成に失敗しました。";
+    return { created: 0, error: msg };
+  }
+}
 
-    const rows: LessonInsert[] = [];
+/**
+ * 指定日のコマ表表示用に、登録済みコマ時刻から出席予定を補完する（過去日も可）。
+ * 既に授業行がある場合はスキップする。
+ */
+export async function ensureScheduledLessonsForDate(
+  supabase: SupabaseClient,
+  lessonDate: string,
+  teacherIdFallback: string
+): Promise<{ created: number; error: string | null }> {
+  const { data: periodTimes, error: ptErr } = await supabase
+    .from("classroom_period_times")
+    .select("classroom, lesson_date, period, subject")
+    .eq("lesson_date", lessonDate);
 
-    for (const pt of futureSlots) {
-      for (const student of students) {
-        const matches = matchingEnrollmentsForPeriodTime(pt, student, capsById);
-        for (const { subject, capacity } of matches) {
-          if (isLessonAfterWithdrawal(pt.lesson_date, student.withdrawal_until_ym)) {
-            continue;
-          }
-          const key = lessonKey(student.id, pt.lesson_date, capacity.period, subject);
-          if (occupied.has(key)) continue;
-          occupied.add(key);
-          rows.push({
-            student_id: student.id,
-            // RLS: lessons への insert は teacher_id = auth.uid() が必須
-            teacher_id: teacherIdFallback,
-            lesson_date: pt.lesson_date,
-            period: capacity.period,
-            attendance: attendanceForScheduledEnrollment(pt.lesson_date, student),
-            subject,
-            status: "scheduled",
-            created_from_enrollment: true,
-            textbook: null,
-            text_memo: null,
-            lesson_classroom: null,
-          });
-        }
-      }
-    }
+  if (ptErr) {
+    return { created: 0, error: ptErr.message };
+  }
 
+  const slots = (periodTimes ?? []) as PeriodTimeSlot[];
+  if (slots.length === 0) {
+    return { created: 0, error: null };
+  }
+
+  try {
+    const classrooms = [...new Set(slots.map((pt) => pt.classroom))];
+    const students = await loadStudentsForClassrooms(supabase, classrooms);
+    const occupied = await loadOccupiedLessonKeysForDate(
+      supabase,
+      students.map((s) => s.id),
+      lessonDate
+    );
+    const rows = await buildScheduledLessonRows(
+      supabase,
+      slots,
+      teacherIdFallback,
+      occupied
+    );
     await insertLessonRows(supabase, rows);
     return { created: rows.length, error: null };
   } catch (e) {

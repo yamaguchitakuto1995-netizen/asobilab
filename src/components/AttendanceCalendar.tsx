@@ -85,7 +85,7 @@ export function AttendanceCalendar({ ym, studentId, lessons, baseHref }: Props) 
         <div>
           <h3 className="text-sm font-semibold">出欠カレンダー</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            日付をタップして出席登録・編集（過去日も可）
+            日付タップで出席登録・編集／右上「表」でトップのコマ表へ
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -129,26 +129,48 @@ export function AttendanceCalendar({ ym, studentId, lessons, baseHref }: Props) 
                 ? SCHEDULED_BG[c.lesson.attendance]
                 : RECORDED_BG[c.lesson.attendance];
             return (
-              <Link
+              <div
                 key={idx}
-                href={lessonHref(studentId, c.lesson)}
-                className={`aspect-square flex items-center justify-center rounded-md text-xs font-semibold hover:opacity-90 ${cls}`}
-                title={`${c.lesson.status === "scheduled" ? "予定: " : ""}${c.lesson.attendance}（タップで編集）`}
+                className={`aspect-square relative rounded-md text-xs font-semibold ${cls}`}
               >
-                {c.day}
-              </Link>
+                <Link
+                  href={lessonHref(studentId, c.lesson)}
+                  className="absolute inset-0 flex items-center justify-center hover:opacity-90 rounded-md"
+                  title={`${c.lesson.status === "scheduled" ? "予定: " : ""}${c.lesson.attendance}（タップで編集）`}
+                >
+                  {c.day}
+                </Link>
+                <Link
+                  href={`/?date=${c.dateIso}`}
+                  className="absolute top-0 right-0 z-10 min-w-[18px] h-[18px] flex items-center justify-center rounded-bl-md rounded-tr-md bg-white/90 text-[9px] font-bold text-brand-700 hover:bg-brand-100"
+                  title="トップのコマ表でこの日を見る"
+                >
+                  表
+                </Link>
+              </div>
             );
           }
 
           return (
-            <Link
+            <div
               key={idx}
-              href={newHref}
-              className="aspect-square flex items-center justify-center rounded-md text-xs text-slate-500 bg-slate-50 hover:bg-brand-50 hover:text-brand-700"
-              title="この日の出席を登録"
+              className="aspect-square relative rounded-md bg-slate-50"
             >
-              {c.day}
-            </Link>
+              <Link
+                href={newHref}
+                className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 hover:bg-brand-50 hover:text-brand-700 rounded-md"
+                title="この日の出席を登録"
+              >
+                {c.day}
+              </Link>
+              <Link
+                href={`/?date=${c.dateIso}`}
+                className="absolute top-0 right-0 z-10 min-w-[18px] h-[18px] flex items-center justify-center rounded-bl-md rounded-tr-md bg-white text-[9px] font-bold text-brand-700 hover:bg-brand-100 ring-1 ring-slate-200"
+                title="トップのコマ表でこの日を見る"
+              >
+                表
+              </Link>
+            </div>
           );
         })}
       </div>

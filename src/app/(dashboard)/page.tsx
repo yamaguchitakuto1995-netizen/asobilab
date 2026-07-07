@@ -5,6 +5,7 @@ import { DailyLessonBoard } from "@/components/DailyLessonBoard";
 import type { DailyLessonItem } from "@/components/DailyLessonCarousel";
 import { classroomNames, fetchClassrooms } from "@/lib/classrooms";
 import { DailyDateNav } from "@/components/DailyDateNav";
+import { DashboardDateCalendar } from "@/components/DashboardDateCalendar";
 import { PageHeader } from "@/components/PageHeader";
 import { SubjectChip } from "@/components/SubjectChip";
 import {
@@ -19,7 +20,9 @@ import {
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
 import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
+import { getCurrentUser } from "@/lib/auth";
 import { fetchPreviousLessonMemos } from "@/lib/previousLessonMemos";
+import { ensureScheduledLessonsForDate } from "@/lib/regularAttendanceSync";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -52,7 +55,7 @@ type LessonWithStudent = Lesson & {
   } | null;
 };
 
-type SearchParams = Promise<{ date?: string }>;
+type SearchParams = Promise<{ date?: string; cal_ym?: string }>;
 
 export default async function DashboardHomePage({
   searchParams,
@@ -63,15 +66,28 @@ export default async function DashboardHomePage({
   const today = todayIso();
   const selectedDate = isValidDate(sp.date) ? sp.date : today;
   const isToday = selectedDate === today;
+  const calYm =
+    sp.cal_ym && /^\d{4}-\d{2}$/.test(sp.cal_ym)
+      ? sp.cal_ym
+      : selectedDate.slice(0, 7);
 
   const supabase = await createClient();
+  const user = await getCurrentUser();
 
   await applyAnnualGradePromotionIfNeeded(supabase);
+
+  if (user?.accountRole === "staff") {
+    await ensureScheduledLessonsForDate(supabase, selectedDate, user.id);
+  }
+
+  const monthStart = `${calYm}-01`;
+  const monthEnd = `${calYm}-31`;
 
   const [
     { count: studentCount },
     { data: dayLessonsRaw },
     { data: recentMemoRecords },
+    { data: monthLessonRows },
     periodTimes,
     classrooms,
   ] = await Promise.all([
@@ -98,6 +114,11 @@ export default async function DashboardHomePage({
       .order("created_at", { ascending: false })
       .limit(15)
       .returns<LessonWithStudent[]>(),
+    supabase
+      .from("lessons")
+      .select("lesson_date")
+      .gte("lesson_date", monthStart)
+      .lte("lesson_date", monthEnd),
     fetchClassroomPeriodTimes(supabase),
     fetchClassrooms(supabase),
   ]);
@@ -128,6 +149,10 @@ export default async function DashboardHomePage({
       period: l.period,
     })),
     selectedDate
+  );
+
+  const datesWithLessons = new Set(
+    (monthLessonRows ?? []).map((r) => r.lesson_date as string)
   );
 
   return (
@@ -172,20 +197,27 @@ export default async function DashboardHomePage({
         />
       </section>
 
-      <section>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-          <h2 className="text-base font-semibold">
-            {isToday ? "本日のコマ表" : `${formatDateLong(selectedDate)} のコマ表`}
-          </h2>
-          <DailyDateNav date={selectedDate} />
-        </div>
-        <DailyLessonBoard
-          date={selectedDate}
-          lessons={(dayLessons ?? []) as DailyLessonItem[]}
-          classroomPeriodTimes={periodTimes}
-          previousMemos={previousMemos}
-          classroomOrderNames={classroomNames(classrooms)}
+      <section className="grid lg:grid-cols-[minmax(0,280px)_1fr] gap-4 items-start">
+        <DashboardDateCalendar
+          selectedDate={selectedDate}
+          calYm={calYm}
+          datesWithLessons={datesWithLessons}
         />
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-base font-semibold">
+              {isToday ? "本日のコマ表" : `${formatDateLong(selectedDate)} のコマ表`}
+            </h2>
+            <DailyDateNav date={selectedDate} />
+          </div>
+          <DailyLessonBoard
+            date={selectedDate}
+            lessons={(dayLessons ?? []) as DailyLessonItem[]}
+            classroomPeriodTimes={periodTimes}
+            previousMemos={previousMemos}
+            classroomOrderNames={classroomNames(classrooms)}
+          />
+        </div>
       </section>
 
       <section>
