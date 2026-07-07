@@ -4,7 +4,6 @@ import {
   formatTimeRange,
   resolveClassroomPeriodTime,
 } from "@/lib/periodTimes";
-import { formatDateLong } from "@/lib/date";
 import {
   groupLessonsByClassroomSubject,
   groupLessonsByPeriod,
@@ -15,6 +14,7 @@ import {
   type ClassroomPeriodTime,
 } from "@/lib/types";
 import { ClassroomBadge } from "@/components/ClassroomBadge";
+import { SubjectChip } from "@/components/SubjectChip";
 import { DailyLessonStudentRow } from "@/components/DailyLessonStudentRow";
 import type { Lesson } from "@/lib/types";
 
@@ -77,19 +77,12 @@ export function DailyLessonCarousel({
   classroomOrderNames.forEach((name, i) => classroomOrder.set(name, i));
 
   const segments = groupLessonsByClassroomSubject(lessons, classroomOrder);
-  const dayTextbookCounts = aggregateLessonTextbookCounts(lessons);
-  const multiSegment = segments.length > 1;
 
   return (
     <div className="-mx-4 sm:mx-0 space-y-6">
-      <PeriodMaterialSummary
-        title={`${formatDateLong(date)}：この日の教材（全コマ合計）`}
-        items={dayTextbookCounts}
-        className="mx-4 sm:mx-0"
-      />
-
       {segments.map((segment) => {
         const periodGroups = groupLessonsByPeriod(segment.lessons);
+        const segmentMaterials = aggregateLessonTextbookCounts(segment.lessons);
         const segmentLabel = [
           segment.classroom ?? "教室未設定",
           segment.subject ?? "科目未設定",
@@ -100,18 +93,23 @@ export function DailyLessonCarousel({
             key={`${segment.classroom ?? ""}:${segment.subject ?? ""}`}
             aria-label={`${segmentLabel} のコマ表`}
           >
-            {multiSegment ? (
-              <div className="flex flex-wrap items-center gap-2 mb-2 px-4 sm:px-0">
-                <ClassroomBadge classroom={segment.classroom} size="md" />
-                <span className="text-xs text-slate-500">
-                  {segment.lessons.length}名 · {periodGroups.length}コマ
-                </span>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2 mb-2 px-4 sm:px-0">
+              <ClassroomBadge classroom={segment.classroom} size="md" />
+              <SubjectChip subject={segment.subject} size="md" />
+              <span className="text-xs text-slate-500">
+                {segment.lessons.length}名 · {periodGroups.length}コマ
+              </span>
+            </div>
+
+            <PeriodMaterialSummary
+              title="この教室・教科で使用する教材"
+              items={segmentMaterials}
+              className="mx-4 sm:mx-0 mb-3 bg-amber-50/60 border border-amber-100 rounded-xl px-3 py-2.5"
+            />
 
             <p className="text-xs text-slate-500 mb-2 px-4 sm:px-0">
               ← 横にスワイプして {periodGroups.length} 件のコマを切り替え
-              {multiSegment ? `（${segment.classroom ?? "教室未設定"}）` : ""}
+              （{segment.classroom ?? "教室未設定"}）
             </p>
 
             <div
