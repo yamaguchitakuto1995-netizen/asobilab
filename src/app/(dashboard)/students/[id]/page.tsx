@@ -28,12 +28,14 @@ import { ProgrammingLoginDisplay } from "@/components/ProgrammingLoginDisplay";
 import { StudentPromotionScheduleNotices } from "@/components/PromotionScheduleNotice";
 import { StudentCourseStartDisplay } from "@/components/StudentCourseStartDisplay";
 import { StudentLeavePeriodDisplay } from "@/components/StudentLeavePeriodDisplay";
+import { StaffMakeupRegister } from "@/components/StaffMakeupRegister";
 import { applyDueSkipPromotionIfNeeded } from "@/lib/applyStudentPromotion";
 import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
 import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
   periodLabel,
+  studentEnrolledSubjects,
   type Lesson,
   type Student,
 } from "@/lib/types";
@@ -395,7 +397,7 @@ export default async function StudentDetailPage({
 
       {/* 今後の予定 */}
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <h2 className="text-base font-semibold flex items-center gap-2">
             今後の予定
             {upcomingVisible.length > 0 ? (
@@ -404,12 +406,23 @@ export default async function StudentDetailPage({
               </span>
             ) : null}
           </h2>
-          <Link
-            href={`/students/${student.id}/lessons/new`}
-            className="text-xs text-brand-600 hover:underline"
-          >
-            ＋ 予定を追加
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {user?.accountRole === "staff" ? (
+              <StaffMakeupRegister
+                studentId={student.id}
+                studentName={student.name}
+                classroom={student.classroom ?? ""}
+                subjects={studentEnrolledSubjects(student.subjects)}
+                periodTimes={periodTimes}
+              />
+            ) : null}
+            <Link
+              href={`/students/${student.id}/lessons/new`}
+              className="text-xs text-brand-600 hover:underline"
+            >
+              ＋ 予定を追加
+            </Link>
+          </div>
         </div>
         {upcomingVisible.length > 0 ? (
           <ul className="bg-white border border-brand-200 rounded-2xl divide-y divide-brand-100 overflow-hidden">
