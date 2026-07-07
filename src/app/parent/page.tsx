@@ -24,6 +24,10 @@ import {
   type Lesson,
   type Student,
 } from "@/lib/types";
+import {
+  formatMakeupSourceLine,
+  hideAbsencesWithMakeupRegistered,
+} from "@/lib/portalScheduleLessons";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 
 type LessonRow = Lesson & {
@@ -205,7 +209,9 @@ export default async function ParentHomePage() {
         <h2 className="text-base font-semibold">授業予定</h2>
         {studentIds.map((id) => {
           const s = byStudent.get(id);
-          const rows = lessonsByStudent.get(id) ?? [];
+          const rows = hideAbsencesWithMakeupRegistered(
+            lessonsByStudent.get(id) ?? []
+          );
           return (
             <div key={`schedule-${id}`} className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -259,21 +265,13 @@ export default async function ParentHomePage() {
                             </span>
                             <ClassroomBadge classroom={lessonVenue} />
                           </div>
-                          {lesson.attendance === "makeup" &&
-                          lesson.source_lesson_date ? (
-                            <p className="text-sm text-sky-900">
-                              <span className="font-medium">振替</span>
-                              <span className="text-slate-600">
-                                {" "}
-                                — 元: {formatDateShort(lesson.source_lesson_date)}
-                                {lesson.source_period != null
-                                  ? ` ${lesson.source_period}コマ目`
-                                  : ""}
-                                {lesson.source_subject
-                                  ? `（${lesson.source_subject}）`
-                                  : ""}
-                              </span>
-                            </p>
+                          {lesson.attendance === "makeup" ? (
+                            (() => {
+                              const line = formatMakeupSourceLine(lesson);
+                              return line ? (
+                                <p className="text-sm text-sky-900">{line}</p>
+                              ) : null;
+                            })()
                           ) : null}
                         </div>
                         <span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-brand-100 text-brand-800 ring-brand-600/20">

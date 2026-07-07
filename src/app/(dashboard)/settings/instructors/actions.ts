@@ -109,3 +109,61 @@ export async function removeInstructor(formData: FormData) {
   revalidatePath("/settings/instructors");
   settingsRedirect(undefined, `${profile.email} の講師権限を削除しました。`);
 }
+
+export async function updateInstructor(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) settingsRedirect(auth.error);
+
+  const userId = String(formData.get("user_id") ?? "").trim();
+  const phone = normalizePhoneDigits(String(formData.get("phone") ?? ""));
+  const displayName = String(formData.get("display_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+
+  if (!userId) settingsRedirect("更新対象が指定されていません。");
+  if (phone.length < 4) {
+    settingsRedirect("電話番号は4桁以上で入力してください。");
+  }
+  if (!email || !email.includes("@")) {
+    settingsRedirect("メールアドレスを正しく入力してください。");
+  }
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("teacher_profiles")
+    .select("email, is_admin")
+    .eq("id", userId)
+    .maybeSingle<{ email: string; is_admin: boolean }>();
+
+  if (!profile) settingsRedirect("講師が見つかりません。");
+  if (profile.is_admin) settingsRedirect("管理者アカウントはここでは編集できません。");
+
+  if (email !== profile.email.toLowerCase()) {
+    const { data: conflict } = await admin
+      .from("teacher_profiles")
+      .select("id")
+      .ilike("email", email)
+      .neq("id", userId)
+      .maybeSingle();
+    if (conflict) {
+      settingsRedirect("このメールアドレスはすでに使われています。");
+    }
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
+      email,
+    });
+    if (authError) settingsRedirect(authError.message);
+  }
+
+  const { error } = await admin
+    .from("teacher_profiles")
+    .update({
+      email,
+      phone,
+      display_name: displayName || null,
+    })
+    .eq("id", userId);
+
+  if (error) settingsRedirect(error.message);
+
+  revalidatePath("/settings/instructors");
+  settingsRedirect(undefined, `${email} の講師情報を更新しました。`);
+}

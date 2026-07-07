@@ -32,6 +32,10 @@ import { StaffMakeupRegister } from "@/components/StaffMakeupRegister";
 import { applyDueSkipPromotionIfNeeded } from "@/lib/applyStudentPromotion";
 import { applyAnnualGradePromotionIfNeeded } from "@/lib/applyAnnualGradePromotion";
 import {
+  formatMakeupSourceLine,
+  hideAbsencesWithMakeupRegistered,
+} from "@/lib/portalScheduleLessons";
+import {
   SCHEDULED_ATTENDANCE_LABEL,
   effectiveLessonClassroom,
   periodLabel,
@@ -124,8 +128,10 @@ export default async function StudentDetailPage({
     fetchSiblingSummaries(supabase, id, student.sibling_group_id),
   ]);
 
-  const upcomingVisible = (upcoming ?? []).filter(
-    (l) => !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
+  const upcomingVisible = hideAbsencesWithMakeupRegistered(
+    (upcoming ?? []).filter(
+      (l) => !isLessonAfterWithdrawal(l.lesson_date, student.withdrawal_until_ym)
+    )
   );
 
   // 出席率は記録済みのみで集計
@@ -473,17 +479,9 @@ export default async function StudentDetailPage({
                           {SCHEDULED_ATTENDANCE_LABEL[l.attendance]}
                         </span>
                       </div>
-                      {l.attendance === "makeup" &&
-                      l.source_lesson_date &&
-                      l.source_period != null &&
-                      l.source_subject ? (
+                      {l.attendance === "makeup" ? (
                         <p className="text-xs text-sky-800 bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 mt-2">
-                          振替:{" "}
-                          <span className="font-medium">
-                            {formatDateLong(l.source_lesson_date)}{" "}
-                            {periodLabel(l.source_period)} {l.source_subject}
-                          </span>
-                          {" → この日へ受講"}
+                          {formatMakeupSourceLine(l)}
                         </p>
                       ) : null}
                       {l.text_memo ? (

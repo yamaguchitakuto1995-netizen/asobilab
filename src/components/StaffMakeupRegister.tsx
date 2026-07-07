@@ -694,33 +694,38 @@ export function StaffMakeupRegister({
                               : "border-slate-200 bg-white hover:border-brand-400"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <span className="font-semibold text-slate-900">
-                              {periodLabel(slot.period)}
-                            </span>
-                            <span className="text-sm text-slate-600 ml-2">
-                              {slot.subject}
-                            </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-slate-900">
+                                {periodLabel(slot.period)}
+                              </span>
+                              <ClassroomBadge
+                                classroom={slot.classroom}
+                                size="sm"
+                              />
+                              <span className="text-sm text-slate-600">
+                                {slot.subject}
+                              </span>
+                            </div>
                             {timeSuffix(
                               selectedDate,
                               slot.period,
                               slot.subject,
                               slot.classroom
                             ) ? (
-                              <span className="text-xs text-slate-500 ml-1">
+                              <p className="text-xs text-slate-500 mt-1">
                                 {timeSuffix(
                                   selectedDate,
                                   slot.period,
                                   slot.subject,
                                   slot.classroom
-                                )}
-                              </span>
+                                ).replace(/^ · /, "")}
+                              </p>
                             ) : null}
                           </div>
                           <div className="text-right shrink-0">
-                            <ClassroomBadge classroom={slot.classroom} size="sm" />
-                            <p className="text-[10px] text-slate-500 mt-1">
+                            <p className="text-[10px] text-slate-500">
                               空き {slot.available} / {slot.max_students}
                             </p>
                           </div>

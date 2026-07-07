@@ -53,6 +53,8 @@ type Props = {
   previousMemos?: Record<string, string | null>;
   /** 教室行の並び順（DB sort_order） */
   classroomOrderNames?: string[];
+  /** 受講予定テキスト（lesson id → 表示文字列） */
+  plannedTextByLessonId?: Record<string, string>;
 };
 
 /**
@@ -64,6 +66,7 @@ export function DailyLessonCarousel({
   classroomPeriodTimes = [],
   previousMemos = {},
   classroomOrderNames = [],
+  plannedTextByLessonId = {},
 }: Props) {
   if (lessons.length === 0) {
     return (
@@ -82,7 +85,16 @@ export function DailyLessonCarousel({
     <div className="-mx-4 sm:mx-0 space-y-6">
       {segments.map((segment) => {
         const periodGroups = groupLessonsByPeriod(segment.lessons);
-        const segmentMaterials = aggregateLessonTextbookCounts(segment.lessons);
+        const segmentMaterials = aggregateLessonTextbookCounts(
+          segment.lessons.map((l) => ({
+            status: l.status,
+            attendance: l.attendance,
+            subject: l.subject,
+            textbook: l.textbook,
+            plannedText: plannedTextByLessonId[l.id],
+            students: l.students,
+          }))
+        );
         const segmentLabel = [
           segment.classroom ?? "教室未設定",
           segment.subject ?? "科目未設定",
@@ -131,6 +143,7 @@ export function DailyLessonCarousel({
                   subject={segment.subject}
                   classroomPeriodTimes={classroomPeriodTimes}
                   previousMemos={previousMemos}
+                  plannedTextByLessonId={plannedTextByLessonId}
                 />
               ))}
             </div>
@@ -149,6 +162,7 @@ function PeriodCard({
   subject,
   classroomPeriodTimes,
   previousMemos,
+  plannedTextByLessonId = {},
 }: {
   date: string;
   period: number | null;
@@ -157,10 +171,20 @@ function PeriodCard({
   subject: string | null;
   classroomPeriodTimes: ClassroomPeriodTime[];
   previousMemos: Record<string, string | null>;
+  plannedTextByLessonId?: Record<string, string>;
 }) {
   const scheduledCount = lessons.filter((l) => l.status === "scheduled").length;
   const recordedCount = lessons.length - scheduledCount;
-  const periodMaterials = aggregateLessonTextbookCounts(lessons);
+  const periodMaterials = aggregateLessonTextbookCounts(
+    lessons.map((l) => ({
+      status: l.status,
+      attendance: l.attendance,
+      subject: l.subject,
+      textbook: l.textbook,
+      plannedText: plannedTextByLessonId[l.id],
+      students: l.students,
+    }))
+  );
 
   const timeHint =
     period && classroomPeriodTimes.length
@@ -240,6 +264,7 @@ function PeriodCard({
               period={period}
               previousMemo={previousMemos[l.id] ?? null}
               classroomPeriodTimes={classroomPeriodTimes}
+              plannedText={plannedTextByLessonId[l.id]}
             />
           </li>
         ))}

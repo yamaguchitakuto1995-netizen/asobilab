@@ -21,6 +21,8 @@ type Props = {
   previousMemos?: Record<string, string | null>;
   /** DB classrooms（sort_order 順） */
   classroomOrderNames: string[];
+  /** 受講予定テキスト（lesson id → 表示文字列） */
+  plannedTextByLessonId?: Record<string, string>;
 };
 
 export function DailyLessonBoard({
@@ -29,6 +31,7 @@ export function DailyLessonBoard({
   classroomPeriodTimes = [],
   previousMemos = {},
   classroomOrderNames,
+  plannedTextByLessonId = {},
 }: Props) {
   const [selectedClassrooms, setSelectedClassrooms] = useState<Set<string>>(
     () => new Set()
@@ -72,6 +75,7 @@ export function DailyLessonBoard({
         classroomPeriodTimes={classroomPeriodTimes}
         previousMemos={previousMemos}
         classroomOrderNames={classroomOrderNames}
+        plannedTextByLessonId={plannedTextByLessonId}
       />
     );
   }
@@ -107,6 +111,7 @@ export function DailyLessonBoard({
           classroomPeriodTimes={classroomPeriodTimes}
           previousMemos={previousMemos}
           classroomOrderNames={classroomOrderNames}
+          plannedTextByLessonId={plannedTextByLessonId}
         />
       )}
     </div>
