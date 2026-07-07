@@ -19,6 +19,7 @@ import {
   validateMakeupTargetDate,
   canBookMakeupTarget,
 } from "@/lib/registrationDeadlines";
+import { dedupeScheduledLessonsBySlot } from "@/lib/scheduledLessonDedupe";
 import {
   readBirthdayFromInput,
   readPortalIdFromInput,
@@ -279,14 +280,16 @@ function normalizeFoundStudent(row: {
 function normalizeScheduledLessons(
   rows: ScheduledLessonOption[]
 ): ScheduledLessonOption[] {
-  return rows.map((row) => ({
-    id: row.id,
-    lesson_date: String(row.lesson_date).slice(0, 10),
-    period: Number(row.period),
-    subject: row.subject,
-    attendance: row.attendance,
-    lesson_classroom: row.lesson_classroom ?? null,
-  }));
+  return dedupeScheduledLessonsBySlot(
+    rows.map((row) => ({
+      id: row.id,
+      lesson_date: String(row.lesson_date).slice(0, 10),
+      period: Number(row.period),
+      subject: row.subject,
+      attendance: row.attendance,
+      lesson_classroom: row.lesson_classroom ?? null,
+    }))
+  );
 }
 
 /** 振替元に選べる「出席予定・振替予定」(RPC: list_scheduled_lessons_for_makeup) */

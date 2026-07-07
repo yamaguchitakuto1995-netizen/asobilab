@@ -619,6 +619,13 @@ create index if not exists lessons_student_date_idx
 create index if not exists lessons_teacher_date_idx
   on public.lessons (teacher_id, lesson_date desc);
 
+-- 同一コマの scheduled 重複を防ぐ（コマ時刻登録と日次補完の二重作成対策）
+create unique index if not exists lessons_unique_scheduled_slot
+  on public.lessons (student_id, lesson_date, period, subject)
+  where status = 'scheduled'
+    and period is not null
+    and subject is not null;
+
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
 begin
@@ -1076,7 +1083,7 @@ stable
 security definer
 set search_path = public
 as $list_sched$
-  select
+  select distinct on (l.lesson_date, l.period, l.subject)
     l.id,
     l.lesson_date,
     l.period,
@@ -1091,7 +1098,7 @@ as $list_sched$
     and l.period is not null
     and l.subject is not null
     and l.attendance in ('present', 'makeup')
-  order by l.lesson_date, l.period;
+  order by l.lesson_date, l.period, l.subject, l.created_at, l.id;
 $list_sched$;
 
 revoke all on function public.list_scheduled_lessons_for_makeup(uuid, text, text, date) from public;
