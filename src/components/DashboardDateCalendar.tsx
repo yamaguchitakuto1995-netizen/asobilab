@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
-import { currentYm, shiftMonth, todayIso, ymLabel } from "@/lib/date";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState, useTransition, useEffect } from "react";
+import { currentYm, formatDateLong, shiftMonth, todayIso, ymLabel } from "@/lib/date";
 
 const WEEK_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -15,10 +19,20 @@ export function DashboardDateCalendar({
   calYm,
   datesWithLessons,
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const [pendingDate, setPendingDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingDate(null);
+  }, [selectedDate]);
+
+  const today = todayIso();
   const [yStr, mStr] = calYm.split("-");
   const year = Number(yStr);
   const month = Number(mStr);
-  const today = todayIso();
 
   const first = new Date(year, month - 1, 1);
   const startOffset = first.getDay();
@@ -27,17 +41,29 @@ export function DashboardDateCalendar({
   const prevYm = shiftMonth(calYm, -1);
   const nextYm = shiftMonth(calYm, +1);
 
-  function dayHref(dateIso: string): string {
-    if (dateIso === today) return "/";
-    return `/?date=${dateIso}`;
+  function buildHref(dateIso: string | null, ym?: string): string {
+    const sp = new URLSearchParams(params.toString());
+    if (!dateIso || dateIso === today) {
+      sp.delete("date");
+    } else {
+      sp.set("date", dateIso);
+    }
+    const ymVal = ym ?? calYm;
+    if (ymVal !== currentYm()) {
+      sp.set("cal_ym", ymVal);
+    } else {
+      sp.delete("cal_ym");
+    }
+    const qs = sp.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
   }
 
-  function monthHref(ym: string): string {
-    const params = new URLSearchParams();
-    if (selectedDate !== today) params.set("date", selectedDate);
-    if (ym !== currentYm()) params.set("cal_ym", ym);
-    const qs = params.toString();
-    return qs ? `/?${qs}` : "/";
+  function selectDate(dateIso: string) {
+    if (dateIso === selectedDate) return;
+    setPendingDate(dateIso);
+    startTransition(() => {
+      router.push(buildHref(dateIso));
+    });
   }
 
   const cells: Array<{ day: number | null; dateIso: string | null }> = [];
@@ -49,7 +75,11 @@ export function DashboardDateCalendar({
   while (cells.length % 7 !== 0) cells.push({ day: null, dateIso: null });
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+    <div
+      className={`bg-white border border-slate-200 rounded-2xl p-4 transition-opacity ${
+        isPending ? "opacity-70" : ""
+      }`}
+    >
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-sm font-semibold">日付カレンダー</h3>
@@ -59,7 +89,7 @@ export function DashboardDateCalendar({
         </div>
         <div className="flex items-center gap-1">
           <Link
-            href={monthHref(prevYm)}
+            href={buildHref(selectedDate, prevYm)}
             className="px-2 py-1 rounded-md text-sm text-slate-600 hover:bg-slate-100"
             aria-label="前の月"
           >
@@ -67,13 +97,20 @@ export function DashboardDateCalendar({
           </Link>
           <span className="text-sm font-medium px-2">{ymLabel(calYm)}</span>
           <Link
-            href={monthHref(nextYm)}
+            href={buildHref(selectedDate, nextYm)}
             className="px-2 py-1 rounded-md text-sm text-slate-600 hover:bg-slate-100"
             aria-label="次の月"
           >
             ›
           </Link>
         </div>
+      </div>
+
+      <div
+        className="mb-2 rounded-lg bg-rose-600 px-3 py-2 text-center text-sm font-bold text-white shadow-sm"
+        aria-live="polite"
+      >
+        表示中: {formatDateLong(selectedDate)}
       </div>
 
       <div className="grid grid-cols-7 text-center text-xs text-slate-500 mb-1">
@@ -84,7 +121,7 @@ export function DashboardDateCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1" role="grid" aria-label="日付カレンダー">
         {cells.map((c, idx) => {
           if (c.day === null || !c.dateIso) {
             return <div key={idx} className="aspect-square" />;
@@ -92,30 +129,56 @@ export function DashboardDateCalendar({
 
           const isSelected = c.dateIso === selectedDate;
           const isToday = c.dateIso === today;
+          const isPast = c.dateIso < today;
           const hasLessons = datesWithLessons?.has(c.dateIso);
+          const isLoading = pendingDate === c.dateIso && isPending;
 
           return (
-            <Link
+            <button
               key={idx}
-              href={dayHref(c.dateIso)}
-              className={`aspect-square flex flex-col items-center justify-center rounded-md text-xs font-medium relative ${
+              type="button"
+              onClick={() => selectDate(c.dateIso!)}
+              disabled={isPending}
+              aria-current={isSelected ? "date" : undefined}
+              aria-pressed={isSelected}
+              className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-bold relative transition-all duration-150 ${
                 isSelected
-                  ? "bg-brand-600 text-white"
-                  : isToday
-                    ? "bg-brand-50 text-brand-800 ring-1 ring-brand-300"
-                    : hasLessons
-                      ? "bg-slate-100 text-slate-800 hover:bg-brand-50"
-                      : "bg-slate-50 text-slate-600 hover:bg-brand-50 hover:text-brand-700"
+                  ? "bg-rose-600 text-white shadow-[0_0_0_3px_white,0_0_0_6px_#e11d48] scale-110 z-[1]"
+                  : isLoading
+                    ? "bg-rose-200 text-rose-900 ring-2 ring-rose-500 animate-pulse"
+                    : isToday
+                      ? "bg-white text-brand-800 ring-2 ring-brand-300 hover:bg-brand-50 font-semibold"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:ring-1 hover:ring-slate-300 font-medium"
               }`}
               title={`${c.dateIso} のコマ表`}
             >
               {c.day}
-              {hasLessons && !isSelected ? (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-brand-500" />
+              {hasLessons ? (
+                <span
+                  className={`absolute bottom-1 w-1.5 h-1.5 rounded-full ${
+                    isSelected
+                      ? "bg-white/90"
+                      : isPast
+                        ? "bg-slate-400"
+                        : "bg-brand-500"
+                  }`}
+                  aria-hidden
+                />
               ) : null}
-            </Link>
+            </button>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mt-3 text-[10px] text-slate-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-400" />
+          過去に授業あり
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-4 h-4 rounded bg-rose-600 shadow-[0_0_0_2px_white,0_0_0_3px_#e11d48]" />
+          選択中（赤）
+        </span>
       </div>
     </div>
   );
