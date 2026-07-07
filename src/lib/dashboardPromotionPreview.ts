@@ -1,13 +1,9 @@
 import { currentYm, shiftMonth } from "@/lib/date";
 import {
-  resolveProgrammingNextTextPartsForStudent,
-  resolveRobotNextTextPartsForStudent,
-} from "@/lib/courseNextText";
-import {
+  resolveNextPromotionCourseDisplay,
   resolvePromotionScheduleInfo,
   type PromotionStudentFields,
 } from "@/lib/studentPromotion";
-import { textbookCourseChipLabel } from "@/lib/textbookCourseColors";
 import type { CourseSubject } from "@/lib/types";
 
 export type DashboardPromotionEntry = {
@@ -26,16 +22,12 @@ export type DashboardPromotionPreview = {
 
 const PROMOTION_SUBJECTS: CourseSubject[] = ["ロボット", "プログラミング"];
 
-function currentCourseLabel(
-  subject: CourseSubject,
-  student: PromotionStudentFields
-): string | null {
-  if (subject === "ロボット") {
-    const parts = resolveRobotNextTextPartsForStudent(student);
-    return parts?.course ? textbookCourseChipLabel(parts.course) : null;
-  }
-  const parts = resolveProgrammingNextTextPartsForStudent(student);
-  return parts?.course ? textbookCourseChipLabel(parts.course) : null;
+function formatPromotionTargetCourseLabel(
+  promotionScheduledYm: string,
+  nextCourse: string
+): string {
+  const month = Number(promotionScheduledYm.slice(5, 7));
+  return `${month}月から${nextCourse}`;
 }
 
 function promotionKindLabel(promotionType: string): string {
@@ -66,14 +58,17 @@ export function buildNextMonthPromotionPreview(
       const info = resolvePromotionScheduleInfo(subject, student, nowYm);
       if (!info || info.promotionScheduledYm !== targetYm) continue;
 
-      const courseLabel = currentCourseLabel(subject, student);
-      if (!courseLabel) continue;
+      const nextCourse = resolveNextPromotionCourseDisplay(subject, student);
+      if (!nextCourse) continue;
 
       entries.push({
         studentId: student.id,
         studentName: student.name,
         subject,
-        courseLabel,
+        courseLabel: formatPromotionTargetCourseLabel(
+          info.promotionScheduledYm,
+          nextCourse
+        ),
         promotionKindLabel: promotionKindLabel(info.promotionType),
       });
     }
