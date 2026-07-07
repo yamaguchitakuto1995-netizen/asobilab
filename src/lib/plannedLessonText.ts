@@ -1,11 +1,20 @@
 import {
   advanceProgrammingNextTextCombined,
   advanceRobotNextTextCombined,
+  firstCombinedTextOfNextCourse,
+  parseProgrammingNextTextParts,
+  parseRobotNextTextParts,
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import {
+  estimateAutoPromotionScheduledYm,
+  type PromotionStudentFields,
+} from "@/lib/studentPromotion";
+import type { CourseStartFields } from "@/lib/studentCourseStart";
 
-export type StudentTextFields = {
+export type StudentTextFields = PromotionStudentFields &
+  CourseStartFields & {
   next_text_robot: string | null;
   next_text_robot_course?: string | null;
   next_text_robot_text?: string | null;
@@ -43,7 +52,9 @@ export function countPriorAdvancingScheduledLessons(
     period: number | null;
     subject: string | null;
   },
-  subject: string
+  subject: string,
+  /** 進級予定月以降のコマだけカウントするとき（例: 9月進級なら 2026-09） */
+  advanceCountFromYm?: string | null
 ): number {
   return upcoming.filter(
     (l) =>
@@ -51,6 +62,8 @@ export function countPriorAdvancingScheduledLessons(
       l.status === "scheduled" &&
       ADVANCING_ATTENDANCES.has(l.attendance) &&
       l.id !== target.id &&
+      (!advanceCountFromYm ||
+        l.lesson_date.slice(0, 7) >= advanceCountFromYm) &&
       isBeforeLessonSlot(l, target)
   ).length;
 }
@@ -70,6 +83,63 @@ function advanceCombinedBySteps(
     cur = next;
   }
   return cur;
+}
+
+function lessonYearMonth(lessonDate: string): string {
+  return lessonDate.slice(0, 7);
+}
+
+function resolvePromotionScheduledYm(
+  subject: "ロボット" | "プログラミング",
+  student: PromotionStudentFields
+): string | null {
+  if (
+    student.promotion_type === "skip_grade" &&
+    student.promotion_scheduled_ym?.trim()
+  ) {
+    return student.promotion_scheduled_ym.trim();
+  }
+  return estimateAutoPromotionScheduledYm(subject, student);
+}
+
+function courseOfCombinedText(
+  subject: "ロボット" | "プログラミング",
+  full: string
+): string | null {
+  const parsed =
+    subject === "ロボット"
+      ? parseRobotNextTextParts(full)
+      : parseProgrammingNextTextParts(full);
+  return parsed?.course ?? null;
+}
+
+/** 進級予定月以降は次コース先頭を起点にする */
+function resolvePlanningBase(
+  subject: "ロボット" | "プログラミング",
+  student: StudentTextFields,
+  lessonDate: string
+): { base: string | null; advanceCountFromYm: string | null } {
+  const current =
+    subject === "ロボット"
+      ? resolveRobotNextTextPartsForStudent(student)?.full ?? null
+      : resolveProgrammingNextTextPartsForStudent(student)?.full ?? null;
+  if (!current) return { base: null, advanceCountFromYm: null };
+
+  const promoYm = resolvePromotionScheduledYm(subject, student);
+  if (!promoYm || lessonYearMonth(lessonDate) < promoYm) {
+    return { base: current, advanceCountFromYm: null };
+  }
+
+  const nextFirst = firstCombinedTextOfNextCourse(subject, student);
+  if (!nextFirst) return { base: current, advanceCountFromYm: null };
+
+  const currentCourse = courseOfCombinedText(subject, current);
+  const nextCourse = courseOfCombinedText(subject, nextFirst);
+  if (!nextCourse || currentCourse === nextCourse) {
+    return { base: current, advanceCountFromYm: null };
+  }
+
+  return { base: nextFirst, advanceCountFromYm: promoYm };
 }
 
 /**
@@ -101,19 +171,11 @@ export function plannedTextForScheduledLesson(
   const subject = lesson.subject;
   if (subject !== "ロボット" && subject !== "プログラミング") return "—";
 
-  const base =
-    subject === "ロボット"
-      ? resolveRobotNextTextPartsForStudent({
-          next_text_robot: student.next_text_robot,
-          next_text_robot_course: student.next_text_robot_course,
-          next_text_robot_text: student.next_text_robot_text,
-        })?.full ?? null
-      : resolveProgrammingNextTextPartsForStudent({
-          next_text_programming: student.next_text_programming,
-          next_text_programming_course: student.next_text_programming_course,
-          next_text_programming_text: student.next_text_programming_text,
-        })?.full ?? null;
-
+  const { base, advanceCountFromYm } = resolvePlanningBase(
+    subject,
+    student,
+    lesson.lesson_date
+  );
   if (!base) return "—";
 
   const steps = countPriorAdvancingScheduledLessons(
@@ -124,7 +186,8 @@ export function plannedTextForScheduledLesson(
       period: lesson.period,
       subject: lesson.subject,
     },
-    subject
+    subject,
+    advanceCountFromYm
   );
 
   return advanceCombinedBySteps(subject, base, steps) ?? "—";
