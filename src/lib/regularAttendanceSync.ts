@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { attendanceForScheduledEnrollment } from "@/lib/applyStudentLeave";
 import { todayIso } from "@/lib/date";
+import { scheduledLessonSlotKey } from "@/lib/scheduledLessonDedupe";
 import type { StudentLeavePeriod } from "@/lib/studentLeave";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import { dowOf } from "@/lib/days";
@@ -92,7 +93,12 @@ function lessonKey(
   period: number,
   subject: string
 ): string {
-  return `${studentId}|${lessonDate}|${period}|${subject}`;
+  return scheduledLessonSlotKey({
+    student_id: studentId,
+    lesson_date: lessonDate,
+    period,
+    subject,
+  });
 }
 
 async function loadStudentsForClassrooms(
@@ -244,11 +250,12 @@ async function insertLessonRows(
   supabase: SupabaseClient,
   rows: LessonInsert[]
 ): Promise<void> {
-  const chunk = 50;
-  for (let i = 0; i < rows.length; i += chunk) {
-    const slice = rows.slice(i, i + chunk);
-    const { error } = await supabase.from("lessons").insert(slice);
-    if (error) throw new Error(error.message);
+  for (const row of rows) {
+    const { error } = await supabase.from("lessons").insert(row);
+    if (!error) continue;
+    // 同一コマの scheduled 重複（コマ時刻登録と日次ボード補完の競合など）
+    if (error.code === "23505") continue;
+    throw new Error(error.message);
   }
 }
 

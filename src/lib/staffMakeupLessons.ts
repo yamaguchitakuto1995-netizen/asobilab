@@ -3,6 +3,7 @@ import {
   makeupTargetMaxDate,
   todayJstIso,
 } from "@/lib/registrationDeadlines";
+import { dedupeScheduledLessonsBySlot } from "@/lib/scheduledLessonDedupe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type StaffLessonOption = {
@@ -72,9 +73,11 @@ export async function listAttendanceSourceLessonsForStaff(
 
   if (error) throw new Error(error.message);
 
-  return (data ?? [])
-    .map((row) => normalizeLessonRow(row as LessonRow))
-    .filter((row): row is StaffLessonOption => row !== null);
+  return dedupeScheduledLessonsBySlot(
+    (data ?? [])
+      .map((row) => normalizeLessonRow(row as LessonRow))
+      .filter((row): row is StaffLessonOption => row !== null)
+  );
 }
 
 /** 講師向け: 欠席済みで振替未登録の scheduled 授業 */
@@ -121,10 +124,12 @@ export async function listPendingAbsenceLessonsForStaff(
     })
   );
 
-  return (absentRows ?? [])
-    .map((row) => normalizeLessonRow(row as LessonRow))
-    .filter((row): row is StaffLessonOption => row !== null)
-    .filter((row) => !bookedKeys.has(sourceChainKey(row)));
+  return dedupeScheduledLessonsBySlot(
+    (absentRows ?? [])
+      .map((row) => normalizeLessonRow(row as LessonRow))
+      .filter((row): row is StaffLessonOption => row !== null)
+      .filter((row) => !bookedKeys.has(sourceChainKey(row)))
+  );
 }
 
 /** 講師登録用の振替先日付レンジ（保護者の3日前締切は適用しない） */
