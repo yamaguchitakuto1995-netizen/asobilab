@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition, useEffect } from "react";
-import { currentYm, shiftMonth, todayIso, ymLabel } from "@/lib/date";
+import { currentYm, formatDateLong, shiftMonth, todayIso, ymLabel } from "@/lib/date";
 
 const WEEK_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -106,6 +106,13 @@ export function DashboardDateCalendar({
         </div>
       </div>
 
+      <div
+        className="mb-2 rounded-lg bg-rose-600 px-3 py-2 text-center text-sm font-bold text-white shadow-sm"
+        aria-live="polite"
+      >
+        表示中: {formatDateLong(selectedDate)}
+      </div>
+
       <div className="grid grid-cols-7 text-center text-xs text-slate-500 mb-1">
         {WEEK_LABELS.map((w, i) => (
           <div key={w} className={i === 0 ? "text-rose-500" : i === 6 ? "text-sky-500" : ""}>
@@ -134,14 +141,14 @@ export function DashboardDateCalendar({
               disabled={isPending}
               aria-current={isSelected ? "date" : undefined}
               aria-pressed={isSelected}
-              className={`aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-bold relative transition-all ${
+              className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-bold relative transition-all duration-150 ${
                 isSelected
-                  ? "bg-brand-900 text-white shadow-lg ring-[3px] ring-slate-900 ring-offset-2 scale-[1.08] z-[1]"
+                  ? "bg-rose-600 text-white shadow-[0_0_0_3px_white,0_0_0_6px_#e11d48] scale-110 z-[1]"
                   : isLoading
-                    ? "bg-brand-200 text-brand-950 ring-2 ring-brand-800 animate-pulse font-bold"
+                    ? "bg-rose-200 text-rose-900 ring-2 ring-rose-500 animate-pulse"
                     : isToday
-                      ? "bg-white text-brand-800 ring-2 ring-brand-300 hover:bg-brand-50"
-                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:ring-1 hover:ring-slate-300"
+                      ? "bg-white text-brand-800 ring-2 ring-brand-300 hover:bg-brand-50 font-semibold"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:ring-1 hover:ring-slate-300 font-medium"
               }`}
               title={`${c.dateIso} のコマ表`}
             >
@@ -169,8 +176,8 @@ export function DashboardDateCalendar({
           過去に授業あり
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3.5 h-3.5 rounded bg-brand-900 ring-[2px] ring-brand-950 ring-offset-1" />
-          選択中
+          <span className="inline-block w-4 h-4 rounded bg-rose-600 shadow-[0_0_0_2px_white,0_0_0_3px_#e11d48]" />
+          選択中（赤）
         </span>
       </div>
     </div>
