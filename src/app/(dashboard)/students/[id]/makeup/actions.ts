@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/auth";
+import { requireAdminUser } from "@/lib/requireRole";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { isValidDate } from "@/lib/date";
 import { fetchClassroomPeriodTimes, resolveClassroomPeriodTime } from "@/lib/periodTimes";
@@ -43,11 +43,9 @@ export type StaffBookMakeupResult =
   | { ok: false; error: string };
 
 async function requireStaff() {
-  const user = await getCurrentUser();
-  if (!user || user.accountRole !== "staff") {
-    return { ok: false as const, error: "権限がありません。" };
-  }
-  return { ok: true as const, user };
+  const auth = await requireAdminUser();
+  if (!auth.ok) return { ok: false as const, error: auth.error };
+  return { ok: true as const, user: auth.user };
 }
 
 async function loadStudentForStaff(studentId: string) {

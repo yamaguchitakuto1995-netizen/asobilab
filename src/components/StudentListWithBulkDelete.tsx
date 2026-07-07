@@ -28,11 +28,13 @@ type StudentListItem = Pick<
 type Props = {
   students: StudentListItem[];
   offeredByClassroom: Record<string, CourseSubject[]>;
+  readOnly?: boolean;
 };
 
 export function StudentListWithBulkDelete({
   students,
   offeredByClassroom,
+  readOnly = false,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const allIds = useMemo(() => students.map((s) => s.id), [students]);
@@ -55,6 +57,7 @@ export function StudentListWithBulkDelete({
 
   return (
     <div className="space-y-3">
+      {!readOnly ? (
       <form
         action={deleteStudentsBulk}
         onSubmit={(e) => {
@@ -86,12 +89,14 @@ export function StudentListWithBulkDelete({
         </button>
         <BulkDeleteButton disabled={!someSelected} count={selectedIds.size} />
       </form>
+      ) : null}
 
       <ul className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
         {students.map((s) => {
           const checked = selectedIds.has(s.id);
           return (
             <li key={s.id} className="flex items-stretch">
+              {!readOnly ? (
               <label
                 className={`flex shrink-0 items-center px-3 cursor-pointer border-r border-slate-100 ${
                   checked ? "bg-rose-50/60" : "bg-slate-50/50 hover:bg-slate-50"
@@ -106,10 +111,11 @@ export function StudentListWithBulkDelete({
                   aria-label={`${s.name} を選択`}
                 />
               </label>
+              ) : null}
               <Link
                 href={`/students/${s.id}`}
                 className={`flex flex-1 items-start justify-between gap-3 px-4 py-3 min-w-0 hover:bg-slate-50 ${
-                  checked ? "bg-rose-50/30" : ""
+                  !readOnly && checked ? "bg-rose-50/30" : ""
                 }`}
               >
                 <div className="min-w-0 flex-1">

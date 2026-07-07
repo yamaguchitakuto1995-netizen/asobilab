@@ -36,6 +36,12 @@ create table if not exists public.teacher_profiles (
 alter table public.teacher_profiles
   add column if not exists account_role text not null default 'staff';
 
+alter table public.teacher_profiles
+  add column if not exists phone text;
+
+alter table public.teacher_profiles
+  add column if not exists instructor_login_secret text;
+
 do $$ begin
   alter table public.teacher_profiles add constraint teacher_profiles_account_role_check
     check (account_role in ('staff', 'parent'));

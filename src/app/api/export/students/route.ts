@@ -69,9 +69,9 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
   }
-  if (user.accountRole !== "staff") {
+  if (user.accountRole !== "staff" || !user.isAdmin) {
     return NextResponse.json(
-      { error: "エクスポートは職員のみ利用できます。" },
+      { error: "エクスポートは管理者のみ利用できます。" },
       { status: 403 }
     );
   }

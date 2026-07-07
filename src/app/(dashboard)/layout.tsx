@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { getCurrentUser } from "@/lib/auth";
+import { isInstructor } from "@/lib/access";
 
 export default async function DashboardLayout({
   children,
@@ -13,7 +14,11 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header email={user.email} isAdmin={user.isAdmin} />
+      <Header
+        email={user.email}
+        isAdmin={user.isAdmin}
+        isInstructor={isInstructor(user)}
+      />
       <div className="flex-1">
         <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">{children}</div>
       </div>

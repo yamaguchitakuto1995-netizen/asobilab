@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminOnlyPath } from "@/lib/access";
 
 /**
  * 認証なしでアクセス可能なパス。
@@ -95,11 +96,26 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && pathname === "/login") {
+  if (user && pathname.startsWith("/login")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  if (user && isAdminOnlyPath(pathname)) {
+    const { data: profile } = await supabase
+      .from("teacher_profiles")
+      .select("is_admin, account_role")
+      .eq("id", user.id)
+      .maybeSingle<{ is_admin: boolean; account_role: string }>();
+
+    if (profile?.account_role === "staff" && !profile.is_admin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;
