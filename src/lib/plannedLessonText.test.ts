@@ -162,6 +162,48 @@ describe("plannedTextForScheduledLesson", () => {
       )
     ).toBe("ベーシック / 7-2");
   });
+
+  it("uses next course text from auto-promotion month onward", () => {
+    const promotedStudent = {
+      next_text_robot: null,
+      next_text_programming: "ベーシック / 9-1",
+      next_text_programming_course: "ベーシック",
+      next_text_programming_text: "9-1",
+      course_start_programming_ym: "2024-09",
+      promotion_scheduled_ym: "2026-09",
+      promotion_type: "skip_grade" as const,
+    };
+
+    expect(
+      plannedTextForScheduledLesson(
+        {
+          id: "sep",
+          lesson_date: "2026-09-05",
+          period: 1,
+          subject: "プログラミング",
+          status: "scheduled",
+          attendance: "present",
+        },
+        promotedStudent,
+        []
+      )
+    ).toBe("ベーシック2 / SU1");
+
+    expect(
+      plannedTextForScheduledLesson(
+        {
+          id: "aug",
+          lesson_date: "2026-08-29",
+          period: 1,
+          subject: "プログラミング",
+          status: "scheduled",
+          attendance: "present",
+        },
+        promotedStudent,
+        []
+      )
+    ).toBe("ベーシック / 9-1");
+  });
 });
 
 describe("countPriorAdvancingScheduledLessons", () => {

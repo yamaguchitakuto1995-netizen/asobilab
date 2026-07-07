@@ -80,7 +80,7 @@ export default async function DashboardHomePage({
 
   await applyAnnualGradePromotionIfNeeded(supabase);
 
-  if (user?.accountRole === "staff") {
+  if (user?.id) {
     await ensureScheduledLessonsForDate(supabase, selectedDate, user.id);
   }
 
@@ -146,9 +146,15 @@ export default async function DashboardHomePage({
     selectedDate
   );
 
-  const datesWithLessons = new Set(
-    (monthLessonRows ?? []).map((r) => r.lesson_date as string)
-  );
+  const datesWithLessons = new Set<string>([
+    ...(monthLessonRows ?? []).map((r) => r.lesson_date as string),
+    ...periodTimes
+      .filter(
+        (pt) =>
+          pt.lesson_date >= monthStart && pt.lesson_date <= monthEnd
+      )
+      .map((pt) => pt.lesson_date),
+  ]);
 
   const studentIds = [
     ...new Set((dayLessons ?? []).map((l) => l.student_id)),
@@ -177,7 +183,15 @@ export default async function DashboardHomePage({
         status: l.status,
         attendance: l.attendance,
         textbook: l.textbook,
-        students: l.students,
+        students: l.students
+          ? {
+              ...l.students,
+              promotion_scheduled_ym: l.students.promotion_scheduled_ym,
+              promotion_type: l.students.promotion_type,
+              course_start_robot_ym: l.students.course_start_robot_ym,
+              course_start_programming_ym: l.students.course_start_programming_ym,
+            }
+          : null,
       })),
       upcomingByStudent
     );
