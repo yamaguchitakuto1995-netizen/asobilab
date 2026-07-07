@@ -170,17 +170,13 @@ export async function deleteClassroom(formData: FormData) {
     return count ?? 0;
   }
 
-  const [students, capacities, periodTimes, lessons] = await Promise.all([
+  const [students, lessons] = await Promise.all([
     relatedCount("students", "classroom"),
-    relatedCount("lesson_capacities", "classroom"),
-    relatedCount("classroom_period_times", "classroom"),
     relatedCount("lessons", "lesson_classroom"),
   ]);
 
   const blockers: string[] = [];
   if (students > 0) blockers.push(`生徒 ${students} 名`);
-  if (capacities > 0) blockers.push(`振替枠 ${capacities} 件`);
-  if (periodTimes > 0) blockers.push(`コマ時刻 ${periodTimes} 件`);
   if (lessons > 0) blockers.push(`授業記録 ${lessons} 件`);
 
   if (blockers.length > 0) {
@@ -189,6 +185,18 @@ export async function deleteClassroom(formData: FormData) {
       returnTo
     );
   }
+
+  const { error: periodTimesError } = await supabase
+    .from("classroom_period_times")
+    .delete()
+    .eq("classroom", name);
+  if (periodTimesError) fail(periodTimesError.message, returnTo);
+
+  const { error: capacitiesError } = await supabase
+    .from("lesson_capacities")
+    .delete()
+    .eq("classroom", name);
+  if (capacitiesError) fail(capacitiesError.message, returnTo);
 
   const { error } = await supabase.from("classrooms").delete().eq("id", id);
 

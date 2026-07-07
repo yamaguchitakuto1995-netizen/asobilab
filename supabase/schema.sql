@@ -879,6 +879,7 @@ as $get_makeup$
   with period_slots as (
     select cpt.classroom, cpt.period, cpt.subject as slot_subject
       from public.classroom_period_times cpt
+      join public.classrooms cl on cl.name = cpt.classroom
      where cpt.lesson_date = target_date
   ),
   expanded as (

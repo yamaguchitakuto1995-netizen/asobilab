@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { classroomNames, fetchClassrooms } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { isValidDate } from "@/lib/date";
 import type { SlotAvailability } from "@/lib/types";
@@ -21,16 +22,24 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_makeup_availability", {
-    target_date: date,
-  });
+  const [classrooms, { data, error }] = await Promise.all([
+    fetchClassrooms(supabase),
+    supabase.rpc("get_makeup_availability", {
+      target_date: date,
+    }),
+  ]);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const activeClassrooms = new Set(classroomNames(classrooms));
+  const slots = ((data ?? []) as SlotAvailability[]).filter((slot) =>
+    activeClassrooms.has(slot.classroom)
+  );
+
   return NextResponse.json({
     date,
-    slots: (data ?? []) as SlotAvailability[],
+    slots,
   });
 }
