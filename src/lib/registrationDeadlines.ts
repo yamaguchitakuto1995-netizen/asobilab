@@ -7,6 +7,14 @@ const JST = "Asia/Tokyo";
 /** 振替申請: 授業日の何日前 23:59 までか */
 export const MAKEUP_REGISTRATION_DAYS_BEFORE = 3;
 
+/** 振替未登録の欠席一覧を遡って検索する日数（過去分の手動登録分を含める） */
+export const MAKEUP_PENDING_ABSENCE_LOOKBACK_DAYS = 730;
+
+/** list_pending_absences 系 RPC / 職員向け一覧の開始日 */
+export function makeupPendingAbsenceFromDate(now = new Date()): string {
+  return shiftDate(todayJstIso(now), -MAKEUP_PENDING_ABSENCE_LOOKBACK_DAYS);
+}
+
 export function todayJstIso(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: JST,

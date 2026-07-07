@@ -33,7 +33,7 @@ export type AttendanceStatus = (typeof ATTENDANCE_OPTIONS)[number]["value"];
 /** 予定モードでは 遅刻 を選択肢から除外 */
 export const SCHEDULED_ATTENDANCE_OPTIONS = [
   { value: "present", label: "出席予定" },
-  { value: "absent", label: "欠席予定" },
+  { value: "absent", label: "欠席（振替可能）" },
   { value: "makeup", label: "振替予定" },
   { value: "on_leave", label: "休会中" },
 ] as const;
@@ -48,7 +48,7 @@ export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
 
 export const SCHEDULED_ATTENDANCE_LABEL: Record<AttendanceStatus, string> = {
   present: "出席予定",
-  absent: "欠席予定",
+  absent: "欠席（振替可能）",
   late: "—",
   makeup: "振替予定",
   on_leave: "休会中",

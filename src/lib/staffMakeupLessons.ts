@@ -1,5 +1,6 @@
 import { shiftDate } from "@/lib/date";
 import {
+  makeupPendingAbsenceFromDate,
   makeupTargetMaxDate,
   todayJstIso,
 } from "@/lib/registrationDeadlines";
@@ -80,12 +81,14 @@ export async function listAttendanceSourceLessonsForStaff(
   );
 }
 
-/** 講師向け: 欠席済みで振替未登録の scheduled 授業 */
+/** 講師向け: 欠席済みで振替未登録の scheduled 授業（過去分の手動登録を含む） */
 export async function listPendingAbsenceLessonsForStaff(
   supabase: SupabaseClient,
   studentId: string,
-  fromDate: string
+  fromDate?: string
 ): Promise<StaffLessonOption[]> {
+  const lookbackFrom = fromDate ?? makeupPendingAbsenceFromDate();
+
   const [{ data: absentRows, error: absentError }, { data: makeupRows, error: makeupError }] =
     await Promise.all([
       supabase
@@ -96,7 +99,7 @@ export async function listPendingAbsenceLessonsForStaff(
         .eq("student_id", studentId)
         .eq("status", "scheduled")
         .eq("attendance", "absent")
-        .gte("lesson_date", fromDate)
+        .gte("lesson_date", lookbackFrom)
         .not("period", "is", null)
         .not("subject", "is", null)
         .order("lesson_date", { ascending: true })

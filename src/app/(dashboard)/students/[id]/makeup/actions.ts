@@ -106,11 +106,7 @@ export async function listStaffMakeupLessons(input: {
         loaded.student.id,
         fromDate
       ),
-      listPendingAbsenceLessonsForStaff(
-        loaded.supabase,
-        loaded.student.id,
-        fromDate
-      ),
+      listPendingAbsenceLessonsForStaff(loaded.supabase, loaded.student.id),
     ]);
 
     const filterBySubject = (rows: StaffLessonOption[]) =>
@@ -289,11 +285,7 @@ export async function bookMakeupLessonForStaff(input: {
       input.studentId,
       input.sourceLessonDate
     ),
-    listPendingAbsenceLessonsForStaff(
-      loaded.supabase,
-      input.studentId,
-      input.sourceLessonDate
-    ),
+    listPendingAbsenceLessonsForStaff(loaded.supabase, input.studentId),
   ]);
 
   const allSources = [...attendanceSources, ...pendingAbsences];
