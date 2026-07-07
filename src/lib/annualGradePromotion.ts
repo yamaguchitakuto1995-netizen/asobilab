@@ -7,6 +7,21 @@ export function schoolYearStartYm(isoDate: string): string {
   return `${year}-04`;
 }
 
+/** 自動学年更新を開始する学年（YYYY-MM、4月）。これより前は昇級しない */
+export const GRADE_PROMOTION_MIN_YM = "2027-04";
+
+/** 新規生徒・巻き戻し後の「更新済み」マーク（2027年4月まで昇級しない） */
+export const GRADE_PROMOTION_DEFERRED_THROUGH_YM = "2026-04";
+
+const NON_DEMOTABLE = new Set<GradeLevel>(["年少", "その他"]);
+
+export function prevGradeLevel(current: GradeLevel): GradeLevel | null {
+  if (NON_DEMOTABLE.has(current)) return null;
+  const idx = GRADE_LEVELS.indexOf(current);
+  if (idx <= 0) return null;
+  return GRADE_LEVELS[idx - 1] ?? null;
+}
+
 const NON_PROMOTABLE = new Set<GradeLevel>(["高3", "浪人", "その他"]);
 
 export function nextGradeLevel(current: GradeLevel): GradeLevel | null {

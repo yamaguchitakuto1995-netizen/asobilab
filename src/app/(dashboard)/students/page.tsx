@@ -34,6 +34,8 @@ export default async function StudentsPage({
   } = await searchParams;
   const supabase = await createClient();
   await applyAnnualGradePromotionIfNeeded(supabase);
+  const user = await getCurrentUser();
+  const isAdmin = user?.isAdmin ?? false;
   const classrooms = await fetchClassrooms(supabase);
 
   const isUnassigned = classroom === "__none__";
@@ -85,22 +87,28 @@ export default async function StudentsPage({
     <div>
       <PageHeader
         title="生徒一覧"
-        description="所属教室・名前で絞り込めます。チェックして一括削除、または CSV で一括登録・更新ができます。"
+        description={
+          isAdmin
+            ? "所属教室・名前で絞り込めます。チェックして一括削除、または CSV で一括登録・更新ができます。"
+            : "所属教室・名前で絞り込んで、生徒情報を確認できます。"
+        }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={exportHref}
-              className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-2"
-            >
-              CSV エクスポート
-            </a>
-            <Link
-              href="/students/new"
-              className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
-            >
-              ＋ 新規生徒
-            </Link>
-          </div>
+          isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={exportHref}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-2"
+              >
+                CSV エクスポート
+              </a>
+              <Link
+                href="/students/new"
+                className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
+              >
+                ＋ 新規生徒
+              </Link>
+            </div>
+          ) : undefined
         }
       />
 
@@ -212,6 +220,7 @@ export default async function StudentsPage({
         <StudentListWithBulkDelete
           students={students}
           offeredByClassroom={Object.fromEntries(offeredByClassroom)}
+          readOnly={!isAdmin}
         />
       ) : (
         <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-8 text-center">
@@ -220,7 +229,7 @@ export default async function StudentsPage({
               ? "該当する生徒が見つかりませんでした。"
               : "まだ生徒が登録されていません。"}
           </p>
-          {!q && !validClassroom && !isUnassigned ? (
+          {!q && !validClassroom && !isUnassigned && isAdmin ? (
             <Link
               href="/students/new"
               className="inline-block mt-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
@@ -231,6 +240,7 @@ export default async function StudentsPage({
         </div>
       )}
 
+      {isAdmin ? (
       <section className="mt-10 space-y-3">
         <h2 className="text-base font-semibold">CSV 一括取り込み</h2>
         <div className="text-xs text-slate-600 leading-relaxed space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
@@ -281,6 +291,7 @@ export default async function StudentsPage({
           </button>
         </form>
       </section>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { todayIso } from "@/lib/date";
 import {
+  GRADE_PROMOTION_MIN_YM,
   nextGradeLevel,
   schoolYearStartYm,
 } from "@/lib/annualGradePromotion";
@@ -21,6 +22,9 @@ export async function applyAnnualGradePromotionIfNeeded(
   nowDate: string = todayIso()
 ): Promise<{ promoted: number; error?: string }> {
   const targetYm = schoolYearStartYm(nowDate);
+  if (targetYm < GRADE_PROMOTION_MIN_YM) {
+    return { promoted: 0 };
+  }
   const [, month, day] = nowDate.split("-").map(Number);
   if (month < 4 || (month === 4 && day < 1)) {
     return { promoted: 0 };

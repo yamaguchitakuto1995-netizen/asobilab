@@ -188,20 +188,22 @@ export default async function StudentDetailPage({
         title={student.name}
         description={`学年: ${student.grade}`}
         actions={
-          <>
-            <Link
-              href={`/students/${student.id}/edit`}
-              className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-2"
-            >
-              生徒を編集
-            </Link>
-            <Link
-              href={`/students/${student.id}/lessons/new`}
-              className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
-            >
-              ＋ 授業を追加
-            </Link>
-          </>
+          isAdmin ? (
+            <>
+              <Link
+                href={`/students/${student.id}/edit`}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-3 py-2"
+              >
+                生徒を編集
+              </Link>
+              <Link
+                href={`/students/${student.id}/lessons/new`}
+                className="rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
+              >
+                ＋ 授業を追加
+              </Link>
+            </>
+          ) : undefined
         }
       />
 
@@ -377,9 +379,10 @@ export default async function StudentDetailPage({
         next_text_programming_text={
           student.next_text_programming_text ?? null
         }
-        editHref={`${baseHref}/edit`}
+        editHref={isAdmin ? `${baseHref}/edit` : undefined}
       />
 
+      {isAdmin ? (
       <StudentPersistentMemoForm
         studentId={student.id}
         defaultValue={
@@ -387,6 +390,14 @@ export default async function StudentDetailPage({
         }
         saved={memoSaved === "1"}
       />
+      ) : student.persistent_memo?.trim() || student.note?.trim() ? (
+        <section className="bg-white border border-slate-200 rounded-2xl p-4">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">備考（継続）</h2>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">
+            {student.persistent_memo?.trim() || student.note?.trim()}
+          </p>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="授業数" value={`${total}`} unit="件" />
@@ -407,7 +418,7 @@ export default async function StudentDetailPage({
             ) : null}
           </h2>
           <div className="flex flex-wrap items-center gap-2">
-            {user?.accountRole === "staff" ? (
+            {isAdmin ? (
               <StaffMakeupRegister
                 studentId={student.id}
                 studentName={student.name}
@@ -416,19 +427,20 @@ export default async function StudentDetailPage({
                 periodTimes={periodTimes}
               />
             ) : null}
+            {isAdmin ? (
             <Link
               href={`/students/${student.id}/lessons/new`}
               className="text-xs text-brand-600 hover:underline"
             >
               ＋ 予定を追加
             </Link>
+            ) : null}
           </div>
         </div>
         {upcomingVisible.length > 0 ? (
           <ul className="bg-white border border-brand-200 rounded-2xl divide-y divide-brand-100 overflow-hidden">
             {upcomingVisible.map((l) => {
-              const canEdit =
-                user !== null && (l.teacher_id === user.id || isAdmin);
+              const canEdit = isAdmin;
               const slotRow =
                 l.period && periodTimes.length
                   ? resolveClassroomPeriodTime(periodTimes, {
@@ -667,7 +679,7 @@ export default async function StudentDetailPage({
         {filteredHistory && filteredHistory.length > 0 ? (
           <ol className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
             {filteredHistory.map((l) => {
-              const canEdit = user !== null && (l.teacher_id === user.id || isAdmin);
+              const canEdit = isAdmin;
               const slotRow =
                 l.period && periodTimes.length
                   ? resolveClassroomPeriodTime(periodTimes, {
@@ -737,7 +749,7 @@ export default async function StudentDetailPage({
                 ? "該当する授業記録が見つかりませんでした。"
                 : "まだ記録済みの授業がありません。"}
             </p>
-            {!q && !subject ? (
+            {!q && !subject && isAdmin ? (
               <Link
                 href={`/students/${student.id}/lessons/new`}
                 className="inline-block mt-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-3 py-2"
@@ -749,6 +761,7 @@ export default async function StudentDetailPage({
         )}
       </section>
 
+      {isAdmin ? (
       <section className="pt-4 border-t border-slate-200">
         <ConfirmDeleteForm
           action={deleteStudent}
@@ -759,6 +772,7 @@ export default async function StudentDetailPage({
           <input type="hidden" name="id" value={student.id} />
         </ConfirmDeleteForm>
       </section>
+      ) : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminUser } from "@/lib/requireRole";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
@@ -45,6 +46,11 @@ function readPeriod(raw: string): { value: number | null; error?: string } {
 }
 
 export async function createLesson(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const studentId = String(formData.get("student_id") ?? "");
   const lessonDate = String(formData.get("lesson_date") ?? "");
   const attendance = String(formData.get("attendance") ?? "");

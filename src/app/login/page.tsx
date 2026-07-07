@@ -101,11 +101,11 @@ export default async function LoginPage({
         </form>
 
         <p className="text-xs text-slate-500 text-center mt-6 leading-relaxed">
-          スタッフ用アカウントの発行・新規登録の可否は管理者にご確認ください。
-          <br />
-          <Link href="/" className="text-brand-600 hover:underline">
-            ログイン後のトップへ
+          管理者はメール・パスワードでログイン。講師の方は{" "}
+          <Link href="/login/instructor" className="text-brand-600 hover:underline">
+            講師ログイン
           </Link>
+          へ。
         </p>
       </div>
     </main>

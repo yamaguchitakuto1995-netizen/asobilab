@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminUser } from "@/lib/requireRole";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
@@ -45,6 +46,11 @@ function readPeriod(raw: string): { value: number | null; error?: string } {
 }
 
 export async function updateLesson(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const studentId = String(formData.get("student_id") ?? "");
   const lessonId = String(formData.get("lesson_id") ?? "");
   const lessonDate = String(formData.get("lesson_date") ?? "");
@@ -131,6 +137,11 @@ export async function updateLesson(formData: FormData) {
 }
 
 export async function deleteLesson(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const studentId = String(formData.get("student_id") ?? "");
   const lessonId = String(formData.get("lesson_id") ?? "");
 
@@ -155,6 +166,11 @@ export async function deleteLesson(formData: FormData) {
  * 生徒詳細ページの「予定→記録に変換」ボタンから使う。
  */
 export async function markLessonRecorded(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const studentId = String(formData.get("student_id") ?? "");
   const lessonId = String(formData.get("lesson_id") ?? "");
 

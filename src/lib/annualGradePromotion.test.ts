@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { nextGradeLevel, schoolYearStartYm } from "./annualGradePromotion";
+import {
+  nextGradeLevel,
+  prevGradeLevel,
+  schoolYearStartYm,
+} from "./annualGradePromotion";
 
 describe("schoolYearStartYm", () => {
   it("returns April of current calendar year from July", () => {
@@ -8,6 +12,16 @@ describe("schoolYearStartYm", () => {
 
   it("returns previous calendar year April before April", () => {
     expect(schoolYearStartYm("2026-03-31")).toBe("2025-04");
+  });
+});
+
+describe("prevGradeLevel", () => {
+  it("demotes 小1 to 年長", () => {
+    expect(prevGradeLevel("小1")).toBe("年長");
+  });
+
+  it("stops at 年少", () => {
+    expect(prevGradeLevel("年少")).toBeNull();
   });
 });
 

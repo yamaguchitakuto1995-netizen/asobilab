@@ -23,7 +23,8 @@ import {
   isProgrammingNextText,
   isRobotNextText,
 } from "@/lib/courseNextText";
-import { schoolYearStartYm } from "@/lib/annualGradePromotion";
+import { GRADE_PROMOTION_DEFERRED_THROUGH_YM } from "@/lib/annualGradePromotion";
+import { requireAdminUser } from "@/lib/requireRole";
 import {
   applySiblingGroup,
   readSiblingFormInput,
@@ -234,6 +235,11 @@ function readNextTextProgramming(
 }
 
 export async function createStudent(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const name = String(formData.get("name") ?? "").trim();
   const nameKana = String(formData.get("name_kana") ?? "").trim();
   const gradeRaw = String(formData.get("grade") ?? "");
@@ -253,9 +259,7 @@ export async function createStudent(formData: FormData) {
       )}`
     );
   }
-  const gradePromotedThroughYm = schoolYearStartYm(
-    new Date().toISOString().slice(0, 10)
-  );
+  const gradePromotedThroughYm = GRADE_PROMOTION_DEFERRED_THROUGH_YM;
   const classroomResult = readClassroom(formData, classrooms);
 
   if (!name) {
@@ -478,6 +482,11 @@ export async function createStudent(formData: FormData) {
 }
 
 export async function updateStudent(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const nameKana = String(formData.get("name_kana") ?? "").trim();
@@ -715,6 +724,11 @@ export async function updateStudent(formData: FormData) {
 }
 
 export async function deleteStudent(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const user = await getCurrentUser();
   if (!user || user.accountRole !== "staff") {
     redirect("/login");
@@ -742,6 +756,11 @@ const UUID_RE =
 
 /** 一覧で選択した生徒を一括削除 */
 export async function deleteStudentsBulk(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const user = await getCurrentUser();
   if (!user || user.accountRole !== "staff") {
     redirect("/login");
@@ -793,6 +812,11 @@ function formatImportDbError(
 
 /** CSV 一括取り込み（新規・更新）。レギュラー出席コマは第1/3・第2/4 週グループ */
 export async function importStudentsCsv(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const user = await getCurrentUser();
   if (!user || user.accountRole !== "staff") {
     redirect("/login");
@@ -901,6 +925,11 @@ export async function importStudentsCsv(formData: FormData) {
 }
 
 export async function updateStudentPersistentMemo(formData: FormData) {
+  const auth = await requireAdminUser();
+  if (!auth.ok) {
+    redirect(`/students?error=${encodeURIComponent(auth.error)}`);
+  }
+
   const user = await getCurrentUser();
   if (!user || user.accountRole !== "staff") {
     redirect("/login");
