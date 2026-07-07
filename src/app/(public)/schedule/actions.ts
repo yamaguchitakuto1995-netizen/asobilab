@@ -14,6 +14,10 @@ import {
 import type { PortalScheduleLesson } from "@/lib/portalScheduleLessons";
 import { isLessonAfterWithdrawal } from "@/lib/studentWithdrawal";
 import {
+  listPendingAbsencesForPortal,
+  mergePortalScheduleWithPendingAbsences,
+} from "@/lib/portalPendingAbsences";
+import {
   lookupStudent,
   type FoundStudent,
   type LookupResult,
@@ -94,6 +98,17 @@ export async function listStudentScheduleForPortal(input: {
       row.source_period != null ? Number(row.source_period) : null,
     source_subject: row.source_subject ?? null,
   }));
+
+  try {
+    const pendingRows = await listPendingAbsencesForPortal(supabase, {
+      studentId: input.studentId,
+      portalId: portalIdResult.value,
+      birthday: birthdayResult.value!,
+    });
+    lessons = mergePortalScheduleWithPendingAbsences(lessons, pendingRows);
+  } catch {
+    // 予定一覧は取得済みのため、欠席過去分の取得失敗時も続行
+  }
 
   if (input.subjects?.length) {
     lessons = lessons.filter(

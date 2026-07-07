@@ -149,7 +149,7 @@ export function AvailabilityPicker({
 
   const needsMakeupSteps = flowTab === "makeup" || flowTab === "both";
   const showAttendanceSources = flowTab === "absence" || flowTab === "both";
-  const showPendingSources = flowTab === "makeup";
+  const showPendingSources = flowTab === "makeup" || flowTab === "both";
 
   const subjectsByStudent = useMemo(
     () =>
@@ -760,16 +760,20 @@ export function AvailabilityPicker({
 
       <div>
         <p className="text-sm font-semibold text-slate-700 mb-1">
-          {showPendingSources
+          {showPendingSources && !showAttendanceSources
             ? "1. 欠席済みの授業を選ぶ"
-            : "1. 欠席する授業を選ぶ"}
+            : showPendingSources && showAttendanceSources
+              ? "1. 欠席する授業・欠席済みの授業を選ぶ"
+              : "1. 欠席する授業を選ぶ"}
         </p>
         <p className="text-xs text-slate-500 mb-3">
-          {showPendingSources
-            ? "すでに欠席登録済みで、まだ振替先が決まっていない授業から選びます。"
-            : isMulti
-              ? "お子様ごとに、欠席にしたい授業（出席予定・振替予定）を選んでください。"
-              : "出席予定・振替予定のコマから欠席にする授業を選んでください。"}
+          {showPendingSources && !showAttendanceSources
+            ? "すでに欠席登録済みで、まだ振替先が決まっていない授業から選びます（過去分の手動登録を含みます）。"
+            : showPendingSources && showAttendanceSources
+              ? "出席予定・振替予定のコマ、またはすでに欠席済み（振替未登録）の授業から選べます。"
+              : isMulti
+                ? "お子様ごとに、欠席にしたい授業（出席予定・振替予定）を選んでください。"
+                : "出席予定・振替予定のコマから欠席にする授業を選んでください。"}
         </p>
 
         <div className="space-y-5">
@@ -789,30 +793,34 @@ export function AvailabilityPicker({
                   studentEnrollsInSubject(s.subjects, row.subject)
                 ) ?? null
               : null;
-            const displayOptions = showPendingSources
-              ? pendingOptions
-              : sourceOptions;
-            const loadingOptions = showPendingSources
-              ? pending === null
-              : suggestions === null;
-            const listError = showPendingSources ? pendingError : suggestError;
+            const displayOptions =
+              showPendingSources && showAttendanceSources
+                ? [...(pendingOptions ?? []), ...(sourceOptions ?? [])]
+                : showPendingSources
+                  ? pendingOptions
+                  : sourceOptions;
+            const loadingOptions =
+              showPendingSources && showAttendanceSources
+                ? pending === null || suggestions === null
+                : showPendingSources
+                  ? pending === null
+                  : suggestions === null;
+            const listError = pendingError || suggestError;
 
             const selectedSourceRow =
-              source && showPendingSources
-                ? pending?.find(
-                    (r) =>
-                      r.lesson_date === source.lessonDate &&
-                      r.period === source.period &&
-                      r.subject === source.subject
-                  )
-                : source
-                  ? suggestions?.find(
-                      (r) =>
-                        r.lesson_date === source.lessonDate &&
-                        r.period === source.period &&
-                        r.subject === source.subject
-                    )
-                  : undefined;
+              source &&
+              (pending?.find(
+                (r) =>
+                  r.lesson_date === source.lessonDate &&
+                  r.period === source.period &&
+                  r.subject === source.subject
+              ) ??
+                suggestions?.find(
+                  (r) =>
+                    r.lesson_date === source.lessonDate &&
+                    r.period === source.period &&
+                    r.subject === source.subject
+                ));
             const selectedSourceVenue =
               selectedSourceRow?.lesson_classroom?.trim() || s.classroom;
             const selectedIsMakeupSource =
@@ -849,9 +857,8 @@ export function AvailabilityPicker({
                         source?.lessonDate === row.lesson_date &&
                         source?.period === row.period &&
                         source?.subject === row.subject;
-                      const kind: SourceKind = showPendingSources
-                        ? "pending_absence"
-                        : "attendance";
+                      const kind: SourceKind =
+                        row.attendance === "absent" ? "pending_absence" : "attendance";
                       const absenceCheck = canRegisterAbsence({
                         lessonDate: row.lesson_date,
                         period: row.period,
@@ -862,10 +869,10 @@ export function AvailabilityPicker({
                       const pendingMakeupOpen = isPendingAbsenceMakeupOpen(
                         row.lesson_date
                       );
-                      const selectable = showPendingSources
+                      const selectable = isAbsentSource
                         ? pendingMakeupOpen
                         : absenceCheck.ok;
-                      const closedMessage = showPendingSources
+                      const closedMessage = isAbsentSource
                         ? pendingMakeupOpen
                           ? null
                           : pendingAbsenceMakeupClosedMessage(row.lesson_date)
@@ -927,7 +934,7 @@ export function AvailabilityPicker({
                               {attendanceLabel}
                             </span>
                           </div>
-                          {selectable && showPendingSources ? (
+                          {selectable && isAbsentSource ? (
                             <p className="mt-2 text-[10px] text-slate-500">
                               振替登録締切:{" "}
                               {formatPendingAbsenceMakeupDeadlineLabel(

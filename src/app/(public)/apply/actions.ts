@@ -11,7 +11,6 @@ import {
   isPendingAbsenceMakeupOpen,
   isStudentSlotOccupied,
   isSameMakeupSourceAndTarget,
-  makeupPendingAbsenceFromDate,
   makeupRegistrationClosedMessage,
   pendingAbsenceMakeupClosedMessage,
   sameMakeupSourceAndTargetMessage,
@@ -21,6 +20,9 @@ import {
   canBookMakeupTarget,
 } from "@/lib/registrationDeadlines";
 import { dedupeScheduledLessonsBySlot } from "@/lib/scheduledLessonDedupe";
+import {
+  listPendingAbsencesForPortal,
+} from "@/lib/portalPendingAbsences";
 import {
   readBirthdayFromInput,
   readPortalIdFromInput,
@@ -338,22 +340,31 @@ export async function listPendingAbsencesForMakeup(input: {
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc("list_pending_absences_for_makeup", {
-    p_student_id: input.studentId,
-    p_portal_id: portalIdResult.value,
-    p_birthday: birthdayResult.value,
-    p_from_date: makeupPendingAbsenceFromDate(),
-  });
+  try {
+    const pending = await listPendingAbsencesForPortal(supabase, {
+      studentId: input.studentId,
+      portalId: portalIdResult.value,
+      birthday: birthdayResult.value!,
+    });
 
-  if (error) return { ok: false, error: error.message };
-
-  const lessons = filterLessonsBySubjects(
-    normalizeScheduledLessons((data ?? []) as ScheduledLessonOption[]).filter(
-      (l) => isPendingAbsenceMakeupOpen(l.lesson_date)
-    ),
-    input.subjects
-  );
-  return { ok: true, lessons };
+    const lessons = filterLessonsBySubjects(
+      pending.map((row) => ({
+        id: row.id,
+        lesson_date: row.lesson_date,
+        period: row.period,
+        subject: row.subject,
+        attendance: row.attendance,
+        lesson_classroom: row.lesson_classroom,
+      })),
+      input.subjects
+    );
+    return { ok: true, lessons };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "欠席済み授業の取得に失敗しました。",
+    };
+  }
 }
 
 async function isAllowedAttendanceSource(input: {
