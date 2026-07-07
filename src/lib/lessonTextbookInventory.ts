@@ -2,6 +2,10 @@ import {
   resolveProgrammingNextTextPartsForStudent,
   resolveRobotNextTextPartsForStudent,
 } from "@/lib/courseNextText";
+import {
+  inventoryLabelFromCombined,
+  physicalTextbookInventoryLabel,
+} from "@/lib/physicalTextbookLabel";
 
 type StudentTextFields = {
   next_text_robot: string | null;
@@ -36,10 +40,14 @@ export function lessonTextbookInventoryLabel(
   lesson: LessonLikeForInventory
 ): string {
   const tb = lesson.textbook?.trim();
-  if (tb) return tb;
-
   const st = lesson.students;
   const subj = lesson.subject?.trim() || "";
+
+  if (tb) {
+    const fromCombined = subj ? inventoryLabelFromCombined(tb, subj) : null;
+    if (fromCombined) return fromCombined;
+    return tb;
+  }
 
   if (subj === "ロボット" && st) {
     const r = resolveRobotNextTextPartsForStudent({
@@ -48,7 +56,11 @@ export function lessonTextbookInventoryLabel(
       next_text_robot_text: st.next_text_robot_text,
     });
     if (r?.course?.trim() && r?.text?.trim()) {
-      return `${r.course.trim()} · ${r.text.trim()}（ロボット）`;
+      return physicalTextbookInventoryLabel(
+        r.course.trim(),
+        r.text.trim(),
+        subj
+      );
     }
     return "ロボット：次回テキスト未設定";
   }
@@ -60,7 +72,11 @@ export function lessonTextbookInventoryLabel(
       next_text_programming_text: st.next_text_programming_text,
     });
     if (r?.course?.trim() && r?.text?.trim()) {
-      return `${r.course.trim()} · ${r.text.trim()}（プログラミング）`;
+      return physicalTextbookInventoryLabel(
+        r.course.trim(),
+        r.text.trim(),
+        subj
+      );
     }
     return "プログラミング：次回テキスト未設定";
   }
