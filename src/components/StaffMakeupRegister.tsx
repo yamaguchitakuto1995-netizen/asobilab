@@ -624,7 +624,10 @@ export function StaffMakeupRegister({
 
           <div className="mt-5">
             <p className="text-sm font-semibold text-slate-700 mb-2">
-              3. 空いているコマを選ぶ
+              3. 振替先のコマを選ぶ
+            </p>
+            <p className="text-xs text-slate-500 mb-2">
+              満員のコマも職員登録では選べます（定員超過で登録されます）。
             </p>
             {slotError ? (
               <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2">
@@ -675,9 +678,7 @@ export function StaffMakeupRegister({
                         subject: source.subject,
                       },
                     });
-                  const disabled = Boolean(
-                    isFull || sameAsSource || studentOccupied
-                  );
+                  const disabled = Boolean(sameAsSource || studentOccupied);
                   return (
                     <li key={`${slot.classroom}:${slot.period}:${slot.subject}`}>
                       <button
@@ -687,11 +688,17 @@ export function StaffMakeupRegister({
                         className={`w-full text-left rounded-xl border px-4 py-3 transition ${
                           disabled
                             ? "border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed"
-                            : dest?.period === slot.period &&
-                                dest.subject === slot.subject &&
-                                dest.classroom === slot.classroom
-                              ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
-                              : "border-slate-200 bg-white hover:border-brand-400"
+                            : isFull
+                              ? dest?.period === slot.period &&
+                                  dest.subject === slot.subject &&
+                                  dest.classroom === slot.classroom
+                                ? "border-amber-500 bg-amber-50 ring-2 ring-amber-200"
+                                : "border-amber-200 bg-amber-50/60 hover:border-amber-400"
+                              : dest?.period === slot.period &&
+                                  dest.subject === slot.subject &&
+                                  dest.classroom === slot.classroom
+                                ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                                : "border-slate-200 bg-white hover:border-brand-400"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -725,8 +732,14 @@ export function StaffMakeupRegister({
                             ) : null}
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="text-[10px] text-slate-500">
-                              空き {slot.available} / {slot.max_students}
+                            <p
+                              className={`text-[10px] font-medium ${
+                                isFull ? "text-amber-800" : "text-slate-500"
+                              }`}
+                            >
+                              {isFull
+                                ? `定員超過 ${slot.occupied}/${slot.max_students}`
+                                : `空き ${slot.available} / ${slot.max_students}`}
                             </p>
                           </div>
                         </div>
@@ -760,10 +773,17 @@ export function StaffMakeupRegister({
                   {periodLabel(source.period)} {source.subject}
                 </p>
                 {confirmMode === "makeup" && dest ? (
-                  <p>
-                    振替先: {formatDateLong(selectedDate)}{" "}
-                    {periodLabel(dest.period)} {dest.subject}（{dest.classroom}）
-                  </p>
+                  <>
+                    <p>
+                      振替先: {formatDateLong(selectedDate)}{" "}
+                      {periodLabel(dest.period)} {dest.subject}（{dest.classroom}）
+                    </p>
+                    {dest.available <= 0 ? (
+                      <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                        このコマは定員超過です。職員登録として受け付けます。
+                      </p>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             ) : null}

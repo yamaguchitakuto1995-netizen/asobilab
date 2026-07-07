@@ -366,6 +366,7 @@ export async function bookMakeupLessonForStaff(input: {
     p_source_subject: input.sourceSubject,
     p_text_memo: memo,
     p_lesson_classroom: lessonVenue || null,
+    p_allow_over_capacity: true,
   });
 
   if (error) return { ok: false, error: error.message };
