@@ -28,6 +28,10 @@ import {
   readPortalIdFromInput,
 } from "@/lib/studentPortal";
 import {
+  notifyLineAbsenceRegistered,
+  notifyLineMakeupRegistered,
+} from "@/lib/appLineNotifications";
+import {
   COURSE_SUBJECTS,
   MAX_PERIOD,
   studentEnrollsInSubject,
@@ -511,6 +515,16 @@ export async function markLessonAbsentForMakeup(
   revalidatePath("/schedule");
   revalidatePath("/parent");
 
+  notifyLineAbsenceRegistered({
+    studentName: verified.row.name,
+    slot: {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+    },
+    source: "保護者フォーム",
+  });
+
   return { ok: true, lessonId: String(data) };
 }
 
@@ -719,6 +733,21 @@ export async function bookMakeupLesson(input: {
   revalidatePath("/");
   revalidatePath("/apply");
   revalidatePath("/schedule");
+
+  notifyLineMakeupRegistered({
+    studentName: verified.row.name,
+    sourceSlot: {
+      lessonDate: input.sourceLessonDate,
+      period: input.sourcePeriod,
+      subject: input.sourceSubject,
+    },
+    targetSlot: {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+    },
+    source: "保護者フォーム",
+  });
 
   return { ok: true, lessonId: String(data) };
 }
@@ -937,6 +966,33 @@ export async function bookMakeupLessonsBatch(
   revalidatePath("/apply");
   revalidatePath("/schedule");
   revalidatePath("/parent");
+
+  const studentNames = new Map<string, string>();
+  for (const booking of bookings) {
+    if (studentNames.has(booking.studentId)) continue;
+    const verified = await verifyStudentForMakeup(booking);
+    if (verified.ok) {
+      studentNames.set(booking.studentId, verified.row.name);
+    }
+  }
+
+  for (const booking of bookings) {
+    const studentName = studentNames.get(booking.studentId) ?? "（生徒名不明）";
+    notifyLineMakeupRegistered({
+      studentName,
+      sourceSlot: {
+        lessonDate: booking.sourceLessonDate,
+        period: booking.sourcePeriod,
+        subject: booking.sourceSubject,
+      },
+      targetSlot: {
+        lessonDate: booking.lessonDate,
+        period: booking.period,
+        subject: booking.subject,
+      },
+      source: "保護者フォーム",
+    });
+  }
 
   return { ok: true, lessonIds: (data ?? []) as string[] };
 }
