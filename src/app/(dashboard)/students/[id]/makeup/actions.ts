@@ -13,6 +13,10 @@ import {
 } from "@/lib/registrationDeadlines";
 import { createClient } from "@/lib/supabase/server";
 import {
+  notifyLineAbsenceRegistered,
+  notifyLineMakeupRegistered,
+} from "@/lib/appLineNotifications";
+import {
   listAttendanceSourceLessonsForStaff,
   listPendingAbsenceLessonsForStaff,
   type StaffLessonOption,
@@ -201,6 +205,15 @@ export async function markLessonAbsentForStaff(input: {
   }
 
   revalidateStudentPaths(input.studentId);
+  notifyLineAbsenceRegistered({
+    studentName: loaded.student.name,
+    slot: {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+    },
+    source: "職員登録",
+  });
   return { ok: true, lessonId: data.id };
 }
 
@@ -364,5 +377,19 @@ export async function bookMakeupLessonForStaff(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidateStudentPaths(input.studentId);
+  notifyLineMakeupRegistered({
+    studentName: loaded.student.name,
+    sourceSlot: {
+      lessonDate: input.sourceLessonDate,
+      period: input.sourcePeriod,
+      subject: input.sourceSubject,
+    },
+    targetSlot: {
+      lessonDate: input.lessonDate,
+      period: input.period,
+      subject: input.subject,
+    },
+    source: "職員登録",
+  });
   return { ok: true, lessonId: String(data) };
 }

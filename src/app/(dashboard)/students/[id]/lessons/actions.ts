@@ -6,6 +6,7 @@ import { requireAdminUser } from "@/lib/requireRole";
 import { fetchClassrooms, isKnownClassroom } from "@/lib/classrooms";
 import { createClient } from "@/lib/supabase/server";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
+import { notifyLineAbsenceRegistered } from "@/lib/appLineNotifications";
 import {
   ATTENDANCE_OPTIONS,
   COURSE_SUBJECTS,
@@ -255,6 +256,22 @@ export async function markLessonMakeupEligibleAbsent(formData: FormData) {
     redirect(`${redirectBase}?error=${encodeURIComponent(error.message)}`);
   }
 
+  const { data: student } = await supabase
+    .from("students")
+    .select("name")
+    .eq("id", studentId)
+    .maybeSingle<{ name: string }>();
+
+  notifyLineAbsenceRegistered({
+    studentName: student?.name ?? "（生徒名不明）",
+    slot: {
+      lessonDate: lesson.lesson_date,
+      period: lesson.period,
+      subject: lesson.subject,
+    },
+    source: "管理者登録",
+  });
+
   revalidateMakeupPaths(studentId);
   redirect(`${redirectBase}?info=${encodeURIComponent("欠席（振替可能）として登録しました。")}`);
 }
@@ -383,6 +400,22 @@ export async function registerMakeupEligibleAbsent(formData: FormData) {
   if (error) {
     redirect(`${formPath}?error=${encodeURIComponent(error.message)}`);
   }
+
+  const { data: student } = await supabase
+    .from("students")
+    .select("name")
+    .eq("id", studentId)
+    .maybeSingle<{ name: string }>();
+
+  notifyLineAbsenceRegistered({
+    studentName: student?.name ?? "（生徒名不明）",
+    slot: {
+      lessonDate,
+      period: periodResult.value,
+      subject,
+    },
+    source: "管理者登録",
+  });
 
   revalidateMakeupPaths(studentId);
   redirect(

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { advanceStudentNextTextAfterLessonRecorded } from "@/lib/advanceNextTextOnLessonRecorded";
+import { notifyLineAttendanceWithMemoRegistered } from "@/lib/appLineNotifications";
 import { createClient } from "@/lib/supabase/server";
 import {
   ATTENDANCE_OPTIONS,
@@ -53,7 +54,9 @@ async function saveLessonFromDailyBoard(
 
   const { data: before } = await supabase
     .from("lessons")
-    .select("id, student_id, subject, status, attendance, lesson_date")
+    .select(
+      "id, student_id, subject, status, attendance, lesson_date, period, students(name)"
+    )
     .eq("id", lessonId)
     .maybeSingle<{
       id: string;
@@ -62,6 +65,8 @@ async function saveLessonFromDailyBoard(
       status: string;
       attendance: AttendanceStatus;
       lesson_date: string;
+      period: number | null;
+      students: { name: string } | null;
     }>();
 
   if (!before) {
@@ -103,6 +108,18 @@ async function saveLessonFromDailyBoard(
       attendance,
       before.lesson_date
     );
+  }
+
+  if (input.viaDetail && textMemo) {
+    notifyLineAttendanceWithMemoRegistered({
+      studentName: before.students?.name ?? "（生徒名不明）",
+      lessonDate: before.lesson_date,
+      period: before.period ?? 0,
+      subject: before.subject ?? "",
+      attendance,
+      textMemo,
+      persistentMemo: input.persistentMemo,
+    });
   }
 
   revalidatePath("/");
