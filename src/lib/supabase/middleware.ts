@@ -6,8 +6,17 @@ import { isAdminOnlyPath } from "@/lib/access";
  * 認証なしでアクセス可能なパス。
  * - /apply: 保護者向け 振替申請フォーム
  * - /api/availability: 振替枠の空き状況 API (保護者フォームから直接 fetch)
+ * - /studio, /api/studio: Wan 2.2（RunPod）Kling風ビデオスタジオ
  */
-const PUBLIC_PATHS = ["/login", "/auth", "/apply", "/schedule", "/api/availability"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth",
+  "/apply",
+  "/schedule",
+  "/api/availability",
+  "/studio",
+  "/api/studio",
+];
 
 function missingEnvResponse(): NextResponse {
   const jp =
