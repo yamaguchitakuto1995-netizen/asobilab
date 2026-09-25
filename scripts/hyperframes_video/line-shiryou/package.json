@@ -1,0 +1,15 @@
+{
+  "name": "line-shiryou",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.8.77 preview",
+    "check": "npx --yes hyperframes@0.8.77 check",
+    "render": "npx --yes hyperframes@0.8.77 render",
+    "publish": "npx --yes hyperframes@0.8.77 publish"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-jp": "^5.3.0",
+    "gsap": "^3.15.0"
+  }
+}
